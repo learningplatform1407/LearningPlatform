@@ -1,0 +1,22 @@
+node_modules/
+.pnpm-store/
+dist/
+build/
+.next/
+.expo/
+.expo-shared/
+coverage/
+pnpm-lock.yaml
+
+# User-authored architecture doc — not reformatted by tooling.
+PLAN.md
+
+# Python service — formatted by Ruff, not Prettier.
+services/api/
+
+# Generator-provided binary/config assets.
+apps/mobile/assets/
+
+# Test/build artifacts.
+apps/web/test-results/
+apps/web/playwright-report/
