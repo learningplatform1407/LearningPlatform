@@ -14,8 +14,13 @@ def get_or_create_profile(db: Session, user: AuthenticatedUser) -> Profile:
 
     profile = Profile(id=user.id, settings=AccountSettings(user_id=user.id))
     db.add(profile)
-    db.add(Subscription(user_id=user.id, plan_code=PlanCode.FREE, status="active"))
+    # Flush before adding the subscription: Subscription has no ORM
+    # relationship() to Profile (it's looked up independently), so nothing
+    # tells SQLAlchemy's autoflush ordering that profiles must be inserted
+    # first. SQLite doesn't enforce the FK either way, but Postgres does.
+    db.flush()
 
+    db.add(Subscription(user_id=user.id, plan_code=PlanCode.FREE, status="active"))
     db.commit()
     db.refresh(profile)
     return profile

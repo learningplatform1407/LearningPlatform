@@ -7,6 +7,12 @@ from app.common.errors import ApiError
 from app.plans.constants import PLAN_ENTITLEMENTS, PlanCode
 from app.plans.dependencies import require_entitlement
 from app.plans.models import Subscription
+from app.users.models import AccountSettings, Profile
+
+
+def _seed_profile(db_session: Session, user: AuthenticatedUser) -> None:
+    db_session.add(Profile(id=user.id, settings=AccountSettings(user_id=user.id)))
+    db_session.flush()
 
 
 def test_entitlements_empty_for_user_without_subscription(authed_client: TestClient) -> None:
@@ -22,6 +28,7 @@ def test_entitlements_lists_active_plan_features(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setitem(PLAN_ENTITLEMENTS, PlanCode.FREE, {"notes.create": None})
+    _seed_profile(db_session, authenticated_user)
     db_session.add(
         Subscription(user_id=authenticated_user.id, plan_code=PlanCode.FREE, status="active")
     )
@@ -47,6 +54,7 @@ def test_require_entitlement_passes_when_granted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setitem(PLAN_ENTITLEMENTS, PlanCode.PRO, {"pro.feature": None})
+    _seed_profile(db_session, authenticated_user)
     db_session.add(
         Subscription(user_id=authenticated_user.id, plan_code=PlanCode.PRO, status="active")
     )

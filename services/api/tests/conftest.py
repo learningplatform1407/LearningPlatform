@@ -1,9 +1,10 @@
 import uuid
 from collections.abc import Generator, Iterator
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, Table, create_engine
+from sqlalchemy import Engine, Table, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -29,6 +30,17 @@ def db_engine() -> Iterator[Engine]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+
+    # SQLite ignores foreign key constraints unless explicitly enabled per
+    # connection. Postgres (what we actually run on) always enforces them —
+    # turning this on locally catches ordering/integrity bugs that would
+    # otherwise only surface against the real database.
+    @event.listens_for(engine, "connect")
+    def _enable_foreign_keys(dbapi_connection: Any, _connection_record: Any) -> None:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     tables = _our_tables()
     Base.metadata.create_all(engine, tables=tables)
     yield engine

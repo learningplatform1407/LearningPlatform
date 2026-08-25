@@ -6,6 +6,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.common.errors import ApiError, ErrorResponse, FieldError
 from app.core.config import settings
+from app.db import models as _db_models  # noqa: F401 -- registers all tables on Base.metadata
 from app.plans.router import router as plans_router
 from app.users.router import router as users_router
 
