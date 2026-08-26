@@ -1,7 +1,5 @@
+import { Dashboard } from "./dashboard";
+
 export default function Home() {
-  return (
-    <main>
-      <h1>LearningPlatform</h1>
-    </main>
-  );
+  return <Dashboard />;
 }

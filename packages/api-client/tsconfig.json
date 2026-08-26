@@ -1,4 +1,10 @@
 {
   "extends": "@lp/config/tsconfig/base.json",
+  "compilerOptions": {
+    // fetch/RequestInit/Response are available in the browser, React
+    // Native, and modern Node — DOM lib is the standard way to type them
+    // without pulling in Node- or browser-specific extras.
+    "lib": ["ES2022", "DOM"]
+  },
   "include": ["src"]
 }
