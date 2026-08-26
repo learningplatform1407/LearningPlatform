@@ -2,6 +2,10 @@
   "extends": ["expo/tsconfig.base", "@lp/config/tsconfig/base.json"],
   "compilerOptions": {
     "strict": true,
+    // @lp/config's base lib (ES2022 only) would otherwise override expo's
+    // own DOM lib inclusion, since it comes later in "extends" — DOM is
+    // needed for fetch/crypto/etc. globals available in the RN runtime.
+    "lib": ["DOM", "ESNext"],
     "types": ["jest"],
     "paths": {
       "@/*": ["./src/*"],
