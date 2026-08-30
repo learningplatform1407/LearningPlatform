@@ -13,29 +13,55 @@ export function Dashboard() {
   });
 
   if (isPending) {
-    return <p>Loading...</p>;
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      </main>
+    );
   }
 
   if (isError) {
-    return <p role="alert">Failed to load profile: {(error as Error).message}</p>;
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <p role="alert" className="text-sm text-danger">
+          Failed to load profile: {(error as Error).message}
+        </p>
+      </main>
+    );
   }
 
+  const rows: Array<[string, string]> = [
+    ["Email", data.email ?? "—"],
+    ["University", data.university ?? "Not set"],
+    ["Theme", data.settings.theme],
+    ["Notifications", data.settings.notifications_enabled ? "Enabled" : "Disabled"],
+  ];
+
   return (
-    <div>
-      <h1>Welcome{data.display_name ? `, ${data.display_name}` : ""}</h1>
-      <dl>
-        <dt>Email</dt>
-        <dd>{data.email}</dd>
-        <dt>University</dt>
-        <dd>{data.university ?? "Not set"}</dd>
-        <dt>Theme</dt>
-        <dd>{data.settings.theme}</dd>
-        <dt>Notifications</dt>
-        <dd>{data.settings.notifications_enabled ? "Enabled" : "Disabled"}</dd>
+    // Arbitrary value, not max-w-lg — see the comment in auth-layout.tsx:
+    // Tailwind's width/max-width scale shares the --spacing-* namespace.
+    <main className="mx-auto max-w-[32rem] p-xl">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-foreground">
+          Welcome{data.display_name ? `, ${data.display_name}` : ""}
+        </h1>
+        <form action={logout}>
+          <button
+            type="submit"
+            className="rounded-md border border-border px-md py-xs text-sm font-medium text-foreground hover:bg-muted"
+          >
+            Sign out
+          </button>
+        </form>
+      </div>
+      <dl className="mt-lg divide-y divide-border rounded-lg border border-border bg-background">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex justify-between px-md py-sm">
+            <dt className="text-sm text-muted-foreground">{label}</dt>
+            <dd className="text-sm text-foreground">{value}</dd>
+          </div>
+        ))}
       </dl>
-      <form action={logout}>
-        <button type="submit">Sign out</button>
-      </form>
-    </div>
+    </main>
   );
 }

@@ -28,6 +28,7 @@
   "devDependencies": {
     "@lp/config": "workspace:*",
     "@playwright/test": "^1.48.0",
+    "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.0.0",
     "@types/node": "^20",
@@ -37,6 +38,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.2",
     "jsdom": "^25.0.0",
+    "postcss": "^8.5.26",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5",
     "vitest": "^2.1.0"
   }

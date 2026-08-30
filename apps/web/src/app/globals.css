@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens — mirrors packages/ui/src/tokens/*.ts. CSS can't import JS
+ * values directly, so these are kept in sync by hand; globals.tokens.test.ts
+ * asserts the two stay identical.
+ *
+ * Line-heights are intentionally not overridden here — Tailwind's built-in
+ * leading-tight/normal/relaxed utilities are close enough to our tokens'
+ * intent (see packages/ui/src/tokens/typography.ts for the exact ratios).
+ */
+@theme {
+  --color-background: #ffffff;
+  --color-foreground: #0f172a;
+
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+
+  --color-border: #e2e8f0;
+
+  --color-primary: #2563eb;
+  --color-primary-foreground: #ffffff;
+
+  --color-secondary: #f1f5f9;
+  --color-secondary-foreground: #0f172a;
+
+  --color-danger: #dc2626;
+  --color-danger-foreground: #ffffff;
+
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+  --spacing-3xl: 64px;
+
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+  --text-4xl: 36px;
+}
