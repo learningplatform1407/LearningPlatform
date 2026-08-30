@@ -1,1 +1,1 @@
-export const UI_PACKAGE = "@lp/ui" as const;
+export * from "./tokens";

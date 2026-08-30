@@ -1,14 +1,8 @@
 # Task Split — Two-Person Backlog
 
-
-
 This document is the execution backlog for building the remaining phases of `PLAN.md` as a two-person team working async(ish). `PLAN.md` stays the architecture reference; this doc is about sequencing, dependencies, and where the two of you need to sync up.
 
-
-
 ## How to use this doc
-
-
 
 - **Anything without unmet dependencies is up for grabs.** Don't pre-assign whole epics to people — pick the next unblocked ticket that's free.
 
@@ -18,15 +12,9 @@ This document is the execution backlog for building the remaining phases of `PLA
 
 - Tickets are grouped into epics with short prefixes (`UI-`, `NOTES-`, `DOCS-`, `STUDY-`, `AI-`, `HARDEN-`) so they read naturally as ticket keys if you copy them into an actual tracker.
 
-
-
 ## Epic: UI — Design Foundation
 
-
-
-Gates every screen-building ticket below. Deliberately minimal — `PLAN.md` already scopes `packages/ui` to "truly cross-platform primitives," not a full shared component library, since web (DOM) and mobile (React Native) render too differently to share most components. What needs to be shared is the *look* (colors, spacing, type), not the code.
-
-
+Gates every screen-building ticket below. Deliberately minimal — `PLAN.md` already scopes `packages/ui` to "truly cross-platform primitives," not a full shared component library, since web (DOM) and mobile (React Native) render too differently to share most components. What needs to be shared is the _look_ (colors, spacing, type), not the code.
 
 | Key | Summary | Depends on | Notes |
 
@@ -38,11 +26,7 @@ Gates every screen-building ticket below. Deliberately minimal — `PLAN.md` alr
 
 | **UI-3** | Mobile `StyleSheet` constants from UI-1's tokens | UI-1 | Mobile already uses plain `StyleSheet`; just centralize the values. |
 
-
-
 ## Epic: NOTES (Phase 2 — Notes & Local Sync)
-
-
 
 | Key | Summary | Depends on | Notes |
 
@@ -64,11 +48,7 @@ Gates every screen-building ticket below. Deliberately minimal — `PLAN.md` alr
 
 | **NOTES-8** 🔗 | Wire sync end-to-end (web + mobile → `/v1/notes/sync`) | NOTES-4, NOTES-6, NOTES-7 | Integration point — needs backend sync endpoint and both clients' local stores done. Good pairing candidate. |
 
-
-
 ## Epic: DOCS (Phase 3 — Documents & PDFs)
-
-
 
 | Key | Summary | Depends on | Notes |
 
@@ -90,11 +70,7 @@ Gates every screen-building ticket below. Deliberately minimal — `PLAN.md` alr
 
 | **DOCS-8** | Document list/detail UI — web + mobile | DOCS-5, UI-1 | |
 
-
-
 ## Epic: STUDY (Phase 4 — Study Materials & Progress)
-
-
 
 | Key | Summary | Depends on | Notes |
 
@@ -114,15 +90,9 @@ Gates every screen-building ticket below. Deliberately minimal — `PLAN.md` alr
 
 | **STUDY-7** 🔗 | Wire enrolment/entitlement gating end-to-end | STUDY-4, STUDY-5, STUDY-6 | Integration point. |
 
-
-
 ## Epic: AI (Phase 5 — AI & Retrieval)
 
-
-
 The one epic that isn't fully parallel from day one: real implementation work needs Documents processing (DOCS-5) reasonably stable first, since chunking/embeddings operate on extracted document text. Schema/planning tickets can still start early.
-
-
 
 | Key | Summary | Depends on | Notes |
 
@@ -148,15 +118,9 @@ The one epic that isn't fully parallel from day one: real implementation work ne
 
 | **AI-10** 🔗 | Wire end-to-end + safety/input-limit review | AI-7, AI-8, AI-9 | Integration + safety review — pairing recommended. |
 
-
-
 ## Epic: HARDEN (Phase 6 — Production Hardening)
 
-
-
 Cross-cutting, joint, and further out — kept lighter/indicative since scope will sharpen closer to the time.
-
-
 
 | Key | Summary | Notes |
 
@@ -176,11 +140,7 @@ Cross-cutting, joint, and further out — kept lighter/indicative since scope wi
 
 | **HARDEN-7** | Client-side error tracking/monitoring | Web + mobile. |
 
-
-
 ## Suggested sequencing
-
-
 
 - **Can start immediately, fully parallel**: UI-1, NOTES-1, NOTES-2, DOCS-1, DOCS-2, DOCS-3, STUDY-1, STUDY-2, AI-2.
 
