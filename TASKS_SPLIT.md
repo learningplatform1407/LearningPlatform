@@ -2,152 +2,158 @@
 
 This document is the execution backlog for building the remaining phases of `PLAN.md` as a two-person team working async(ish). `PLAN.md` stays the architecture reference; this doc is about sequencing, dependencies, and where the two of you need to sync up.
 
+**Rewritten** to reflect the app's information architecture (left sidebar / bottom tab bar navigation with five sections: Lectures, AI Assistant, Roadmap, Feed, Profile) decided after the original version of this doc was written. See "App navigation" below before the epics — several existing epics (Notes, Documents, Study) got folded, renamed, or reframed to match.
+
 ## How to use this doc
 
 - **Anything without unmet dependencies is up for grabs.** Don't pre-assign whole epics to people — pick the next unblocked ticket that's free.
-
 - **🔗 marks a sync point** — a ticket that needs a joint decision or a short pairing session, not solo work.
-
 - **Migration coordination**: Alembic migrations are sequential (each new revision points at the previous one via `down_revision`). If you're both mid-migration at the same time, ping each other before running `alembic revision --autogenerate` — whoever merges second rebases their migration file on top of the new head.
+- Tickets are grouped into epics with short prefixes so they read naturally as ticket keys if you copy them into an actual tracker.
 
-- Tickets are grouped into epics with short prefixes (`UI-`, `NOTES-`, `DOCS-`, `STUDY-`, `AI-`, `HARDEN-`) so they read naturally as ticket keys if you copy them into an actual tracker.
+## App navigation
 
-## Epic: UI — Design Foundation
+Five top-level sections, in this order: **Lectures, AI Assistant, Roadmap, Feed, Profile**.
 
-Gates every screen-building ticket below. Deliberately minimal — `PLAN.md` already scopes `packages/ui` to "truly cross-platform primitives," not a full shared component library, since web (DOM) and mobile (React Native) render too differently to share most components. What needs to be shared is the _look_ (colors, spacing, type), not the code.
+- **Web and tablet**: a persistent left sidebar, collapsible. Lectures/AI Assistant/Roadmap/Feed are grouped together at the top; **Profile is pinned to the bottom of the sidebar, visually separated from the other four** (a spacer/divider between the two groups).
+- **Phone**: a bottom tab bar with the same five items, in the same order.
+- **Detection**: `useWindowDimensions()` with a breakpoint (~768px), not a static device-type check — this handles iPad split-screen/multitasking and orientation changes correctly, where "is this device a tablet" and "how much space is actually available right now" can disagree.
+- Applies only to the authenticated app shell — `/login` and `/signup` (and their mobile equivalents) stay outside it, as today.
+- **Lectures** has its own internal sub-tabs: **Materials** (PDFs), **Quizzes**, **Diagrams**.
 
-| Key | Summary | Depends on | Notes |
+**Scope decisions this triggered**:
 
-|---|---|---|---|
+- The original standalone **Notes** epic (freestanding note-taking, independent local-first sync) is **superseded**, not built — the actual need described was taking notes _on a lecture_ (margin notes, highlights, ink), which is a different, document-anchored concept, folded into the Lectures epic below.
+- The original standalone **Study dashboard UI** (its own page) goes away — there's no separate menu item for it. `courses`/`enrolments`/`progress` remain as backend organizational structure (a course groups lectures together), surfaced _within_ the Lectures UI rather than its own section.
+- **News** is renamed **Feed** throughout.
+- **Quizzes** and **Diagrams** are real menu sub-tabs, but — like Roadmap — the product details haven't been discussed yet (question types? grading? what exactly is a "diagram," uploaded or generated?). Placeholder-only for now, same treatment as Roadmap, until that conversation happens.
 
-| **UI-1** 🔗 | Design tokens: color palette, spacing scale, type scale | — | ~30 min joint call. Shared constants exported from `packages/ui`, even without shared components. |
+## Epic: UI — Design Foundation ✅ Done
 
-| **UI-2** | Web styling approach (Tailwind vs CSS modules vs plain CSS) using UI-1's tokens | UI-1 | Left unresolved since Phase 0 (Tailwind was explicitly skipped then). |
+Tokens (`packages/ui`), Tailwind wiring (web), `theme.ts` (mobile), and a first styling pass on the existing auth/profile screens are all complete and committed.
 
-| **UI-3** | Mobile `StyleSheet` constants from UI-1's tokens | UI-1 | Mobile already uses plain `StyleSheet`; just centralize the values. |
+## Epic: NAV — Adaptive Navigation Shell ✅ Done
 
-## Epic: NOTES (Phase 2 — Notes & Local Sync)
+Every section below lives inside this shell. Both platforms now have the full five-section structure (Lectures, AI Assistant, Roadmap, Feed, Profile) with placeholder content for the four new sections and the moved profile screen.
 
-| Key | Summary | Depends on | Notes |
+| Key          | Summary                             | Depends on   | Notes                                                                                                                                                                                                                                                              |
+| ------------ | ----------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **NAV-1**    | Web sidebar component               | UI-1         | ✅ `apps/web/src/components/sidebar.tsx`. Persistent, manually collapsible (shrinks to an icon rail). Lectures/AI Assistant/Roadmap/Feed grouped at top; Profile pinned to the bottom via `mt-auto`, separated by a border.                                       |
+| **NAV-2**    | Tablet sidebar                      | NAV-1        | ✅ `apps/mobile/src/app/(app)/_layout.tsx`, `drawerType: "permanent"` via `expo-router/drawer`. No new dependency needed — Expo Router vendors its own React Navigation Drawer, and its runtime deps (`reanimated`/`worklets`/`gesture-handler`) were already installed. |
+| **NAV-3**    | Phone bottom tab bar                | UI-1         | ✅ Same `(app)/_layout.tsx`, `expo-router/tabs`. Same five items, same order.                                                                                                                                                                                       |
+| **NAV-4** 🔗 | Responsive breakpoint logic, shared | —            | ✅ 768px (`useWindowDimensions()` width), matching the iPad-portrait convention.                                                                                                                                                                                    |
+| **NAV-5**    | Web route restructuring             | NAV-1        | ✅ Authenticated routes moved under an `(app)/` route group: `/lectures`, `/assistant`, `/roadmap`, `/feed`, `/profile`. Bare `/` redirects to `/lectures`.                                                                                                        |
+| **NAV-6**    | Mobile route restructuring          | NAV-2, NAV-3 | ✅ Same idea under `apps/mobile/src/app/(app)/`: `lectures.tsx` (renamed from `index.tsx`), `assistant.tsx`, `roadmap.tsx`, `feed.tsx`, `profile.tsx`. Root `_layout.tsx`'s `Stack.Protected` now guards the whole `(app)` group as one entry.                     |
 
-|---|---|---|---|
+## Epic: LECTURES
 
-| **NOTES-1** | `notes` table + migration | — | Client-generated id, server id, revision, `deleted_at` (soft delete for sync), timestamps. |
+Absorbs the original **Documents** epic (Materials sub-tab) and adds the annotation work discussed for reading/marking up PDFs. Quizzes and Diagrams sub-tabs are reserved but not scoped yet (see above).
 
-| **NOTES-2** 🔗 | `Note` schema in `packages/validation`/`packages/contracts` | — | Joint — the contract both the API and both clients build against. |
+### Materials (PDFs) — carried over from the original Documents epic
 
-| **NOTES-3** | `GET/POST/PATCH/DELETE /v1/notes` CRUD API | NOTES-1, NOTES-2 | Mirrors the `/v1/me` ownership pattern already in `app/users/`. |
+| Key               | Summary                                                                                       | Depends on             | Notes                                                                                                                  |
+| ----------------- | --------------------------------------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **LECTURES-1**    | `documents` + `document_versions` tables + migration                                          | —                      |                                                                                                                        |
+| **LECTURES-2** 🔗 | `Document` schema in `packages/validation`/`packages/contracts`                               | —                      | Joint.                                                                                                                 |
+| **LECTURES-3** 🔗 | Supabase Storage bucket + policies                                                            | —                      | One-time dashboard config, not code — share the bucket name/policy once done.                                          |
+| **LECTURES-4**    | `POST /v1/documents/upload-url` (signed upload URL)                                           | LECTURES-1, LECTURES-3 |                                                                                                                        |
+| **LECTURES-5**    | Register uploaded document + processing-status endpoint, file validation (size/MIME/checksum) | LECTURES-4             |                                                                                                                        |
+| **LECTURES-6**    | Upload UI — web                                                                               | LECTURES-2, UI-1       | Can build against a stubbed upload-url response before LECTURES-4 is real.                                             |
+| **LECTURES-7**    | Upload UI — mobile                                                                            | LECTURES-2, UI-1       | Same.                                                                                                                  |
+| **LECTURES-8**    | Materials list/detail UI (Lectures → Materials sub-tab) — web + mobile                        | LECTURES-5, NAV-5/6    | Group by course where `courses`/`study_materials` data exists — this is where the old Study dashboard's job lives now. |
 
-| **NOTES-4** | `POST /v1/notes/sync` — revision-based, idempotent | NOTES-3 | Last-write-wins + conflict copies, per `PLAN.md §9`. |
+### Reading + annotations
 
-| **NOTES-5** | Local note store — SQLite (mobile) / IndexedDB (web) | NOTES-2 | Pure client-side storage — fully parallel to NOTES-1/3/4. |
+The PDF needs to render as real fixed pages (not reflowed text) for highlights, margin notes, and freehand ink to have stable positions to anchor to — see the earlier discussion on reflow vs. fixed layout.
 
-| **NOTES-6** | Notes list/editor screens — web | NOTES-2, NOTES-5, UI-1/2 | Build against the local store first; wire to the real API in NOTES-8. |
+| Key                | Summary                                                                 | Depends on              | Notes                                                                                                                                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **LECTURES-9** 🔗  | Spike: validate PDF rendering + selectable text layer on both platforms | LECTURES-8              | Web (`pdf.js`) is mature; mobile's equivalent needs verifying against current library docs before committing — the exact library choice is unconfirmed. Do this before scoping the rest below in detail.                                     |
+| **LECTURES-10**    | `document_annotations` table + migration                                | LECTURES-9              | Type discriminator: `highlight` (page + text range + color), `margin_note` (page + position + text), `ink` (page + vector stroke data).                                                                                                      |
+| **LECTURES-11** 🔗 | Annotation schema, shared                                               | LECTURES-10             | Joint — the three sub-types need agreement before either platform builds against it.                                                                                                                                                         |
+| **LECTURES-12**    | Highlight/underline UI — web                                            | LECTURES-9, LECTURES-11 |                                                                                                                                                                                                                                              |
+| **LECTURES-13**    | Highlight/underline UI — mobile                                         | LECTURES-9, LECTURES-11 |                                                                                                                                                                                                                                              |
+| **LECTURES-14**    | Margin notes UI — web + mobile                                          | LECTURES-11             | This is where "notes on a lecture" actually lives now, instead of the superseded standalone Notes epic.                                                                                                                                      |
+| **LECTURES-15**    | Freehand ink annotation — mobile (tablet-focused)                       | LECTURES-9, LECTURES-11 | Highest-risk, most novel ticket. Likely `@shopify/react-native-skia` for the drawing canvas — new dependency, not yet installed. Not gated to tablet devices specifically (a finger can draw too), but tablet is where it's actually usable. |
 
-| **NOTES-7** | Notes list/editor screens — mobile | NOTES-2, NOTES-5, UI-1/3 | Same, mobile. |
+### Quizzes / Diagrams
 
-| **NOTES-8** 🔗 | Wire sync end-to-end (web + mobile → `/v1/notes/sync`) | NOTES-4, NOTES-6, NOTES-7 | Integration point — needs backend sync endpoint and both clients' local stores done. Good pairing candidate. |
+Reserved sub-tabs, not scoped — needs its own product conversation (question types and grading for Quizzes; what a "diagram" actually is — uploaded image, AI-generated, or something else — for Diagrams) before writing real tickets.
 
-## Epic: DOCS (Phase 3 — Documents & PDFs)
+## Epic: STUDY (backend only — no longer a separate page)
 
-| Key | Summary | Depends on | Notes |
+| Key            | Summary                                                                           | Depends on | Notes  |
+| -------------- | --------------------------------------------------------------------------------- | ---------- | ------ |
+| **STUDY-1**    | `courses`, `enrolments`, `study_materials`, `progress_records` tables + migration | —          |        |
+| **STUDY-2** 🔗 | Course/Enrolment/Progress schemas                                                 | —          | Joint. |
 
-|---|---|---|---|
+(No dedicated UI tickets — this data now just informs how `LECTURES-8` groups materials, and gates access via the existing `require_entitlement` dependency.)
 
-| **DOCS-1** | `documents` + `document_versions` tables + migration | — | |
+## Epic: PROFILE
 
-| **DOCS-2** 🔗 | `Document` schema in `packages/validation`/`packages/contracts` | — | Joint. |
+Mostly already built (the current dashboard) — needs to move under `/profile` (covered by `NAV-5`/`NAV-6`) and gain actual editing.
 
-| **DOCS-3** 🔗 | Supabase Storage bucket + policies | — | One-time dashboard config, not code — share the bucket name/policy once done. |
+| Key              | Summary                                                         | Depends on | Notes                                                                                                                                                                                                                                                                                                       |
+| ---------------- | --------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PROFILE-1**    | Edit form UI — web (`display_name`, `avatar_url`, `university`) | NAV-5      | `PATCH /v1/me` already exists — this is UI-only.                                                                                                                                                                                                                                                            |
+| **PROFILE-2**    | Edit form UI — mobile                                           | NAV-6      | Same.                                                                                                                                                                                                                                                                                                       |
+| **PROFILE-3** 🔗 | Decide + build settings editing (theme, notifications)          | —          | Real gap found while writing this: `PATCH /v1/me` only covers `display_name`/`avatar_url`/`university` — `theme`/`notifications_enabled` live on `account_settings` with no update endpoint yet. Needs a quick decision on whether Profile should expose these before building a new PATCH endpoint for it. |
 
-| **DOCS-4** | `POST /v1/documents/upload-url` (signed upload URL) | DOCS-1, DOCS-3 | |
+## Epic: FEED (renamed from News)
 
-| **DOCS-5** | Register uploaded document + processing-status endpoint, file validation (size/MIME/checksum) | DOCS-4 | |
+| Key           | Summary                                        | Depends on     | Notes                                                                           |
+| ------------- | ---------------------------------------------- | -------------- | ------------------------------------------------------------------------------- |
+| **FEED-1**    | `feed_posts` table + migration                 | —              | `title`, `body`, `category` (news/exam/livestream), `link_url`, `published_at`. |
+| **FEED-2** 🔗 | Feed post schema, shared                       | —              | Joint.                                                                          |
+| **FEED-3**    | `GET /v1/feed` API (paginated, published only) | FEED-1, FEED-2 |                                                                                 |
+| **FEED-4**    | Feed UI — web                                  | FEED-3, NAV-5  |                                                                                 |
+| **FEED-5**    | Feed UI — mobile                               | FEED-3, NAV-6  |                                                                                 |
 
-| **DOCS-6** | Upload UI — web | DOCS-2, UI-1/2 | Can build against a stubbed upload-url response before DOCS-4 is real. |
+Not addressed yet: who authors feed posts. No admin/CMS UI planned — direct DB inserts are fine until that's actually a pain point.
 
-| **DOCS-7** | Upload UI — mobile | DOCS-2, UI-1/3 | Same. |
+## Epic: ROADMAP (placeholder only)
 
-| **DOCS-8** | Document list/detail UI — web + mobile | DOCS-5, UI-1 | |
-
-## Epic: STUDY (Phase 4 — Study Materials & Progress)
-
-| Key | Summary | Depends on | Notes |
-
-|---|---|---|---|
-
-| **STUDY-1** | `courses`, `enrolments`, `study_materials`, `progress_records` tables + migration | — | |
-
-| **STUDY-2** 🔗 | Course/Enrolment/Progress schemas | — | Joint. |
-
-| **STUDY-3** | `GET /v1/study/courses` API | STUDY-1, STUDY-2 | Lists available + enrolled courses. |
-
-| **STUDY-4** | `GET /v1/study/progress` + `PATCH /v1/study/progress/{material_id}` API | STUDY-3 | Enforce enrolment + plan entitlement via the existing `require_entitlement` dependency. |
-
-| **STUDY-5** | Study dashboard UI — web | STUDY-2, UI-1/2 | Course list + progress view. |
-
-| **STUDY-6** | Study dashboard UI — mobile | STUDY-2, UI-1/3 | |
-
-| **STUDY-7** 🔗 | Wire enrolment/entitlement gating end-to-end | STUDY-4, STUDY-5, STUDY-6 | Integration point. |
+| Key           | Summary                              | Depends on   | Notes                                                                                                                  |
+| ------------- | ------------------------------------ | ------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| **ROADMAP-1** | Reserve the menu item + route/screen | NAV-5, NAV-6 | Empty/"coming soon" placeholder. The actual gamification/milestone concept is a separate future planning conversation. |
 
 ## Epic: AI (Phase 5 — AI & Retrieval)
 
-The one epic that isn't fully parallel from day one: real implementation work needs Documents processing (DOCS-5) reasonably stable first, since chunking/embeddings operate on extracted document text. Schema/planning tickets can still start early.
+Explicitly lowest priority — described as a future implementation. Real work also waits on Lectures' Materials processing (`LECTURES-5`) being stable, since chunking/embeddings operate on extracted document text.
 
-| Key | Summary | Depends on | Notes |
-
-|---|---|---|---|
-
-| **AI-1** | `document_chunks`, `embeddings`, `ai_conversations`, `ai_usage_events` tables + migration | DOCS-1 | Needs the `documents` table to exist for FKs. |
-
-| **AI-2** 🔗 | AI query/conversation schemas | — | Joint, can happen anytime. |
-
-| **AI-3** | Text extraction + chunking pipeline (background job) | DOCS-5, AI-1 | |
-
-| **AI-4** | Vertex AI embeddings generation for chunks | AI-3 | |
-
-| **AI-5** | Retrieval logic (vector search scoped to user/workspace) | AI-4 | |
-
-| **AI-6** | `POST /v1/ai/query` + usage tracking/quotas | AI-5 | Via the existing `require_entitlement` dependency. |
-
-| **AI-7** | `GET /v1/ai/conversations` | AI-6 | |
-
-| **AI-8** | AI query UI — web | AI-6, UI-1/2 | |
-
-| **AI-9** | AI query UI — mobile | AI-6, UI-1/3 | |
-
-| **AI-10** 🔗 | Wire end-to-end + safety/input-limit review | AI-7, AI-8, AI-9 | Integration + safety review — pairing recommended. |
+| Key          | Summary                                                                                   | Depends on       | Notes                                              |
+| ------------ | ----------------------------------------------------------------------------------------- | ---------------- | -------------------------------------------------- |
+| **AI-1**     | `document_chunks`, `embeddings`, `ai_conversations`, `ai_usage_events` tables + migration | LECTURES-1       | Needs the `documents` table to exist for FKs.      |
+| **AI-2** 🔗  | AI query/conversation schemas                                                             | —                | Joint, can happen anytime.                         |
+| **AI-3**     | Text extraction + chunking pipeline (background job)                                      | LECTURES-5, AI-1 |                                                    |
+| **AI-4**     | Vertex AI embeddings generation for chunks                                                | AI-3             |                                                    |
+| **AI-5**     | Retrieval logic (vector search scoped to user/workspace)                                  | AI-4             |                                                    |
+| **AI-6**     | `POST /v1/ai/query` + usage tracking/quotas                                               | AI-5             | Via the existing `require_entitlement` dependency. |
+| **AI-7**     | `GET /v1/ai/conversations`                                                                | AI-6             |                                                    |
+| **AI-8**     | AI Assistant chat UI — web                                                                | AI-6, NAV-5      |                                                    |
+| **AI-9**     | AI Assistant chat UI — mobile                                                             | AI-6, NAV-6      |                                                    |
+| **AI-10** 🔗 | Wire end-to-end + safety/input-limit review                                               | AI-7, AI-8, AI-9 | Integration + safety review — pairing recommended. |
 
 ## Epic: HARDEN (Phase 6 — Production Hardening)
 
 Cross-cutting, joint, and further out — kept lighter/indicative since scope will sharpen closer to the time.
 
-| Key | Summary | Notes |
-
-|---|---|---|
-
-| **HARDEN-1** | Structured logging + request-ID middleware | Backend. |
-
-| **HARDEN-2** | Audit events table + sensitive-action logging | |
-
-| **HARDEN-3** | Backup/restore procedure, documented + tested | |
-
-| **HARDEN-4** 🔗 | Security review — Auth, Storage policies, signed URL expiry, tenant isolation | Joint review session. |
-
-| **HARDEN-5** | Load-test API + processing pipeline | |
-
-| **HARDEN-6** | Evaluate Render → Cloud Run migration | Decision ticket, not necessarily code. |
-
-| **HARDEN-7** | Client-side error tracking/monitoring | Web + mobile. |
+| Key             | Summary                                                                       | Notes                                  |
+| --------------- | ----------------------------------------------------------------------------- | -------------------------------------- |
+| **HARDEN-1**    | Structured logging + request-ID middleware                                    | Backend.                               |
+| **HARDEN-2**    | Audit events table + sensitive-action logging                                 |                                        |
+| **HARDEN-3**    | Backup/restore procedure, documented + tested                                 |                                        |
+| **HARDEN-4** 🔗 | Security review — Auth, Storage policies, signed URL expiry, tenant isolation | Joint review session.                  |
+| **HARDEN-5**    | Load-test API + processing pipeline                                           |                                        |
+| **HARDEN-6**    | Evaluate Render → Cloud Run migration                                         | Decision ticket, not necessarily code. |
+| **HARDEN-7**    | Client-side error tracking/monitoring                                         | Web + mobile.                          |
 
 ## Suggested sequencing
 
-- **Can start immediately, fully parallel**: UI-1, NOTES-1, NOTES-2, DOCS-1, DOCS-2, DOCS-3, STUDY-1, STUDY-2, AI-2.
-
-- **UI-1 gates** every `-6/-7/-8`-style screen ticket across all epics — worth doing in the first sync call.
-
-- **NOTES, DOCS, and STUDY epics have zero dependencies on each other** — genuinely parallelizable end-to-end.
-
-- **AI epic's real work (AI-3 onward) waits on DOCS-5** — treat AI-1/AI-2 as prep you can do early, but don't expect to build the pipeline until Documents processing is stable.
-
-- **HARDEN comes last**, after the feature epics, as joint work.
+1. **NAV** first — everything else lives inside this shell, and it's a real restructuring of routes that already exist.
+2. **LECTURES → Materials** (`LECTURES-1` through `-8`) — the core value of the app, fully parallelizable internally.
+3. **LECTURES-9** (the rendering/annotation spike) as soon as Materials is far enough along to have a real document to test against — don't commit to the rest of the annotation tickets until this comes back.
+4. **PROFILE** and **FEED** are both small and independent of Lectures — good filler work or a second parallel track while Lectures is in progress.
+5. **ROADMAP-1** is trivial, do it whenever.
+6. **AI** last, and only once `LECTURES-5` (Materials processing) is stable.
+7. **HARDEN** after the feature epics, as joint work.

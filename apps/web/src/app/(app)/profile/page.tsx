@@ -4,9 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
-import { logout } from "./actions";
+import { logout } from "../actions";
 
-export function Dashboard() {
+export default function ProfilePage() {
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
     queryFn: () => getBrowserApiClient().getMe(),

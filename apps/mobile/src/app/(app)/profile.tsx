@@ -5,7 +5,7 @@ import { getApiClient } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
 import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
 
-export default function DashboardScreen() {
+export default function ProfileScreen() {
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
     queryFn: () => getApiClient().getMe(),
