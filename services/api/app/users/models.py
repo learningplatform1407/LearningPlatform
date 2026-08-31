@@ -34,6 +34,7 @@ class AccountSettings(Base):
     )
     theme: Mapped[str] = mapped_column(String, default="system")
     notifications_enabled: Mapped[bool] = mapped_column(default=True)
+    language: Mapped[str] = mapped_column(String, default="en")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

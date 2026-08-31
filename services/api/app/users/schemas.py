@@ -9,6 +9,7 @@ class AccountSettingsResponse(BaseModel):
 
     theme: str
     notifications_enabled: bool
+    language: str
 
 
 class MeResponse(BaseModel):
@@ -28,3 +29,6 @@ class ProfileUpdateRequest(BaseModel):
     display_name: str | None = None
     avatar_url: str | None = None
     university: str | None = None
+    theme: str | None = None
+    notifications_enabled: bool | None = None
+    language: str | None = None

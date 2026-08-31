@@ -3,6 +3,7 @@ import { z } from "zod";
 export const accountSettingsSchema = z.object({
   theme: z.string(),
   notifications_enabled: z.boolean(),
+  language: z.string(),
 });
 
 export const meResponseSchema = z.object({
@@ -20,6 +21,9 @@ export const profileUpdateRequestSchema = z.object({
   display_name: z.string().nullable().optional(),
   avatar_url: z.string().nullable().optional(),
   university: z.string().nullable().optional(),
+  theme: z.string().optional(),
+  notifications_enabled: z.boolean().optional(),
+  language: z.string().optional(),
 });
 
 export const entitlementResponseSchema = z.object({

@@ -10,9 +10,15 @@ const TABLET_BREAKPOINT = 768;
 
 function AppDrawerContent({ state, navigation, descriptors }: DrawerContentComponentProps) {
   const activeKey = state.routes[state.index]?.key;
-  const profileIndex = state.routes.findIndex((route) => route.name === "profile");
-  const topRoutes = state.routes.filter((_, index) => index !== profileIndex);
-  const profileRoute = profileIndex >= 0 ? state.routes[profileIndex] : undefined;
+  // "settings" is registered with options={{ href: null }} for parity with the
+  // Tabs branch, but Expo Router's href:null hiding only affects the default
+  // tab-bar/drawer renderers — since this is a custom drawerContent, it's
+  // filtered out here directly instead (it's reachable only via router.push
+  // from the Profile screen, not as a drawer item).
+  const visibleRoutes = state.routes.filter((route) => route.name !== "settings");
+  const profileIndex = visibleRoutes.findIndex((route) => route.name === "profile");
+  const topRoutes = visibleRoutes.filter((_, index) => index !== profileIndex);
+  const profileRoute = profileIndex >= 0 ? visibleRoutes[profileIndex] : undefined;
 
   const renderItem = (route: (typeof state.routes)[number], isProfile: boolean) => {
     const drawerLabel = descriptors[route.key]?.options.drawerLabel;
@@ -71,6 +77,9 @@ export default function AppLayout() {
         <Drawer.Screen name="roadmap" options={{ drawerLabel: "Roadmap" }} />
         <Drawer.Screen name="feed" options={{ drawerLabel: "Feed" }} />
         <Drawer.Screen name="profile" options={{ drawerLabel: "Profile" }} />
+        {/* No `href: null` here — Drawer's options type doesn't support it, and
+            AppDrawerContent above already filters "settings" out by name. */}
+        <Drawer.Screen name="settings" />
       </Drawer>
     );
   }
@@ -88,6 +97,7 @@ export default function AppLayout() {
       <Tabs.Screen name="roadmap" options={{ title: "Roadmap" }} />
       <Tabs.Screen name="feed" options={{ title: "Feed" }} />
       <Tabs.Screen name="profile" options={{ title: "Profile" }} />
+      <Tabs.Screen name="settings" options={{ href: null }} />
     </Tabs>
   );
 }

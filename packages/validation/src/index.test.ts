@@ -12,7 +12,7 @@ describe("meResponseSchema", () => {
       university: "MIT",
       created_at: "2026-08-25T23:17:58.049368Z",
       updated_at: "2026-08-25T23:18:04.552657Z",
-      settings: { theme: "system", notifications_enabled: true },
+      settings: { theme: "system", notifications_enabled: true, language: "en" },
     };
 
     expect(meResponseSchema.safeParse(payload).success).toBe(true);

@@ -26,10 +26,14 @@ def get_or_create_profile(db: Session, user: AuthenticatedUser) -> Profile:
     return profile
 
 
+SETTINGS_FIELDS = {"theme", "notifications_enabled", "language"}
+
+
 def update_profile(db: Session, profile: Profile, data: ProfileUpdateRequest) -> Profile:
     updates = data.model_dump(exclude_unset=True)
     for field, value in updates.items():
-        setattr(profile, field, value)
+        target = profile.settings if field in SETTINGS_FIELDS else profile
+        setattr(target, field, value)
     db.commit()
     db.refresh(profile)
     return profile

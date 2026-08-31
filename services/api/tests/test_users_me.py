@@ -27,6 +27,7 @@ def test_me_creates_profile_on_first_access(
     assert body["settings"] == {
         "theme": "system",
         "notifications_enabled": True,
+        "language": "en",
     }
 
     assert db_session.get(Profile, authenticated_user.id) is not None
@@ -46,3 +47,18 @@ def test_me_patch_updates_university(authed_client: TestClient) -> None:
     response = authed_client.patch("/v1/me", json={"university": "MIT"})
     assert response.status_code == 200
     assert response.json()["university"] == "MIT"
+
+
+def test_me_patch_updates_settings_fields(authed_client: TestClient) -> None:
+    authed_client.get("/v1/me")
+
+    response = authed_client.patch(
+        "/v1/me",
+        json={"theme": "dark", "notifications_enabled": False, "language": "es"},
+    )
+    assert response.status_code == 200
+    assert response.json()["settings"] == {
+        "theme": "dark",
+        "notifications_enabled": False,
+        "language": "es",
+    }
