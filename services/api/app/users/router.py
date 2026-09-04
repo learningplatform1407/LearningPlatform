@@ -18,6 +18,7 @@ def _to_me_response(profile: Profile, user: AuthenticatedUser) -> MeResponse:
         display_name=profile.display_name,
         avatar_url=profile.avatar_url,
         university=profile.university,
+        role=profile.role,
         created_at=profile.created_at,
         updated_at=profile.updated_at,
         settings=AccountSettingsResponse.model_validate(profile.settings),

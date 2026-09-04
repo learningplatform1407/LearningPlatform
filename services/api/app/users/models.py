@@ -16,6 +16,7 @@ class Profile(Base):
     display_name: Mapped[str | None] = mapped_column(String, default=None)
     avatar_url: Mapped[str | None] = mapped_column(String, default=None)
     university: Mapped[str | None] = mapped_column(String, default=None)
+    role: Mapped[str] = mapped_column(String, default="student")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

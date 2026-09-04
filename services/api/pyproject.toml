@@ -6,10 +6,12 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.19.1",
     "fastapi>=0.141.1",
+    "httpx>=0.28.1",
     "psycopg[binary]>=3.3.4",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.15.0",
     "pyjwt[crypto]>=2.13.0",
+    "pymupdf>=1.28.2",
     "sqlalchemy>=2.0.52",
     "uvicorn[standard]>=0.52.4",
 ]
@@ -36,6 +38,14 @@ ignore = ["B008"]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
+
+# pymupdf is a compiled extension with no complete type stubs — relax just
+# the untyped-call check for the one module that talks to it directly,
+# rather than losing strict mode checking everywhere or scattering
+# type: ignore comments across every call into it.
+[[tool.mypy.overrides]]
+module = "app.documents.extraction"
+disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

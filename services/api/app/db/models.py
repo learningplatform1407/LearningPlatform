@@ -6,12 +6,15 @@ Base.metadata being complete.
 """
 
 from app.db.external import auth_users
+from app.documents.models import Document, DocumentVersion
 from app.plans.models import Subscription
 from app.users.models import AccountSettings, Consent, Profile
 
 __all__ = [
     "AccountSettings",
     "Consent",
+    "Document",
+    "DocumentVersion",
     "Profile",
     "Subscription",
     "auth_users",

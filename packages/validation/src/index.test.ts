@@ -10,6 +10,7 @@ describe("meResponseSchema", () => {
       display_name: null,
       avatar_url: null,
       university: "MIT",
+      role: "student",
       created_at: "2026-08-25T23:17:58.049368Z",
       updated_at: "2026-08-25T23:18:04.552657Z",
       settings: { theme: "system", notifications_enabled: true, language: "en" },

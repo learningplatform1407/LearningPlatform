@@ -20,6 +20,7 @@ class MeResponse(BaseModel):
     display_name: str | None
     avatar_url: str | None
     university: str | None
+    role: str
     created_at: datetime
     updated_at: datetime
     settings: AccountSettingsResponse

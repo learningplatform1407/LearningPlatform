@@ -12,6 +12,7 @@ export const meResponseSchema = z.object({
   display_name: z.string().nullable(),
   avatar_url: z.string().nullable(),
   university: z.string().nullable(),
+  role: z.string(),
   created_at: z.string(),
   updated_at: z.string(),
   settings: accountSettingsSchema,
