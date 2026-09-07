@@ -5,6 +5,7 @@ domain's models module individually) before calling anything that relies on
 Base.metadata being complete.
 """
 
+from app.annotations.models import DocumentAnnotation
 from app.db.external import auth_users
 from app.documents.models import Document, DocumentVersion
 from app.plans.models import Subscription
@@ -14,6 +15,7 @@ __all__ = [
     "AccountSettings",
     "Consent",
     "Document",
+    "DocumentAnnotation",
     "DocumentVersion",
     "Profile",
     "Subscription",

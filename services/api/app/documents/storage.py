@@ -57,3 +57,17 @@ def download_object(path: str) -> bytes:
     if response.is_error:
         raise StorageError(f"Failed to download object: {response.text}")
     return response.content
+
+
+def upload_object(path: str, data: bytes, content_type: str) -> None:
+    """Backend-initiated upload (e.g. an image extracted during processing) —
+    uses the service_role key directly rather than a signed URL, since this
+    isn't a client-initiated write that needs separate admin-gating."""
+    if not settings.supabase_url:
+        raise RuntimeError("SUPABASE_URL is not configured")
+
+    url = f"{settings.supabase_url}/storage/v1/object/{DOCUMENTS_BUCKET}/{path}"
+    headers = {**_headers(), "Content-Type": content_type, "x-upsert": "true"}
+    response = httpx.post(url, headers=headers, content=data)
+    if response.is_error:
+        raise StorageError(f"Failed to upload object: {response.text}")

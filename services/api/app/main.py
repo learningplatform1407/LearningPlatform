@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.annotations.router import router as annotations_router
 from app.common.errors import ApiError, ErrorResponse, FieldError
 from app.core.config import settings
 from app.db import models as _db_models  # noqa: F401 -- registers all tables on Base.metadata
@@ -25,6 +26,7 @@ if settings.cors_allowed_origins:
 app.include_router(users_router)
 app.include_router(plans_router)
 app.include_router(documents_router)
+app.include_router(annotations_router)
 
 
 @app.exception_handler(ApiError)

@@ -1,15 +1,16 @@
 import hashlib
 import uuid
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.common.errors import ApiError
 from app.documents.constants import ALLOWED_MIME_TYPES, MAX_UPLOAD_BYTES
-from app.documents.extraction import ExtractionError, extract_pdf
+from app.documents.extraction import ExtractedBlock, ExtractionError, extract_pdf
 from app.documents.models import Document, DocumentVersion
 from app.documents.schemas import DocumentCreateRequest, UploadUrlRequest
-from app.documents.storage import create_signed_upload_url, download_object
+from app.documents.storage import create_signed_upload_url, download_object, upload_object
 
 
 def create_upload_url(data: UploadUrlRequest) -> tuple[str, str]:
@@ -61,7 +62,8 @@ def _process_version(db: Session, version: DocumentVersion) -> None:
         if actual_checksum != version.checksum:
             raise ExtractionError("Checksum mismatch — upload may be corrupted")
 
-        blocks = extract_pdf(pdf_bytes)
+        raw_blocks = extract_pdf(pdf_bytes)
+        blocks = _persist_images(version.id, raw_blocks)
         version.status = "ready"
         version.extracted_content = {"blocks": blocks}
     except ExtractionError as exc:
@@ -70,6 +72,27 @@ def _process_version(db: Session, version: DocumentVersion) -> None:
     except Exception as exc:  # any extraction failure should land as "failed", not a 500
         version.status = "failed"
         version.error_message = f"Unexpected error during processing: {exc}"
+
+
+def _persist_images(
+    version_id: uuid.UUID, raw_blocks: list[ExtractedBlock]
+) -> list[dict[str, Any]]:
+    """Uploads each image block's raw bytes to Storage, replacing them with a
+    path — extracted_content is stored as JSON, so raw bytes never land in
+    the database, only the path to fetch them from later."""
+    blocks: list[dict[str, Any]] = []
+    image_index = 0
+    for block in raw_blocks:
+        if block["type"] != "image":
+            blocks.append({"type": block["type"], "text": block["text"], "page": block["page"]})
+            continue
+
+        image_index += 1
+        ext = block["ext"]
+        image_path = f"{version_id}/images/{image_index}.{ext}"
+        upload_object(image_path, block["image_bytes"], f"image/{ext}")
+        blocks.append({"type": "image", "page": block["page"], "image_path": image_path})
+    return blocks
 
 
 def list_documents(db: Session) -> list[Document]:

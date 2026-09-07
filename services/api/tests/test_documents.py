@@ -127,6 +127,52 @@ def test_create_document_extracts_and_is_listable(
     assert detail_response.json()["current_version"]["status"] == "ready"
 
 
+def test_create_document_uploads_extracted_images_and_stores_only_the_path(
+    admin_client: TestClient,
+) -> None:
+    fake_pdf_bytes = b"%PDF-1.4 fake"
+    checksum = hashlib.sha256(fake_pdf_bytes).hexdigest()
+    fake_blocks = [
+        {"type": "heading", "text": "Chapter 1", "page": 1},
+        {"type": "image", "page": 1, "image_bytes": b"\x89PNG-fake-bytes", "ext": "png"},
+        {"type": "paragraph", "text": "After the image.", "page": 1},
+    ]
+
+    with (
+        patch("app.documents.service.download_object", return_value=fake_pdf_bytes),
+        patch("app.documents.service.extract_pdf", return_value=fake_blocks),
+        patch("app.documents.service.upload_object") as mock_upload_object,
+    ):
+        response = admin_client.post(
+            "/v1/documents",
+            json={
+                "title": "Lecture with a diagram",
+                "storage_path": "abc.pdf",
+                "mime_type": "application/pdf",
+                "size_bytes": len(fake_pdf_bytes),
+                "checksum": checksum,
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    version_id = body["current_version"]["id"]
+    stored_blocks = body["current_version"]["extracted_content"]["blocks"]
+
+    assert stored_blocks[0] == {"type": "heading", "text": "Chapter 1", "page": 1}
+    assert stored_blocks[2] == {"type": "paragraph", "text": "After the image.", "page": 1}
+
+    image_block = stored_blocks[1]
+    assert image_block["type"] == "image"
+    assert image_block["page"] == 1
+    assert image_block["image_path"] == f"{version_id}/images/1.png"
+    assert "image_bytes" not in image_block  # raw bytes never reach the stored JSON
+
+    mock_upload_object.assert_called_once_with(
+        f"{version_id}/images/1.png", b"\x89PNG-fake-bytes", "image/png"
+    )
+
+
 def test_create_document_marks_failed_on_extraction_error(admin_client: TestClient) -> None:
     with (
         patch("app.documents.service.download_object", return_value=b"whatever"),
