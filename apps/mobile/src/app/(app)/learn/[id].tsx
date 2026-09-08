@@ -1,6 +1,6 @@
 import type { Annotation } from "@lp/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -168,6 +168,9 @@ export default function LectureScreen() {
   return (
     <>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <Pressable onPress={() => router.push("/learn")} accessibilityRole="button">
+          <Text style={styles.backLink}>← Learn</Text>
+        </Pressable>
         <Text style={styles.title}>{data.title}</Text>
 
         {!version && <Text style={styles.hint}>Not processed yet.</Text>}
@@ -283,6 +286,10 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.xl,
     gap: spacing.md,
+  },
+  backLink: {
+    fontSize: fontSizes.sm,
+    color: colors.mutedForeground,
   },
   title: {
     fontSize: fontSizes["2xl"],

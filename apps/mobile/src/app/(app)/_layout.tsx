@@ -72,7 +72,7 @@ export default function AppLayout() {
           drawerType: "permanent",
         }}
       >
-        <Drawer.Screen name="lectures" options={{ drawerLabel: "Lectures" }} />
+        <Drawer.Screen name="learn" options={{ drawerLabel: "Learn" }} />
         <Drawer.Screen name="assistant" options={{ drawerLabel: "AI Assistant" }} />
         <Drawer.Screen name="roadmap" options={{ drawerLabel: "Roadmap" }} />
         <Drawer.Screen name="feed" options={{ drawerLabel: "Feed" }} />
@@ -92,7 +92,7 @@ export default function AppLayout() {
         tabBarInactiveTintColor: colors.mutedForeground,
       }}
     >
-      <Tabs.Screen name="lectures" options={{ title: "Lectures" }} />
+      <Tabs.Screen name="learn" options={{ title: "Learn" }} />
       <Tabs.Screen name="assistant" options={{ title: "AI Assistant" }} />
       <Tabs.Screen name="roadmap" options={{ title: "Roadmap" }} />
       <Tabs.Screen name="feed" options={{ title: "Feed" }} />

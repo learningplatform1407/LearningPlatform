@@ -4,6 +4,8 @@ import type {
   accountSettingsSchema,
   annotationCreateRequestSchema,
   annotationResponseSchema,
+  chapterCreateRequestSchema,
+  chapterResponseSchema,
   documentCreateRequestSchema,
   documentResponseSchema,
   documentSummaryResponseSchema,
@@ -12,6 +14,7 @@ import type {
   extractedContentSchema,
   meResponseSchema,
   profileUpdateRequestSchema,
+  recentLessonResponseSchema,
   uploadUrlRequestSchema,
   uploadUrlResponseSchema,
 } from "@lp/validation";
@@ -29,3 +32,6 @@ export type UploadUrlResponse = z.infer<typeof uploadUrlResponseSchema>;
 export type DocumentCreateRequest = z.infer<typeof documentCreateRequestSchema>;
 export type Annotation = z.infer<typeof annotationResponseSchema>;
 export type AnnotationCreateRequest = z.infer<typeof annotationCreateRequestSchema>;
+export type Chapter = z.infer<typeof chapterResponseSchema>;
+export type ChapterCreateRequest = z.infer<typeof chapterCreateRequestSchema>;
+export type RecentLesson = z.infer<typeof recentLessonResponseSchema>;

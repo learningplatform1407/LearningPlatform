@@ -92,6 +92,24 @@ describe("createApiClient", () => {
     expect(url).toBe("http://api.test/v1/documents/d1");
   });
 
+  test("listDocuments hits GET /v1/documents?chapter_id={id} when a chapter is given", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    await client().listDocuments("c1");
+
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/documents?chapter_id=c1");
+  });
+
+  test("listDocuments passes through the 'none' sentinel for the Uncategorized bucket", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    await client().listDocuments("none");
+
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/documents?chapter_id=none");
+  });
+
   test("requestDocumentUploadUrl POSTs the file metadata", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ storage_path: "x.pdf", token: "tok" }));
 
@@ -168,5 +186,46 @@ describe("createApiClient", () => {
     const [url, init] = lastCall(fetchMock);
     expect(url).toBe("http://api.test/v1/documents/d1/annotations/a1");
     expect(init.method).toBe("DELETE");
+  });
+
+  test("listChapters hits GET /v1/chapters", async () => {
+    const chapters = [{ id: "c1", title: "Intro", order_index: 0, lesson_count: 2 }];
+    fetchMock.mockResolvedValueOnce(jsonResponse(chapters));
+
+    const result = await client().listChapters();
+
+    expect(result).toEqual(chapters);
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/chapters");
+    expect(init.method ?? "GET").toBe("GET");
+  });
+
+  test("createChapter POSTs to /v1/chapters", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "c1", title: "Intro" }));
+
+    await client().createChapter({ title: "Intro" });
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/chapters");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ title: "Intro" });
+  });
+
+  test("listRecentLessons hits GET /v1/me/recent-lessons", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    await client().listRecentLessons();
+
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/me/recent-lessons");
+  });
+
+  test("listRecentLessons passes a limit through as a query param", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    await client().listRecentLessons(3);
+
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/me/recent-lessons?limit=3");
   });
 });

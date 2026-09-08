@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
 import { useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -17,12 +17,20 @@ const STATUS_LABEL: Record<string, string> = {
   failed: "Failed",
 };
 
-export default function LecturesScreen() {
+export default function ChapterLessonsScreen() {
+  const { chapterId } = useLocalSearchParams<{ chapterId: string }>();
+  const isUncategorized = chapterId === "uncategorized";
   const queryClient = useQueryClient();
+
   const me = useQuery({ queryKey: ["me"], queryFn: () => getApiClient().getMe() });
+  const chapters = useQuery({
+    queryKey: ["chapters"],
+    queryFn: () => getApiClient().listChapters(),
+    enabled: !isUncategorized,
+  });
   const documents = useQuery({
-    queryKey: ["documents"],
-    queryFn: () => getApiClient().listDocuments(),
+    queryKey: ["documents", chapterId],
+    queryFn: () => getApiClient().listDocuments(isUncategorized ? "none" : chapterId),
   });
 
   const [title, setTitle] = useState("");
@@ -61,12 +69,14 @@ export default function LecturesScreen() {
         mime_type: "application/pdf",
         size_bytes: pickedFile.size ?? bytes.byteLength,
         checksum,
+        chapter_id: isUncategorized ? undefined : chapterId,
       });
     },
     onSuccess: () => {
       setTitle("");
       setPickedFile(null);
-      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      queryClient.invalidateQueries({ queryKey: ["documents", chapterId] });
+      queryClient.invalidateQueries({ queryKey: ["chapters"] });
     },
     onError: (err) => {
       setUploadError(err instanceof Error ? err.message : "Failed to upload document.");
@@ -93,12 +103,14 @@ export default function LecturesScreen() {
   if (documents.isError) {
     return (
       <View style={styles.container}>
-        <Text style={styles.error}>Failed to load lectures: {(documents.error as Error).message}</Text>
+        <Text style={styles.error}>Failed to load lessons: {(documents.error as Error).message}</Text>
       </View>
     );
   }
 
   const isAdmin = me.data?.role === "admin";
+  const chapterTitle = chapters.data?.find((chapter) => chapter.id === chapterId)?.title;
+  const heading = isUncategorized ? "Uncategorized" : (chapterTitle ?? "Lessons");
 
   return (
     <FlatList
@@ -106,12 +118,19 @@ export default function LecturesScreen() {
       contentContainerStyle={styles.listContent}
       data={documents.data}
       keyExtractor={(doc) => doc.id}
-      ListHeaderComponent={<Text style={styles.title}>Lectures</Text>}
-      ListEmptyComponent={<Text style={styles.empty}>No lectures uploaded yet.</Text>}
+      ListHeaderComponent={
+        <>
+          <Pressable onPress={() => router.push("/learn/lessons")} accessibilityRole="button">
+            <Text style={styles.backLink}>← All chapters</Text>
+          </Pressable>
+          <Text style={styles.title}>{heading}</Text>
+        </>
+      }
+      ListEmptyComponent={<Text style={styles.empty}>No lessons yet.</Text>}
       renderItem={({ item }) => (
         <Pressable
           style={styles.row}
-          onPress={() => router.push(`/lectures/${item.id}`)}
+          onPress={() => router.push(`/learn/${item.id}`)}
           accessibilityRole="button"
         >
           <Text style={styles.rowTitle}>{item.title}</Text>
@@ -123,7 +142,7 @@ export default function LecturesScreen() {
       ListFooterComponent={
         isAdmin ? (
           <View style={styles.uploadForm}>
-            <Text style={styles.uploadHeading}>Upload a lecture</Text>
+            <Text style={styles.uploadHeading}>Upload a lesson</Text>
             <Text style={styles.label}>Title</Text>
             <TextInput style={styles.input} value={title} onChangeText={setTitle} />
 
@@ -162,6 +181,11 @@ const styles = StyleSheet.create({
   listContent: {
     padding: spacing.xl,
     gap: spacing.xs,
+  },
+  backLink: {
+    fontSize: fontSizes.sm,
+    color: colors.mutedForeground,
+    marginBottom: spacing.xs,
   },
   title: {
     fontSize: fontSizes["2xl"],

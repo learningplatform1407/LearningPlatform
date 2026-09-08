@@ -13,6 +13,8 @@ This document is the execution backlog for building the remaining phases of `PLA
 
 ## App navigation
 
+**Update**: "Lectures" was later renamed **Learn** (see the LEARN epic below), and its actual internal structure ended up as a landing hub ("continue where you left off" / "recently opened") → **Lessons** (chapter/lesson browser) and **Flashcards**, not the `Materials`/`Quizzes`/`Diagrams` sub-tabs speculated below when this section was first written — Quizzes/Diagrams are still unscoped, reserved for later. The rest of this section is left as the original navigation-shell decision record.
+
 Five top-level sections, in this order: **Lectures, AI Assistant, Roadmap, Feed, Profile**.
 
 - **Web and tablet**: a persistent left sidebar, collapsible. Lectures/AI Assistant/Roadmap/Feed are grouped together at the top; **Profile is pinned to the bottom of the sidebar, visually separated from the other four** (a spacer/divider between the two groups).
@@ -45,9 +47,11 @@ Every section below lives inside this shell. Both platforms now have the full fi
 | **NAV-5**    | Web route restructuring             | NAV-1        | ✅ Authenticated routes moved under an `(app)/` route group: `/lectures`, `/assistant`, `/roadmap`, `/feed`, `/profile`. Bare `/` redirects to `/lectures`.                                                                                                        |
 | **NAV-6**    | Mobile route restructuring          | NAV-2, NAV-3 | ✅ Same idea under `apps/mobile/src/app/(app)/`: `lectures.tsx` (renamed from `index.tsx`), `assistant.tsx`, `roadmap.tsx`, `feed.tsx`, `profile.tsx`. Root `_layout.tsx`'s `Stack.Protected` now guards the whole `(app)` group as one entry.                     |
 
-## Epic: LECTURES
+## Epic: LEARN (renamed from Lectures)
 
 **Reflow-first, not PDF-first** (supersedes the earlier PDF-fixed-layout framing): admins upload a PDF, the backend extracts its text once at upload time into heading/paragraph blocks, and students read/annotate a **reflowed** rendering of that text. The original fixed-layout PDF + freehand-ink mode (tablet-only, via a toggle) is explicitly deferred — real signal from this simpler version first. Quizzes/Diagrams sub-tabs stay reserved/unscoped (see below) — not wasted groundwork though, since the heading blocks extraction already produces are the natural future anchor points for chapter navigation and "which chapter is this quiz attached to."
+
+**Renamed Lectures → Learn** (LECTURES-14 through -20 below): the nav item, routes (`/lectures` → `/learn`), and user-facing copy ("Lecture" → "Lesson") all moved. Internal model/table names stayed `Document`/`documents` — too wide-reaching to rename across schema/migrations/tests. Every file path in the ✅-complete tickets below that still says `(app)/lectures/...` reflects where that work originally landed; those files now live under `(app)/learn/...` after the rename, with reader/annotation internals otherwise unchanged.
 
 Two real gaps surfaced while scoping this: there was no admin concept anywhere in the app (needed for upload-gating), and mobile has no built-in way to capture a text-selection range the way a browser's Selection API does (`Text` doesn't expose `onSelectionChange`, only `TextInput` does) — that gets its own spike before the mobile annotation UI is committed to.
 
@@ -77,13 +81,27 @@ Two real gaps surfaced while scoping this: there was no admin concept anywhere i
 | **LECTURES-12**    | Highlight + margin-note UI — web                 | LECTURES-8, LECTURES-11  | ✅ `(app)/lectures/[id]/page.tsx` — native Selection/Range API, offsets computed via a `TreeWalker`-based utility (`src/lib/text-offset.ts`, same technique as Hypothesis). Floating toolbar (Highlight / Add note) positioned from `range.getBoundingClientRect()`. Highlights render as `<mark>`; margin notes (block-level or range-anchored) render as a small clickable "note" badge — a real segment-type bug caught and fixed here: `spliceAnnotations` originally rendered *any* annotation with offsets as a highlight, so a range-anchored margin note was showing as a highlight with no way to read its text. Live-verified end-to-end: real login, real upload, real highlight + note creation, persistence across a revisit, and per-user scoping (a second user sees zero of the first user's annotations). |
 | **LECTURES-13**    | Highlight + margin-note UI — mobile              | LECTURES-9, LECTURES-11  | ✅ `(app)/lectures/[id].tsx` — long-press a paragraph (`Pressable` + `onLongPress`) opens a `Modal` for a block-level note (no offsets); existing highlights/margin notes (including ones created on web) render read-only via the same segment-splicing logic as web (`src/lib/text-offset.ts`, mobile variant), with all note badges shown below the paragraph rather than inline since RN `Text` can't nest a `Pressable` mid-flow the way web nests a `<span>`. Live-verified via the exported-web-build technique: real long-press → note creation → persists after revisiting; confirmed a highlight + range-anchored note created on web during the LECTURES-12 pass render correctly (read-only) on mobile. |
 
-**Deferred, deliberately**: fixed-layout PDF + freehand-ink mode (tablet toggle), chapter/subchapter navigation, Quizzes, Diagrams. All noted above as real future work, none blocked by anything just built.
+**Deferred, deliberately**: fixed-layout PDF + freehand-ink mode (tablet toggle), in-lesson sub-chapter/section navigation (a mini table-of-contents within one lesson, based on heading *levels* — the extraction heuristic still only classifies heading-vs-paragraph, not depth), Quizzes, Diagrams. Chapter→Lesson grouping itself is done (see below). All noted above as real future work, none blocked by anything just built.
 
 ### Quizzes / Diagrams
 
 Reserved sub-tabs, not scoped — needs its own product conversation (question types and grading for Quizzes; what a "diagram" actually is — uploaded image, AI-generated, or something else — for Diagrams) before writing real tickets.
 
-## Epic: STUDY (backend only — no longer a separate page)
+### Chapters → Lessons + Learn hub — done on both platforms
+
+Supersedes the old `STUDY-1`/`STUDY-2` stub below (`courses`→`chapters`, `study_materials`→`documents.chapter_id`, `progress_records`→`lesson_views`; `enrolments` dropped — no multi-tenancy/course-marketplace concept exists, any authenticated user sees any content, same as before). One PDF = one Lesson; a Chapter is a lightweight, PDF-independent grouping (title + order) created via the UI, not derived from PDF content — avoids depending on a fragile heading-level auto-split heuristic. See the in-lesson sub-chapter deferral above for the alternative that was considered and rejected for now.
+
+| Key                | Summary                                            | Depends on              | Notes                                                                                                                                                                                                                                                                    |
+| ------------------ | --------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **LECTURES-14**    | `chapters` table + `documents.chapter_id`/`order_index` + migration | LECTURES-1 | ✅ `chapter_id` nullable (`ON DELETE SET NULL`) — ungrouped lessons fall into an "Uncategorized" bucket rather than requiring every lesson be pre-assigned; keeps existing documents working with no data migration. |
+| **LECTURES-15**    | `lesson_views` table + view-recording + `GET /v1/me/recent-lessons` | LECTURES-14 | ✅ One row per `(user, document)`, upserted whenever `GET /v1/documents/{id}` is called (viewing *is* the signal — no separate "mark as viewed" endpoint). `recent-lessons` orders by `last_viewed_at DESC`; the first row is "continue where you left off", the rest feed "recently opened". Same FK-ordering regression-test pattern as annotations (`get_or_create_profile` before the first insert). |
+| **LECTURES-16** 🔗 | Chapter + recent-lesson schemas, shared             | LECTURES-14, LECTURES-15 | ✅ `chapterResponseSchema`/`chapterCreateRequestSchema`/`recentLessonResponseSchema` in `packages/validation`, `Chapter`/`ChapterCreateRequest`/`RecentLesson` in `packages/contracts`, `listChapters`/`createChapter`/`listRecentLessons` in `packages/api-client` (`listDocuments` gained an optional `chapterId` param, `"none"` requests the Uncategorized bucket). |
+| **LECTURES-17**    | Learn landing hub UI — web + mobile                 | LECTURES-16              | ✅ `(app)/learn/page.tsx` / `(app)/learn/index.tsx` — "Continue where you left off" card (most recent lesson) + "Recently opened" list (the rest, capped) when history exists, else straight to the two nav cards (**Lessons**, **Flashcards**). Live-verified cross-platform: a lesson viewed on web shows correctly as "recently opened" when the same account opens the app on mobile, and vice versa. |
+| **LECTURES-18**    | Chapter/lesson browser UI — web + mobile            | LECTURES-16              | ✅ `(app)/learn/lessons/page.tsx` (chapter list + admin-only "New chapter" form) → `(app)/learn/lessons/[chapterId]/page.tsx` (lesson list for that chapter, scoped upload form tagging `chapter_id`; `chapterId === "uncategorized"` special-cases to the null filter). Mobile mirrors this under `(app)/learn/lessons/`. Caught a real Expo Router bug here: without an explicit `(app)/learn/_layout.tsx`, the Drawer/Tabs navigator leaked the nested `lessons/` routes as separate top-level sidebar items instead of nesting them under one "Learn" entry — fixed with an explicit `<Stack screenOptions={{headerShown: false}} />`, plus in-content "← Learn"/"← All chapters" back links added to mobile (web already had them via `next/link`). |
+| **LECTURES-19**    | Flashcards placeholder — web + mobile               | —                        | ✅ `(app)/learn/flashcards/page.tsx` / `.tsx` — same empty "Coming soon" shape as the Roadmap placeholder. Scope explicitly deferred; the feature itself may change. |
+| **LECTURES-20**    | Nav rename: Lectures → Learn                        | —                        | ✅ `apps/web/src/components/sidebar.tsx` label/href, both mobile nav configs (`(app)/_layout.tsx`'s tablet Drawer and phone Tabs screen names), and every `/lectures` redirect target (`login`/`signup` actions, `(app)/page.tsx`). |
+
+## Epic: STUDY (backend only — no longer a separate page, superseded by LEARN above)
 
 | Key            | Summary                                                                           | Depends on | Notes  |
 | -------------- | --------------------------------------------------------------------------------- | ---------- | ------ |
@@ -158,7 +176,8 @@ Cross-cutting, joint, and further out — kept lighter/indicative since scope wi
 5. **LECTURES-7/8b** (mobile upload UI + reflow reader) ✅ Done, live-verified.
 6. **LECTURES-9** (mobile text-selection spike) ✅ Done — came back uncertain, mobile v1 scoped to margin notes only (see notes above).
 7. **LECTURES-10/11/12/13** (annotations schema + highlight/margin-note UI) ✅ Done, live-verified on both platforms including cross-platform annotation visibility and per-user scoping.
-8. **PROFILE** and **FEED** are both small and independent of Lectures — good filler work or a second parallel track. PROFILE is done; FEED is still open.
-9. **ROADMAP-1** is trivial, do it whenever.
-10. **AI** last, and only once `LECTURES-5` (Materials processing) is stable — it already is.
-11. **HARDEN** after the feature epics, as joint work.
+8. **LECTURES-14/15/16/17/18/19/20** (Chapters → Lessons + Learn hub, nav rename) ✅ Done, live-verified on both platforms including cross-platform "continue where you left off"/"recently opened" visibility.
+9. **PROFILE** and **FEED** are both small and independent of Learn — good filler work or a second parallel track. PROFILE is done; FEED is still open.
+10. **ROADMAP-1** is trivial, do it whenever.
+11. **AI** last, and only once `LECTURES-5` (Materials processing) is stable — it already is.
+12. **HARDEN** after the feature epics, as joint work.

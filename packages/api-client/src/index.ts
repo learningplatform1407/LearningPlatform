@@ -1,12 +1,15 @@
 import type {
   Annotation,
   AnnotationCreateRequest,
+  Chapter,
+  ChapterCreateRequest,
   DocumentCreateRequest,
   DocumentResponse,
   DocumentSummaryResponse,
   EntitlementResponse,
   MeResponse,
   ProfileUpdateRequest,
+  RecentLesson,
   UploadUrlRequest,
   UploadUrlResponse,
 } from "@lp/contracts";
@@ -57,7 +60,10 @@ export function createApiClient(config: ApiClientConfig) {
     updateMe: (data: ProfileUpdateRequest) =>
       request<MeResponse>("/v1/me", { method: "PATCH", body: JSON.stringify(data) }),
     getMyEntitlements: () => request<EntitlementResponse[]>("/v1/me/entitlements"),
-    listDocuments: () => request<DocumentSummaryResponse[]>("/v1/documents"),
+    listDocuments: (chapterId?: string) =>
+      request<DocumentSummaryResponse[]>(
+        chapterId ? `/v1/documents?chapter_id=${encodeURIComponent(chapterId)}` : "/v1/documents",
+      ),
     getDocument: (id: string) => request<DocumentResponse>(`/v1/documents/${id}`),
     requestDocumentUploadUrl: (data: UploadUrlRequest) =>
       request<UploadUrlResponse>("/v1/documents/upload-url", {
@@ -77,5 +83,10 @@ export function createApiClient(config: ApiClientConfig) {
       request<void>(`/v1/documents/${documentId}/annotations/${annotationId}`, {
         method: "DELETE",
       }),
+    listChapters: () => request<Chapter[]>("/v1/chapters"),
+    createChapter: (data: ChapterCreateRequest) =>
+      request<Chapter>("/v1/chapters", { method: "POST", body: JSON.stringify(data) }),
+    listRecentLessons: (limit?: number) =>
+      request<RecentLesson[]>(`/v1/me/recent-lessons${limit ? `?limit=${limit}` : ""}`),
   };
 }

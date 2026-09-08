@@ -1,14 +1,15 @@
 import hashlib
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.common.errors import ApiError
 from app.documents.constants import ALLOWED_MIME_TYPES, MAX_UPLOAD_BYTES
 from app.documents.extraction import ExtractedBlock, ExtractionError, extract_pdf
-from app.documents.models import Document, DocumentVersion
+from app.documents.models import Document, DocumentVersion, LessonView
 from app.documents.schemas import DocumentCreateRequest, UploadUrlRequest
 from app.documents.storage import create_signed_upload_url, download_object, upload_object
 
@@ -30,7 +31,15 @@ def register_document(db: Session, created_by: uuid.UUID, data: DocumentCreateRe
     if data.size_bytes > MAX_UPLOAD_BYTES:
         raise ApiError(422, "file_too_large", "File exceeds the 50MB upload limit")
 
-    document = Document(title=data.title, created_by=created_by)
+    order_index = (
+        db.scalar(
+            select(func.count()).select_from(Document).where(Document.chapter_id == data.chapter_id)
+        )
+        or 0
+    )
+    document = Document(
+        title=data.title, created_by=created_by, chapter_id=data.chapter_id, order_index=order_index
+    )
     db.add(document)
     db.flush()
 
@@ -95,9 +104,50 @@ def _persist_images(
     return blocks
 
 
-def list_documents(db: Session) -> list[Document]:
-    return list(db.scalars(select(Document).order_by(Document.created_at.desc())))
+def list_documents(
+    db: Session, chapter_id: uuid.UUID | None = None, filter_by_chapter: bool = False
+) -> list[Document]:
+    """With `filter_by_chapter=False` (default) returns every document,
+    unscoped. With `filter_by_chapter=True`, `chapter_id=None` filters to the
+    Uncategorized bucket (`chapter_id IS NULL`) and a real UUID filters to
+    that chapter."""
+    query = select(Document).order_by(Document.order_index, Document.created_at.desc())
+    if filter_by_chapter:
+        query = query.where(Document.chapter_id == chapter_id)
+    return list(db.scalars(query))
 
 
 def get_document(db: Session, document_id: uuid.UUID) -> Document | None:
     return db.get(Document, document_id)
+
+
+def record_lesson_view(db: Session, user_id: uuid.UUID, document_id: uuid.UUID) -> None:
+    # Timestamped in Python (not via the DB's func.now()) for microsecond
+    # precision — SQLite's CURRENT_TIMESTAMP is second-granularity, so two
+    # views in quick succession could otherwise tie and order arbitrarily.
+    now = datetime.now(UTC)
+    existing = db.scalar(
+        select(LessonView).where(
+            LessonView.user_id == user_id, LessonView.document_id == document_id
+        )
+    )
+    if existing is None:
+        db.add(LessonView(user_id=user_id, document_id=document_id, last_viewed_at=now))
+    else:
+        db.execute(
+            update(LessonView).where(LessonView.id == existing.id).values(last_viewed_at=now)
+        )
+    db.commit()
+
+
+def list_recent_lessons(
+    db: Session, user_id: uuid.UUID, limit: int
+) -> list[tuple[Document, datetime]]:
+    rows = db.execute(
+        select(Document, LessonView.last_viewed_at)
+        .join(LessonView, LessonView.document_id == Document.id)
+        .where(LessonView.user_id == user_id)
+        .order_by(LessonView.last_viewed_at.desc())
+        .limit(limit)
+    ).all()
+    return [(document, last_viewed_at) for document, last_viewed_at in rows]

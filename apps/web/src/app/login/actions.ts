@@ -19,5 +19,5 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
     return { error: error.message };
   }
 
-  redirect("/lectures");
+  redirect("/learn");
 }

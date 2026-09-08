@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
 from app.db.session import get_db
+from app.documents.schemas import RecentLessonResponse
+from app.documents.service import list_recent_lessons
 from app.users.models import Profile
 from app.users.schemas import AccountSettingsResponse, MeResponse, ProfileUpdateRequest
 from app.users.service import get_or_create_profile, update_profile
@@ -43,3 +45,22 @@ def patch_me(
     profile = get_or_create_profile(db, user)
     profile = update_profile(db, profile, data)
     return _to_me_response(profile, user)
+
+
+@router.get("/me/recent-lessons", response_model=list[RecentLessonResponse])
+def read_recent_lessons(
+    limit: int = 6,
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[RecentLessonResponse]:
+    rows = list_recent_lessons(db, user.id, limit)
+    return [
+        RecentLessonResponse(
+            id=document.id,
+            title=document.title,
+            created_at=document.created_at,
+            status=document.current_version.status if document.current_version else None,
+            last_viewed_at=last_viewed_at,
+        )
+        for document, last_viewed_at in rows
+    ]

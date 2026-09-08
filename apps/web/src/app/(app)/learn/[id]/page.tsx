@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -243,7 +244,10 @@ export default function LecturePage() {
     // Arbitrary value, not max-w-lg — see the comment in auth-layout.tsx:
     // Tailwind's width/max-width scale shares the --spacing-* namespace.
     <main className="mx-auto max-w-[42rem] p-xl">
-      <h1 className="text-2xl font-semibold text-foreground">{data.title}</h1>
+      <Link href="/learn" className="text-sm text-muted-foreground hover:underline">
+        ← Learn
+      </Link>
+      <h1 className="mt-xs text-2xl font-semibold text-foreground">{data.title}</h1>
 
       {!version && <p className="mt-md text-sm text-muted-foreground">Not processed yet.</p>}
       {version?.status === "processing" && (

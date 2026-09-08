@@ -22,7 +22,7 @@ export async function signup(_prevState: SignupState, formData: FormData): Promi
 
   // If email confirmation is required, Supabase returns no session yet.
   if (data.session) {
-    redirect("/lectures");
+    redirect("/learn");
   }
 
   return { error: null, checkEmail: true };

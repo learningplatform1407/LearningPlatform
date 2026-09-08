@@ -16,7 +16,14 @@ from app.documents.schemas import (
     UploadUrlRequest,
     UploadUrlResponse,
 )
-from app.documents.service import create_upload_url, get_document, list_documents, register_document
+from app.documents.service import (
+    create_upload_url,
+    get_document,
+    list_documents,
+    record_lesson_view,
+    register_document,
+)
+from app.users.service import get_or_create_profile
 
 router = APIRouter(prefix="/v1/documents", tags=["documents"])
 
@@ -51,19 +58,34 @@ def create_document(
 
 @router.get("", response_model=list[DocumentSummaryResponse])
 def read_documents(
+    chapter_id: str | None = None,
     _user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[DocumentSummaryResponse]:
-    return [_to_summary(document) for document in list_documents(db)]
+    if chapter_id is None:
+        documents = list_documents(db)
+    elif chapter_id == "none":
+        documents = list_documents(db, chapter_id=None, filter_by_chapter=True)
+    else:
+        try:
+            parsed_chapter_id = UUID(chapter_id)
+        except ValueError as exc:
+            raise ApiError(
+                422, "invalid_chapter_id", "chapter_id must be a UUID or 'none'"
+            ) from exc
+        documents = list_documents(db, chapter_id=parsed_chapter_id, filter_by_chapter=True)
+    return [_to_summary(document) for document in documents]
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)
 def read_document(
     document_id: UUID,
-    _user: AuthenticatedUser = Depends(get_current_user),
+    user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DocumentResponse:
     document = get_document(db, document_id)
     if document is None:
         raise ApiError(404, "not_found", "Document not found")
+    get_or_create_profile(db, user)
+    record_lesson_view(db, user.id, document_id)
     return DocumentResponse.model_validate(document)

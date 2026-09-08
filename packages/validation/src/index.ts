@@ -88,6 +88,27 @@ export const documentCreateRequestSchema = z.object({
   mime_type: z.literal("application/pdf"),
   size_bytes: z.number(),
   checksum: z.string(),
+  chapter_id: z.string().nullable().optional(),
+});
+
+export const recentLessonResponseSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  created_at: z.string(),
+  status: documentVersionStatusSchema.nullable(),
+  last_viewed_at: z.string(),
+});
+
+export const chapterResponseSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  order_index: z.number(),
+  lesson_count: z.number(),
+  created_at: z.string(),
+});
+
+export const chapterCreateRequestSchema = z.object({
+  title: z.string(),
 });
 
 export const annotationTypeSchema = z.enum(["highlight", "margin_note"]);

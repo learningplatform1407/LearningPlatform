@@ -6,17 +6,20 @@ Base.metadata being complete.
 """
 
 from app.annotations.models import DocumentAnnotation
+from app.chapters.models import Chapter
 from app.db.external import auth_users
-from app.documents.models import Document, DocumentVersion
+from app.documents.models import Document, DocumentVersion, LessonView
 from app.plans.models import Subscription
 from app.users.models import AccountSettings, Consent, Profile
 
 __all__ = [
     "AccountSettings",
+    "Chapter",
     "Consent",
     "Document",
     "DocumentAnnotation",
     "DocumentVersion",
+    "LessonView",
     "Profile",
     "Subscription",
     "auth_users",

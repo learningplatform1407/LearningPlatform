@@ -3,9 +3,13 @@ import { describe, expect, test } from "vitest";
 import {
   annotationCreateRequestSchema,
   annotationResponseSchema,
+  chapterCreateRequestSchema,
+  chapterResponseSchema,
+  documentCreateRequestSchema,
   documentResponseSchema,
   documentSummaryResponseSchema,
   meResponseSchema,
+  recentLessonResponseSchema,
   uploadUrlResponseSchema,
 } from "./index";
 
@@ -229,5 +233,70 @@ describe("annotationCreateRequestSchema", () => {
 
   test("rejects a missing block_index", () => {
     expect(annotationCreateRequestSchema.safeParse({ type: "highlight" }).success).toBe(false);
+  });
+});
+
+describe("chapterResponseSchema", () => {
+  test("accepts a real backend-shaped payload", () => {
+    const payload = {
+      id: "2879a273-236d-429e-985b-db6c43672a1b",
+      title: "Intro to Systems",
+      order_index: 0,
+      lesson_count: 3,
+      created_at: "2026-09-08T22:10:05.372022Z",
+    };
+
+    expect(chapterResponseSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("chapterCreateRequestSchema", () => {
+  test("accepts a title-only request", () => {
+    expect(chapterCreateRequestSchema.safeParse({ title: "Intro to Systems" }).success).toBe(true);
+  });
+
+  test("rejects a missing title", () => {
+    expect(chapterCreateRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("documentCreateRequestSchema", () => {
+  test("accepts a request with a chapter_id", () => {
+    const payload = {
+      title: "Lecture 1",
+      storage_path: "x.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 1234,
+      checksum: "abc",
+      chapter_id: "2879a273-236d-429e-985b-db6c43672a1b",
+    };
+
+    expect(documentCreateRequestSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("accepts a request with no chapter_id (Uncategorized)", () => {
+    const payload = {
+      title: "Lecture 1",
+      storage_path: "x.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 1234,
+      checksum: "abc",
+    };
+
+    expect(documentCreateRequestSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("recentLessonResponseSchema", () => {
+  test("accepts a real backend-shaped payload", () => {
+    const payload = {
+      id: "2879a273-236d-429e-985b-db6c43672a1b",
+      title: "Intro to Systems",
+      created_at: "2026-09-08T22:10:05.372022Z",
+      status: "ready",
+      last_viewed_at: "2026-09-08T22:12:00.000000Z",
+    };
+
+    expect(recentLessonResponseSchema.safeParse(payload).success).toBe(true);
   });
 });

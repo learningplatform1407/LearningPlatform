@@ -52,3 +52,14 @@ class DocumentCreateRequest(BaseModel):
     mime_type: Literal["application/pdf"]
     size_bytes: int
     checksum: str
+    chapter_id: UUID | None = None
+
+
+class RecentLessonResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    title: str
+    created_at: datetime
+    status: str | None
+    last_viewed_at: datetime

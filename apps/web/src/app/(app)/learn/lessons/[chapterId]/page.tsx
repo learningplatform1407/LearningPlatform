@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useState } from "react";
 
 import { getBrowserApiClient } from "@/lib/api-client.browser";
@@ -16,12 +17,21 @@ const STATUS_LABEL: Record<string, string> = {
   failed: "Failed",
 };
 
-export default function LecturesPage() {
+export default function ChapterLessonsPage() {
+  const params = useParams<{ chapterId: string }>();
+  const isUncategorized = params.chapterId === "uncategorized";
   const queryClient = useQueryClient();
+
   const me = useQuery({ queryKey: ["me"], queryFn: () => getBrowserApiClient().getMe() });
+  const chapters = useQuery({
+    queryKey: ["chapters"],
+    queryFn: () => getBrowserApiClient().listChapters(),
+    enabled: !isUncategorized,
+  });
   const documents = useQuery({
-    queryKey: ["documents"],
-    queryFn: () => getBrowserApiClient().listDocuments(),
+    queryKey: ["documents", params.chapterId],
+    queryFn: () =>
+      getBrowserApiClient().listDocuments(isUncategorized ? "none" : params.chapterId),
   });
 
   const [title, setTitle] = useState("");
@@ -54,12 +64,14 @@ export default function LecturesPage() {
         mime_type: "application/pdf",
         size_bytes: file.size,
         checksum,
+        chapter_id: isUncategorized ? undefined : params.chapterId,
       });
     },
     onSuccess: () => {
       setTitle("");
       setFile(null);
-      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      queryClient.invalidateQueries({ queryKey: ["documents", params.chapterId] });
+      queryClient.invalidateQueries({ queryKey: ["chapters"] });
     },
     onError: (err) => {
       setUploadError(err instanceof Error ? err.message : "Failed to upload document.");
@@ -78,26 +90,31 @@ export default function LecturesPage() {
     return (
       <main className="p-xl">
         <p role="alert" className="text-sm text-danger">
-          Failed to load lectures: {(documents.error as Error).message}
+          Failed to load lessons: {(documents.error as Error).message}
         </p>
       </main>
     );
   }
 
   const isAdmin = me.data?.role === "admin";
+  const chapterTitle = chapters.data?.find((chapter) => chapter.id === params.chapterId)?.title;
+  const heading = isUncategorized ? "Uncategorized" : (chapterTitle ?? "Lessons");
 
   return (
     <main className="p-xl">
-      <h1 className="text-2xl font-semibold text-foreground">Lectures</h1>
+      <Link href="/learn/lessons" className="text-sm text-muted-foreground hover:underline">
+        ← All chapters
+      </Link>
+      <h1 className="mt-xs text-2xl font-semibold text-foreground">{heading}</h1>
 
       {documents.data.length === 0 ? (
-        <p className="mt-md text-sm text-muted-foreground">No lectures uploaded yet.</p>
+        <p className="mt-md text-sm text-muted-foreground">No lessons yet.</p>
       ) : (
         <ul className="mt-lg flex flex-col gap-xs">
           {documents.data.map((doc) => (
             <li key={doc.id}>
               <Link
-                href={`/lectures/${doc.id}`}
+                href={`/learn/${doc.id}`}
                 className="flex items-center justify-between rounded-md border border-border px-md py-sm hover:bg-muted"
               >
                 <span className="text-sm font-medium text-foreground">{doc.title}</span>
@@ -119,7 +136,7 @@ export default function LecturesPage() {
             uploadMutation.mutate();
           }}
         >
-          <h2 className="text-sm font-semibold text-foreground">Upload a lecture</h2>
+          <h2 className="text-sm font-semibold text-foreground">Upload a lesson</h2>
           <label className="flex flex-col gap-xs text-sm text-foreground">
             Title
             <input

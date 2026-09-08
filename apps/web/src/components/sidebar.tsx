@@ -5,13 +5,13 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 const NAV_ITEMS = [
-  { href: "/lectures", label: "Lectures" },
-  { href: "/assistant", label: "AI Assistant" },
-  { href: "/roadmap", label: "Roadmap" },
-  { href: "/feed", label: "Feed" },
+  { href: "/learn", label: "Learn", emoji: "📖" },
+  { href: "/assistant", label: "AI Assistant", emoji: "🤖" },
+  { href: "/roadmap", label: "Roadmap", emoji: "🗺️" },
+  { href: "/feed", label: "Feed", emoji: "📰" },
 ] as const;
 
-const PROFILE_ITEM = { href: "/profile", label: "Profile" } as const;
+const PROFILE_ITEM = { href: "/profile", label: "Profile", emoji: "👤" } as const;
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -20,7 +20,7 @@ export function Sidebar() {
   return (
     <nav
       aria-label="Main"
-      className={`flex h-screen shrink-0 flex-col border-r border-border bg-background py-md transition-[width] ${
+      className={`sticky top-0 flex h-screen shrink-0 flex-col overflow-y-auto border-r border-border bg-background py-md transition-[width] ${
         collapsed ? "w-[3.5rem]" : "w-[14rem]"
       }`}
     >
@@ -51,7 +51,7 @@ function NavLink({
   collapsed,
   active,
 }: {
-  item: { href: string; label: string };
+  item: { href: string; label: string; emoji: string };
   collapsed: boolean;
   active: boolean;
 }) {
@@ -60,11 +60,18 @@ function NavLink({
       <Link
         href={item.href}
         title={collapsed ? item.label : undefined}
+        aria-label={collapsed ? item.label : undefined}
         className={`flex h-9 items-center overflow-hidden rounded-md px-sm text-sm font-medium whitespace-nowrap ${
-          active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
-        }`}
+          collapsed ? "justify-center" : ""
+        } ${active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
       >
-        {collapsed ? item.label.slice(0, 2).toUpperCase() : item.label}
+        {collapsed ? (
+          <span aria-hidden="true" className="text-base leading-none">
+            {item.emoji}
+          </span>
+        ) : (
+          item.label
+        )}
       </Link>
     </li>
   );
