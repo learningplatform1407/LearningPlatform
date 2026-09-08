@@ -130,12 +130,124 @@ interface PendingSelection {
   left: number;
 }
 
+const TABS = [
+  { key: "lesson", label: "Lesson" },
+  { key: "quizzes", label: "Quizzes" },
+  { key: "flashcards", label: "Flashcards" },
+  { key: "notes", label: "Notes" },
+] as const;
+
+type TabKey = (typeof TABS)[number]["key"];
+
+function QuizzesTab({ documentId }: { documentId: string }) {
+  const { data, isPending } = useQuery({
+    queryKey: ["quizzes", documentId],
+    queryFn: () => getBrowserApiClient().listQuizzes(documentId),
+  });
+
+  if (isPending) {
+    return <p className="text-sm text-muted-foreground">Loading...</p>;
+  }
+  if (!data || data.length === 0) {
+    return <p className="text-sm text-muted-foreground">Coming soon.</p>;
+  }
+  return (
+    <ul className="flex flex-col gap-xs">
+      {data.map((quiz) => (
+        <li
+          key={quiz.id}
+          className="rounded-md border border-border px-md py-sm text-sm text-foreground"
+        >
+          {quiz.title}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function FlashcardsTab({ documentId }: { documentId: string }) {
+  const { data, isPending } = useQuery({
+    queryKey: ["flashcards", documentId],
+    queryFn: () => getBrowserApiClient().listFlashcards(documentId),
+  });
+
+  if (isPending) {
+    return <p className="text-sm text-muted-foreground">Loading...</p>;
+  }
+  if (!data || data.length === 0) {
+    return <p className="text-sm text-muted-foreground">Coming soon.</p>;
+  }
+  return (
+    <ul className="flex flex-col gap-xs">
+      {data.map((flashcard) => (
+        <li
+          key={flashcard.id}
+          className="rounded-md border border-border px-md py-sm text-sm text-foreground"
+        >
+          {flashcard.front_text}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function NotesTab({ documentId }: { documentId: string }) {
+  const queryClient = useQueryClient();
+  const { data: note, isPending } = useQuery({
+    queryKey: ["note", documentId],
+    queryFn: () => getBrowserApiClient().getNote(documentId),
+  });
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const value = draft ?? note?.content ?? "";
+
+  const saveMutation = useMutation({
+    mutationFn: (content: string) => getBrowserApiClient().upsertNote(documentId, content),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["note", documentId] });
+      setSaved(true);
+    },
+  });
+
+  if (isPending) {
+    return <p className="text-sm text-muted-foreground">Loading...</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-sm">
+      <textarea
+        value={value}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          setSaved(false);
+        }}
+        rows={10}
+        placeholder="Write your notes for this lesson..."
+        className="w-full rounded-md border border-border p-sm text-sm text-foreground focus:border-primary focus:outline-none"
+      />
+      <div className="flex items-center gap-sm">
+        <button
+          type="button"
+          onClick={() => saveMutation.mutate(value)}
+          disabled={saveMutation.isPending}
+          className="self-start rounded-md bg-primary px-md py-sm text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        >
+          {saveMutation.isPending ? "Saving..." : "Save"}
+        </button>
+        {saved && <span className="text-xs text-muted-foreground">Saved.</span>}
+      </div>
+    </div>
+  );
+}
+
 export default function LecturePage() {
   const params = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const articleRef = useRef<HTMLElement>(null);
   const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabKey>("lesson");
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["documents", params.id],
@@ -247,44 +359,88 @@ export default function LecturePage() {
       <Link href="/learn" className="text-sm text-muted-foreground hover:underline">
         ← Learn
       </Link>
-      <h1 className="mt-xs text-2xl font-semibold text-foreground">{data.title}</h1>
-
-      {!version && <p className="mt-md text-sm text-muted-foreground">Not processed yet.</p>}
-      {version?.status === "processing" && (
-        <p className="mt-md text-sm text-muted-foreground">Processing...</p>
-      )}
-      {version?.status === "failed" && (
-        <p role="alert" className="mt-md text-sm text-danger">
-          Processing failed: {version.error_message ?? "Unknown error"}
+      {data.sub_chapter && (
+        <p className="mt-xs text-xs text-muted-foreground">
+          <Link href={`/learn/lessons/${data.sub_chapter.chapter.id}`} className="hover:underline">
+            {data.sub_chapter.chapter.title}
+          </Link>
+          {" / "}
+          {data.sub_chapter.title}
         </p>
       )}
-      {version?.status === "ready" && version.extracted_content && (
-        <article ref={articleRef} onMouseUp={handleMouseUp} className="mt-lg flex flex-col gap-md">
-          {version.extracted_content.blocks.map((block, index) => {
-            if (block.type === "heading") {
-              return (
-                <h2 key={index} className="text-xl font-semibold text-foreground">
-                  {block.text}
-                </h2>
-              );
-            }
-            if (block.type === "image") {
-              return block.image_path ? <ExtractedImage key={index} path={block.image_path} /> : null;
-            }
-            return (
-              <AnnotatedParagraph
-                key={index}
-                text={block.text ?? ""}
-                blockIndex={index}
-                annotations={annotations}
-                onDeleteAnnotation={(annotationId) => deleteAnnotationMutation.mutate(annotationId)}
-              />
-            );
-          })}
-        </article>
-      )}
+      <h1 className="mt-xs text-2xl font-semibold text-foreground">{data.title}</h1>
 
-      {pendingSelection && (
+      <div className="mt-lg flex gap-xs border-b border-border">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-md py-sm text-sm font-medium ${
+              activeTab === tab.key
+                ? "border-b-2 border-primary text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-lg">
+        {activeTab === "quizzes" && <QuizzesTab documentId={params.id} />}
+        {activeTab === "flashcards" && <FlashcardsTab documentId={params.id} />}
+        {activeTab === "notes" && <NotesTab documentId={params.id} />}
+
+        {activeTab === "lesson" && (
+          <>
+            {!version && <p className="text-sm text-muted-foreground">Not processed yet.</p>}
+            {version?.status === "processing" && (
+              <p className="text-sm text-muted-foreground">Processing...</p>
+            )}
+            {version?.status === "failed" && (
+              <p role="alert" className="text-sm text-danger">
+                Processing failed: {version.error_message ?? "Unknown error"}
+              </p>
+            )}
+            {version?.status === "ready" && version.extracted_content && (
+              <article
+                ref={articleRef}
+                onMouseUp={handleMouseUp}
+                className="flex flex-col gap-md"
+              >
+                {version.extracted_content.blocks.map((block, index) => {
+                  if (block.type === "heading") {
+                    return (
+                      <h2 key={index} className="text-xl font-semibold text-foreground">
+                        {block.text}
+                      </h2>
+                    );
+                  }
+                  if (block.type === "image") {
+                    return block.image_path ? (
+                      <ExtractedImage key={index} path={block.image_path} />
+                    ) : null;
+                  }
+                  return (
+                    <AnnotatedParagraph
+                      key={index}
+                      text={block.text ?? ""}
+                      blockIndex={index}
+                      annotations={annotations}
+                      onDeleteAnnotation={(annotationId) =>
+                        deleteAnnotationMutation.mutate(annotationId)
+                      }
+                    />
+                  );
+                })}
+              </article>
+            )}
+          </>
+        )}
+      </div>
+
+      {activeTab === "lesson" && pendingSelection && (
         <div
           role="toolbar"
           aria-label="Annotation actions"

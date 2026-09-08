@@ -21,10 +21,10 @@ def read_chapters(
             id=chapter.id,
             title=chapter.title,
             order_index=chapter.order_index,
-            lesson_count=lesson_count,
+            sub_chapter_count=sub_chapter_count,
             created_at=chapter.created_at,
         )
-        for chapter, lesson_count in list_chapters(db)
+        for chapter, sub_chapter_count in list_chapters(db)
     ]
 
 
@@ -39,6 +39,6 @@ def create_chapter_route(
         id=chapter.id,
         title=chapter.title,
         order_index=chapter.order_index,
-        lesson_count=0,
+        sub_chapter_count=0,
         created_at=chapter.created_at,
     )

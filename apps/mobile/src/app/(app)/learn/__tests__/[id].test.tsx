@@ -8,6 +8,10 @@ const mockCreateSignedUrl = jest.fn();
 const mockListAnnotations = jest.fn();
 const mockCreateAnnotation = jest.fn();
 const mockDeleteAnnotation = jest.fn();
+const mockListQuizzes = jest.fn();
+const mockListFlashcards = jest.fn();
+const mockGetNote = jest.fn();
+const mockUpsertNote = jest.fn();
 
 jest.mock("@/lib/api-client", () => ({
   getApiClient: () => ({
@@ -15,6 +19,10 @@ jest.mock("@/lib/api-client", () => ({
     listAnnotations: mockListAnnotations,
     createAnnotation: mockCreateAnnotation,
     deleteAnnotation: mockDeleteAnnotation,
+    listQuizzes: mockListQuizzes,
+    listFlashcards: mockListFlashcards,
+    getNote: mockGetNote,
+    upsertNote: mockUpsertNote,
   }),
 }));
 
@@ -22,7 +30,10 @@ jest.mock("@/lib/supabase", () => ({
   supabase: { storage: { from: () => ({ createSignedUrl: mockCreateSignedUrl }) } },
 }));
 
-jest.mock("expo-router", () => ({ useLocalSearchParams: () => ({ id: "d1" }) }));
+jest.mock("expo-router", () => ({
+  router: { push: jest.fn() },
+  useLocalSearchParams: () => ({ id: "d1" }),
+}));
 
 function renderScreen() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -53,6 +64,12 @@ beforeEach(() => {
   mockListAnnotations.mockReset().mockResolvedValue([]);
   mockCreateAnnotation.mockReset().mockResolvedValue({});
   mockDeleteAnnotation.mockReset().mockResolvedValue(undefined);
+  mockListQuizzes.mockReset().mockResolvedValue([]);
+  mockListFlashcards.mockReset().mockResolvedValue([]);
+  mockGetNote.mockReset().mockResolvedValue(null);
+  mockUpsertNote
+    .mockReset()
+    .mockResolvedValue({ document_id: "d1", content: "", updated_at: "2026-01-01" });
 });
 
 test("renders extracted headings and paragraphs when ready", async () => {
@@ -287,4 +304,106 @@ test("deleting a note from its modal calls the delete endpoint", async () => {
   fireEvent.press(await screen.findByText("Delete"));
 
   await waitFor(() => expect(mockDeleteAnnotation).toHaveBeenCalledWith("d1", "a1"));
+});
+
+test("renders a chapter / sub-chapter breadcrumb when the lesson is organized", async () => {
+  mockGetDocument.mockResolvedValue({
+    ...readyDocumentWithParagraph("Hello world"),
+    sub_chapter: {
+      id: "sc1",
+      title: "Sub A",
+      chapter: { id: "c1", title: "Chapter One" },
+    },
+  });
+
+  renderScreen();
+
+  expect(await screen.findByText("Chapter One / Sub A")).toBeTruthy();
+});
+
+test("omits the breadcrumb when the lesson is uncategorized", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+  renderScreen();
+
+  await screen.findByText("Hello world");
+  expect(screen.queryByText(/Chapter One/)).toBeNull();
+});
+
+test("switching to the Quizzes tab shows a Coming soon placeholder", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Quizzes"));
+
+  expect(await screen.findByText("Coming soon.")).toBeTruthy();
+  expect(mockListQuizzes).toHaveBeenCalledWith("d1");
+});
+
+test("switching to the Flashcards tab shows a Coming soon placeholder", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Flashcards"));
+
+  expect(await screen.findByText("Coming soon.")).toBeTruthy();
+  expect(mockListFlashcards).toHaveBeenCalledWith("d1");
+});
+
+test("switching back to the Lesson tab restores the reader content", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Notes"));
+  expect(screen.queryByText("Hello world")).toBeNull();
+
+  fireEvent.press(screen.getByText("Lesson"));
+  expect(await screen.findByText("Hello world")).toBeTruthy();
+});
+
+test("Notes tab loads the existing note and saves edits", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockGetNote.mockResolvedValue({
+    document_id: "d1",
+    content: "Existing note",
+    updated_at: "2026-01-01",
+  });
+  mockUpsertNote.mockResolvedValue({
+    document_id: "d1",
+    content: "Updated note",
+    updated_at: "2026-01-02",
+  });
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Notes"));
+
+  const textarea = await screen.findByPlaceholderText("Write your notes for this lesson...");
+  expect(textarea.props.value).toBe("Existing note");
+
+  fireEvent.changeText(textarea, "Updated note");
+  fireEvent.press(screen.getByText("Save"));
+
+  await screen.findByText("Saved.");
+  expect(mockUpsertNote).toHaveBeenCalledWith("d1", "Updated note");
+});
+
+test("Notes tab starts empty when the lesson has no note yet", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockGetNote.mockResolvedValue(null);
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Notes"));
+
+  const textarea = await screen.findByPlaceholderText("Write your notes for this lesson...");
+  expect(textarea.props.value).toBe("");
 });

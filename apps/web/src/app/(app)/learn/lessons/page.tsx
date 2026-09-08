@@ -73,7 +73,8 @@ export default function LessonsPage() {
               >
                 <span className="text-sm font-medium text-foreground">{chapter.title}</span>
                 <span className="text-xs text-muted-foreground">
-                  {chapter.lesson_count} {chapter.lesson_count === 1 ? "lesson" : "lessons"}
+                  {chapter.sub_chapter_count}{" "}
+                  {chapter.sub_chapter_count === 1 ? "sub-chapter" : "sub-chapters"}
                 </span>
               </Link>
             </li>

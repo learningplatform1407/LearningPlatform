@@ -92,13 +92,13 @@ describe("createApiClient", () => {
     expect(url).toBe("http://api.test/v1/documents/d1");
   });
 
-  test("listDocuments hits GET /v1/documents?chapter_id={id} when a chapter is given", async () => {
+  test("listDocuments hits GET /v1/documents?sub_chapter_id={id} when a sub-chapter is given", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse([]));
 
-    await client().listDocuments("c1");
+    await client().listDocuments("sc1");
 
     const [url] = lastCall(fetchMock);
-    expect(url).toBe("http://api.test/v1/documents?chapter_id=c1");
+    expect(url).toBe("http://api.test/v1/documents?sub_chapter_id=sc1");
   });
 
   test("listDocuments passes through the 'none' sentinel for the Uncategorized bucket", async () => {
@@ -107,7 +107,7 @@ describe("createApiClient", () => {
     await client().listDocuments("none");
 
     const [url] = lastCall(fetchMock);
-    expect(url).toBe("http://api.test/v1/documents?chapter_id=none");
+    expect(url).toBe("http://api.test/v1/documents?sub_chapter_id=none");
   });
 
   test("requestDocumentUploadUrl POSTs the file metadata", async () => {
@@ -189,7 +189,7 @@ describe("createApiClient", () => {
   });
 
   test("listChapters hits GET /v1/chapters", async () => {
-    const chapters = [{ id: "c1", title: "Intro", order_index: 0, lesson_count: 2 }];
+    const chapters = [{ id: "c1", title: "Intro", order_index: 0, sub_chapter_count: 2 }];
     fetchMock.mockResolvedValueOnce(jsonResponse(chapters));
 
     const result = await client().listChapters();
@@ -227,5 +227,72 @@ describe("createApiClient", () => {
 
     const [url] = lastCall(fetchMock);
     expect(url).toBe("http://api.test/v1/me/recent-lessons?limit=3");
+  });
+
+  test("listSubChapters hits GET /v1/chapters/{id}/sub-chapters", async () => {
+    const subChapters = [{ id: "sc1", chapter_id: "c1", title: "Sub A", order_index: 0, lesson_count: 1 }];
+    fetchMock.mockResolvedValueOnce(jsonResponse(subChapters));
+
+    const result = await client().listSubChapters("c1");
+
+    expect(result).toEqual(subChapters);
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/chapters/c1/sub-chapters");
+    expect(init.method ?? "GET").toBe("GET");
+  });
+
+  test("createSubChapter POSTs to /v1/chapters/{id}/sub-chapters", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "sc1", title: "Sub A" }));
+
+    await client().createSubChapter("c1", { title: "Sub A" });
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/chapters/c1/sub-chapters");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ title: "Sub A" });
+  });
+
+  test("getNote hits GET /v1/documents/{id}/notes and can resolve null", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(null));
+
+    const result = await client().getNote("d1");
+
+    expect(result).toBeNull();
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/documents/d1/notes");
+  });
+
+  test("upsertNote PUTs the note content to /v1/documents/{id}/notes", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ document_id: "d1", content: "New note", updated_at: "2026-01-01" }),
+    );
+
+    const result = await client().upsertNote("d1", "New note");
+
+    expect(result).toEqual({ document_id: "d1", content: "New note", updated_at: "2026-01-01" });
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/documents/d1/notes");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body as string)).toEqual({ content: "New note" });
+  });
+
+  test("listQuizzes hits GET /v1/documents/{id}/quizzes", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    const result = await client().listQuizzes("d1");
+
+    expect(result).toEqual([]);
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/documents/d1/quizzes");
+  });
+
+  test("listFlashcards hits GET /v1/documents/{id}/flashcards", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    const result = await client().listFlashcards("d1");
+
+    expect(result).toEqual([]);
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/documents/d1/flashcards");
   });
 });

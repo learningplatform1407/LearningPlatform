@@ -34,18 +34,18 @@ beforeEach(() => {
 });
 
 describe("LessonsPage", () => {
-  test("renders chapters with their lesson counts", async () => {
+  test("renders chapters with their sub-chapter counts", async () => {
     getMe.mockResolvedValue(STUDENT_ME);
     listChapters.mockResolvedValue([
-      { id: "c1", title: "Intro to Systems", order_index: 0, lesson_count: 3 },
-      { id: "c2", title: "Consistency", order_index: 1, lesson_count: 1 },
+      { id: "c1", title: "Intro to Systems", order_index: 0, sub_chapter_count: 3 },
+      { id: "c2", title: "Consistency", order_index: 1, sub_chapter_count: 1 },
     ]);
 
     renderPage();
 
     expect(await screen.findByText("Intro to Systems")).toBeInTheDocument();
-    expect(screen.getByText("3 lessons")).toBeInTheDocument();
-    expect(screen.getByText("1 lesson")).toBeInTheDocument();
+    expect(screen.getByText("3 sub-chapters")).toBeInTheDocument();
+    expect(screen.getByText("1 sub-chapter")).toBeInTheDocument();
   });
 
   test("shows an Uncategorized entry only when chapterless lessons exist", async () => {
@@ -67,7 +67,7 @@ describe("LessonsPage", () => {
   test("hides Uncategorized when there are no chapterless lessons", async () => {
     getMe.mockResolvedValue(STUDENT_ME);
     listChapters.mockResolvedValue([
-      { id: "c1", title: "Intro to Systems", order_index: 0, lesson_count: 1 },
+      { id: "c1", title: "Intro to Systems", order_index: 0, sub_chapter_count: 1 },
     ]);
     listDocuments.mockResolvedValue([]);
 
@@ -103,7 +103,7 @@ describe("LessonsPage", () => {
       id: "c1",
       title: "New Chapter",
       order_index: 0,
-      lesson_count: 0,
+      sub_chapter_count: 0,
     });
 
     renderPage();

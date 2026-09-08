@@ -8,8 +8,14 @@ import {
   documentCreateRequestSchema,
   documentResponseSchema,
   documentSummaryResponseSchema,
+  flashcardResponseSchema,
   meResponseSchema,
+  noteResponseSchema,
+  noteUpsertRequestSchema,
+  quizResponseSchema,
   recentLessonResponseSchema,
+  subChapterCreateRequestSchema,
+  subChapterResponseSchema,
   uploadUrlResponseSchema,
 } from "./index";
 
@@ -75,6 +81,38 @@ describe("documentResponseSchema", () => {
       created_at: "2026-09-03T22:10:05.372022Z",
       updated_at: "2026-09-03T22:10:05.372022Z",
       current_version: null,
+    };
+
+    expect(documentResponseSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("accepts a document with a sub_chapter breadcrumb", () => {
+    const payload = {
+      id: "2879a273-236d-429e-985b-db6c43672a1b",
+      title: "Intro to Systems",
+      created_by: "20501741-6a13-4701-9ee5-b70d713f5a85",
+      created_at: "2026-09-03T22:10:05.372022Z",
+      updated_at: "2026-09-03T22:10:05.372022Z",
+      current_version: null,
+      sub_chapter: {
+        id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+        title: "Sub A",
+        chapter: { id: "20501741-6a13-4701-9ee5-b70d713f5a85", title: "Chapter One" },
+      },
+    };
+
+    expect(documentResponseSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("accepts a document with a null sub_chapter (Uncategorized)", () => {
+    const payload = {
+      id: "2879a273-236d-429e-985b-db6c43672a1b",
+      title: "Intro to Systems",
+      created_by: "20501741-6a13-4701-9ee5-b70d713f5a85",
+      created_at: "2026-09-03T22:10:05.372022Z",
+      updated_at: "2026-09-03T22:10:05.372022Z",
+      current_version: null,
+      sub_chapter: null,
     };
 
     expect(documentResponseSchema.safeParse(payload).success).toBe(true);
@@ -242,7 +280,7 @@ describe("chapterResponseSchema", () => {
       id: "2879a273-236d-429e-985b-db6c43672a1b",
       title: "Intro to Systems",
       order_index: 0,
-      lesson_count: 3,
+      sub_chapter_count: 3,
       created_at: "2026-09-08T22:10:05.372022Z",
     };
 
@@ -261,20 +299,20 @@ describe("chapterCreateRequestSchema", () => {
 });
 
 describe("documentCreateRequestSchema", () => {
-  test("accepts a request with a chapter_id", () => {
+  test("accepts a request with a sub_chapter_id", () => {
     const payload = {
       title: "Lecture 1",
       storage_path: "x.pdf",
       mime_type: "application/pdf",
       size_bytes: 1234,
       checksum: "abc",
-      chapter_id: "2879a273-236d-429e-985b-db6c43672a1b",
+      sub_chapter_id: "2879a273-236d-429e-985b-db6c43672a1b",
     };
 
     expect(documentCreateRequestSchema.safeParse(payload).success).toBe(true);
   });
 
-  test("accepts a request with no chapter_id (Uncategorized)", () => {
+  test("accepts a request with no sub_chapter_id (Uncategorized)", () => {
     const payload = {
       title: "Lecture 1",
       storage_path: "x.pdf",
@@ -298,5 +336,79 @@ describe("recentLessonResponseSchema", () => {
     };
 
     expect(recentLessonResponseSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("subChapterResponseSchema", () => {
+  test("accepts a real backend-shaped payload", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      chapter_id: "2879a273-236d-429e-985b-db6c43672a1b",
+      title: "Sub A",
+      order_index: 0,
+      lesson_count: 2,
+      created_at: "2026-09-08T22:10:05.372022Z",
+    };
+
+    expect(subChapterResponseSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("subChapterCreateRequestSchema", () => {
+  test("accepts a title-only request", () => {
+    expect(subChapterCreateRequestSchema.safeParse({ title: "Sub A" }).success).toBe(true);
+  });
+
+  test("rejects a missing title", () => {
+    expect(subChapterCreateRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("noteResponseSchema", () => {
+  test("accepts a real backend-shaped payload", () => {
+    const payload = {
+      document_id: "2879a273-236d-429e-985b-db6c43672a1b",
+      content: "Remember the key formula.",
+      updated_at: "2026-09-08T22:10:05.372022Z",
+    };
+
+    expect(noteResponseSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("noteUpsertRequestSchema", () => {
+  test("accepts a content-only request", () => {
+    expect(noteUpsertRequestSchema.safeParse({ content: "New note" }).success).toBe(true);
+  });
+
+  test("rejects a missing content field", () => {
+    expect(noteUpsertRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("quizResponseSchema", () => {
+  test("accepts a real backend-shaped payload", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      document_id: "2879a273-236d-429e-985b-db6c43672a1b",
+      title: "Chapter 1 Quiz",
+      created_at: "2026-09-08T22:10:05.372022Z",
+    };
+
+    expect(quizResponseSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("flashcardResponseSchema", () => {
+  test("accepts a real backend-shaped payload", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      document_id: "2879a273-236d-429e-985b-db6c43672a1b",
+      front_text: "What is a CDN?",
+      back_text: "A content delivery network.",
+      order_index: 0,
+    };
+
+    expect(flashcardResponseSchema.safeParse(payload).success).toBe(true);
   });
 });

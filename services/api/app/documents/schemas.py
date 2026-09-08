@@ -15,6 +15,21 @@ class DocumentVersionResponse(BaseModel):
     created_at: datetime
 
 
+class ChapterSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    title: str
+
+
+class SubChapterSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    title: str
+    chapter: ChapterSummary
+
+
 class DocumentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -24,6 +39,7 @@ class DocumentResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     current_version: DocumentVersionResponse | None
+    sub_chapter: SubChapterSummary | None = None
 
 
 class DocumentSummaryResponse(BaseModel):
@@ -52,7 +68,7 @@ class DocumentCreateRequest(BaseModel):
     mime_type: Literal["application/pdf"]
     size_bytes: int
     checksum: str
-    chapter_id: UUID | None = None
+    sub_chapter_id: UUID | None = None
 
 
 class RecentLessonResponse(BaseModel):
@@ -63,3 +79,34 @@ class RecentLessonResponse(BaseModel):
     created_at: datetime
     status: str | None
     last_viewed_at: datetime
+
+
+class NoteResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    document_id: UUID
+    content: str
+    updated_at: datetime
+
+
+class NoteUpsertRequest(BaseModel):
+    content: str
+
+
+class QuizResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    document_id: UUID
+    title: str
+    created_at: datetime
+
+
+class FlashcardResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    document_id: UUID
+    front_text: str
+    back_text: str
+    order_index: int

@@ -1,4 +1,3 @@
-import type { Chapter } from "@lp/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -7,7 +6,12 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, Vi
 import { getApiClient } from "@/lib/api-client";
 import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
 
-type ChapterRow = Pick<Chapter, "id" | "title" | "lesson_count">;
+interface ChapterRow {
+  id: string;
+  title: string;
+  count: number;
+  countLabel: string;
+}
 
 export default function LessonsScreen() {
   const queryClient = useQueryClient();
@@ -54,12 +58,19 @@ export default function LessonsScreen() {
   const isAdmin = me.data?.role === "admin";
   const uncategorizedLessons = uncategorized.data ?? [];
   const hasUncategorized = uncategorizedLessons.length > 0;
+  const chapterRows: ChapterRow[] = chapters.data.map((chapter) => ({
+    id: chapter.id,
+    title: chapter.title,
+    count: chapter.sub_chapter_count,
+    countLabel: chapter.sub_chapter_count === 1 ? "sub-chapter" : "sub-chapters",
+  }));
   const uncategorizedRow: ChapterRow = {
     id: "uncategorized",
     title: "Uncategorized",
-    lesson_count: uncategorizedLessons.length,
+    count: uncategorizedLessons.length,
+    countLabel: uncategorizedLessons.length === 1 ? "lesson" : "lessons",
   };
-  const rows: ChapterRow[] = hasUncategorized ? [...chapters.data, uncategorizedRow] : chapters.data;
+  const rows: ChapterRow[] = hasUncategorized ? [...chapterRows, uncategorizedRow] : chapterRows;
 
   return (
     <FlatList
@@ -84,7 +95,7 @@ export default function LessonsScreen() {
         >
           <Text style={styles.rowTitle}>{item.title}</Text>
           <Text style={styles.rowStatus}>
-            {item.lesson_count} {item.lesson_count === 1 ? "lesson" : "lessons"}
+            {item.count} {item.countLabel}
           </Text>
         </Pressable>
       )}

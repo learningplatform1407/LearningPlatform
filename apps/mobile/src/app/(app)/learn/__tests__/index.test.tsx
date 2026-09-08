@@ -26,13 +26,13 @@ beforeEach(() => {
   (router.push as jest.Mock).mockReset();
 });
 
-test("shows only the Lessons/Flashcards options when nothing has been viewed yet", async () => {
+test("shows only the Lessons option when nothing has been viewed yet", async () => {
   mockListRecentLessons.mockResolvedValue([]);
 
   renderScreen();
 
   expect(await screen.findByText("Lessons")).toBeTruthy();
-  expect(screen.getByText("Flashcards")).toBeTruthy();
+  expect(screen.queryByText("Flashcards")).toBeNull();
   expect(screen.queryByText("Continue where you left off")).toBeNull();
   expect(screen.queryByText("Recently opened")).toBeNull();
 });

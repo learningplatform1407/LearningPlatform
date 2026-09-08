@@ -17,21 +17,19 @@ const STATUS_LABEL: Record<string, string> = {
   failed: "Failed",
 };
 
-export default function ChapterLessonsPage() {
-  const params = useParams<{ chapterId: string }>();
-  const isUncategorized = params.chapterId === "uncategorized";
+function LessonList({
+  subChapterId,
+  isAdmin,
+  invalidateKeys = [],
+}: {
+  subChapterId: string;
+  isAdmin: boolean;
+  invalidateKeys?: unknown[][];
+}) {
   const queryClient = useQueryClient();
-
-  const me = useQuery({ queryKey: ["me"], queryFn: () => getBrowserApiClient().getMe() });
-  const chapters = useQuery({
-    queryKey: ["chapters"],
-    queryFn: () => getBrowserApiClient().listChapters(),
-    enabled: !isUncategorized,
-  });
   const documents = useQuery({
-    queryKey: ["documents", params.chapterId],
-    queryFn: () =>
-      getBrowserApiClient().listDocuments(isUncategorized ? "none" : params.chapterId),
+    queryKey: ["documents", subChapterId],
+    queryFn: () => getBrowserApiClient().listDocuments(subChapterId),
   });
 
   const [title, setTitle] = useState("");
@@ -64,53 +62,40 @@ export default function ChapterLessonsPage() {
         mime_type: "application/pdf",
         size_bytes: file.size,
         checksum,
-        chapter_id: isUncategorized ? undefined : params.chapterId,
+        sub_chapter_id: subChapterId === "none" ? undefined : subChapterId,
       });
     },
     onSuccess: () => {
       setTitle("");
       setFile(null);
-      queryClient.invalidateQueries({ queryKey: ["documents", params.chapterId] });
-      queryClient.invalidateQueries({ queryKey: ["chapters"] });
+      queryClient.invalidateQueries({ queryKey: ["documents", subChapterId] });
+      for (const key of invalidateKeys) {
+        queryClient.invalidateQueries({ queryKey: key });
+      }
     },
     onError: (err) => {
       setUploadError(err instanceof Error ? err.message : "Failed to upload document.");
     },
   });
 
-  if (me.isPending || documents.isPending) {
-    return (
-      <main className="p-xl">
-        <p className="text-sm text-muted-foreground">Loading...</p>
-      </main>
-    );
+  if (documents.isPending) {
+    return <p className="text-sm text-muted-foreground">Loading...</p>;
   }
 
   if (documents.isError) {
     return (
-      <main className="p-xl">
-        <p role="alert" className="text-sm text-danger">
-          Failed to load lessons: {(documents.error as Error).message}
-        </p>
-      </main>
+      <p role="alert" className="text-sm text-danger">
+        Failed to load lessons: {(documents.error as Error).message}
+      </p>
     );
   }
 
-  const isAdmin = me.data?.role === "admin";
-  const chapterTitle = chapters.data?.find((chapter) => chapter.id === params.chapterId)?.title;
-  const heading = isUncategorized ? "Uncategorized" : (chapterTitle ?? "Lessons");
-
   return (
-    <main className="p-xl">
-      <Link href="/learn/lessons" className="text-sm text-muted-foreground hover:underline">
-        ← All chapters
-      </Link>
-      <h1 className="mt-xs text-2xl font-semibold text-foreground">{heading}</h1>
-
+    <div>
       {documents.data.length === 0 ? (
-        <p className="mt-md text-sm text-muted-foreground">No lessons yet.</p>
+        <p className="text-sm text-muted-foreground">No lessons yet.</p>
       ) : (
-        <ul className="mt-lg flex flex-col gap-xs">
+        <ul className="flex flex-col gap-xs">
           {documents.data.map((doc) => (
             <li key={doc.id}>
               <Link
@@ -129,14 +114,14 @@ export default function ChapterLessonsPage() {
 
       {isAdmin && (
         <form
-          className="mt-2xl flex max-w-[24rem] flex-col gap-md border-t border-border pt-lg"
+          className="mt-lg flex max-w-[24rem] flex-col gap-md border-t border-border pt-lg"
           onSubmit={(event) => {
             event.preventDefault();
             setUploadError(null);
             uploadMutation.mutate();
           }}
         >
-          <h2 className="text-sm font-semibold text-foreground">Upload a lesson</h2>
+          <h3 className="text-sm font-semibold text-foreground">Upload a lesson</h3>
           <label className="flex flex-col gap-xs text-sm text-foreground">
             Title
             <input
@@ -167,6 +152,186 @@ export default function ChapterLessonsPage() {
             className="self-start rounded-md bg-primary px-md py-sm text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {uploadMutation.isPending ? "Uploading..." : "Upload"}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function SubChapterRow({
+  subChapter,
+  chapterId,
+  isAdmin,
+  isExpanded,
+  onToggle,
+}: {
+  subChapter: { id: string; title: string; lesson_count: number };
+  chapterId: string;
+  isAdmin: boolean;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <li className="rounded-md border border-border">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={isExpanded}
+        className="flex w-full items-center justify-between px-md py-sm text-left hover:bg-muted"
+      >
+        <span className="text-sm font-medium text-foreground">{subChapter.title}</span>
+        <span className="text-xs text-muted-foreground">
+          {subChapter.lesson_count} {subChapter.lesson_count === 1 ? "lesson" : "lessons"}{" "}
+          {isExpanded ? "▲" : "▼"}
+        </span>
+      </button>
+      {isExpanded && (
+        <div className="border-t border-border px-md py-md">
+          <LessonList
+            subChapterId={subChapter.id}
+            isAdmin={isAdmin}
+            invalidateKeys={[["sub-chapters", chapterId]]}
+          />
+        </div>
+      )}
+    </li>
+  );
+}
+
+export default function ChapterLessonsPage() {
+  const params = useParams<{ chapterId: string }>();
+  const isUncategorized = params.chapterId === "uncategorized";
+  const queryClient = useQueryClient();
+
+  const me = useQuery({ queryKey: ["me"], queryFn: () => getBrowserApiClient().getMe() });
+  const chapters = useQuery({
+    queryKey: ["chapters"],
+    queryFn: () => getBrowserApiClient().listChapters(),
+    enabled: !isUncategorized,
+  });
+  const subChapters = useQuery({
+    queryKey: ["sub-chapters", params.chapterId],
+    queryFn: () => getBrowserApiClient().listSubChapters(params.chapterId),
+    enabled: !isUncategorized,
+  });
+
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [newSubChapterTitle, setNewSubChapterTitle] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const createSubChapterMutation = useMutation({
+    mutationFn: () =>
+      getBrowserApiClient().createSubChapter(params.chapterId, { title: newSubChapterTitle }),
+    onSuccess: () => {
+      setNewSubChapterTitle("");
+      queryClient.invalidateQueries({ queryKey: ["sub-chapters", params.chapterId] });
+      queryClient.invalidateQueries({ queryKey: ["chapters"] });
+    },
+    onError: (err) => {
+      setCreateError(err instanceof Error ? err.message : "Failed to create sub-chapter.");
+    },
+  });
+
+  if (isUncategorized) {
+    if (me.isPending) {
+      return (
+        <main className="p-xl">
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </main>
+      );
+    }
+    return (
+      <main className="p-xl">
+        <Link href="/learn/lessons" className="text-sm text-muted-foreground hover:underline">
+          ← All chapters
+        </Link>
+        <h1 className="mt-xs text-2xl font-semibold text-foreground">Uncategorized</h1>
+        <div className="mt-lg">
+          <LessonList subChapterId="none" isAdmin={me.data?.role === "admin"} />
+        </div>
+      </main>
+    );
+  }
+
+  if (me.isPending || chapters.isPending || subChapters.isPending) {
+    return (
+      <main className="p-xl">
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      </main>
+    );
+  }
+
+  if (subChapters.isError) {
+    return (
+      <main className="p-xl">
+        <p role="alert" className="text-sm text-danger">
+          Failed to load sub-chapters: {(subChapters.error as Error).message}
+        </p>
+      </main>
+    );
+  }
+
+  const isAdmin = me.data?.role === "admin";
+  const chapterTitle = chapters.data?.find((chapter) => chapter.id === params.chapterId)?.title;
+
+  return (
+    <main className="p-xl">
+      <Link href="/learn/lessons" className="text-sm text-muted-foreground hover:underline">
+        ← All chapters
+      </Link>
+      <h1 className="mt-xs text-2xl font-semibold text-foreground">{chapterTitle ?? "Chapter"}</h1>
+
+      {subChapters.data.length === 0 ? (
+        <p className="mt-md text-sm text-muted-foreground">No sub-chapters yet.</p>
+      ) : (
+        <ul className="mt-lg flex flex-col gap-xs">
+          {subChapters.data.map((subChapter) => (
+            <SubChapterRow
+              key={subChapter.id}
+              subChapter={subChapter}
+              chapterId={params.chapterId}
+              isAdmin={isAdmin}
+              isExpanded={expandedId === subChapter.id}
+              onToggle={() =>
+                setExpandedId((current) => (current === subChapter.id ? null : subChapter.id))
+              }
+            />
+          ))}
+        </ul>
+      )}
+
+      {isAdmin && (
+        <form
+          className="mt-2xl flex max-w-[24rem] flex-col gap-md border-t border-border pt-lg"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setCreateError(null);
+            createSubChapterMutation.mutate();
+          }}
+        >
+          <h2 className="text-sm font-semibold text-foreground">New sub-chapter</h2>
+          <label className="flex flex-col gap-xs text-sm text-foreground">
+            Title
+            <input
+              type="text"
+              value={newSubChapterTitle}
+              onChange={(event) => setNewSubChapterTitle(event.target.value)}
+              required
+              className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none"
+            />
+          </label>
+          {createError && (
+            <p role="alert" className="text-sm text-danger">
+              {createError}
+            </p>
+          )}
+          <button
+            type="submit"
+            disabled={createSubChapterMutation.isPending}
+            className="self-start rounded-md bg-primary px-md py-sm text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {createSubChapterMutation.isPending ? "Creating..." : "Create sub-chapter"}
           </button>
         </form>
       )}

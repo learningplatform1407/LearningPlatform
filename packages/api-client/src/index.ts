@@ -7,9 +7,14 @@ import type {
   DocumentResponse,
   DocumentSummaryResponse,
   EntitlementResponse,
+  Flashcard,
   MeResponse,
+  Note,
   ProfileUpdateRequest,
+  Quiz,
   RecentLesson,
+  SubChapter,
+  SubChapterCreateRequest,
   UploadUrlRequest,
   UploadUrlResponse,
 } from "@lp/contracts";
@@ -60,9 +65,11 @@ export function createApiClient(config: ApiClientConfig) {
     updateMe: (data: ProfileUpdateRequest) =>
       request<MeResponse>("/v1/me", { method: "PATCH", body: JSON.stringify(data) }),
     getMyEntitlements: () => request<EntitlementResponse[]>("/v1/me/entitlements"),
-    listDocuments: (chapterId?: string) =>
+    listDocuments: (subChapterId?: string) =>
       request<DocumentSummaryResponse[]>(
-        chapterId ? `/v1/documents?chapter_id=${encodeURIComponent(chapterId)}` : "/v1/documents",
+        subChapterId
+          ? `/v1/documents?sub_chapter_id=${encodeURIComponent(subChapterId)}`
+          : "/v1/documents",
       ),
     getDocument: (id: string) => request<DocumentResponse>(`/v1/documents/${id}`),
     requestDocumentUploadUrl: (data: UploadUrlRequest) =>
@@ -88,5 +95,21 @@ export function createApiClient(config: ApiClientConfig) {
       request<Chapter>("/v1/chapters", { method: "POST", body: JSON.stringify(data) }),
     listRecentLessons: (limit?: number) =>
       request<RecentLesson[]>(`/v1/me/recent-lessons${limit ? `?limit=${limit}` : ""}`),
+    listSubChapters: (chapterId: string) =>
+      request<SubChapter[]>(`/v1/chapters/${chapterId}/sub-chapters`),
+    createSubChapter: (chapterId: string, data: SubChapterCreateRequest) =>
+      request<SubChapter>(`/v1/chapters/${chapterId}/sub-chapters`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    getNote: (documentId: string) => request<Note | null>(`/v1/documents/${documentId}/notes`),
+    upsertNote: (documentId: string, content: string) =>
+      request<Note>(`/v1/documents/${documentId}/notes`, {
+        method: "PUT",
+        body: JSON.stringify({ content }),
+      }),
+    listQuizzes: (documentId: string) => request<Quiz[]>(`/v1/documents/${documentId}/quizzes`),
+    listFlashcards: (documentId: string) =>
+      request<Flashcard[]>(`/v1/documents/${documentId}/flashcards`),
   };
 }

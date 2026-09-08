@@ -5,18 +5,18 @@ from sqlalchemy.orm import Session
 
 from app.chapters.models import Chapter
 from app.chapters.schemas import ChapterCreateRequest
-from app.documents.models import Document
+from app.sub_chapters.models import SubChapter
 
 
 def list_chapters(db: Session) -> list[tuple[Chapter, int]]:
-    lesson_counts = (
-        select(Document.chapter_id, func.count(Document.id).label("count"))
-        .group_by(Document.chapter_id)
+    sub_chapter_counts = (
+        select(SubChapter.chapter_id, func.count(SubChapter.id).label("count"))
+        .group_by(SubChapter.chapter_id)
         .subquery()
     )
     rows = db.execute(
-        select(Chapter, func.coalesce(lesson_counts.c.count, 0))
-        .outerjoin(lesson_counts, lesson_counts.c.chapter_id == Chapter.id)
+        select(Chapter, func.coalesce(sub_chapter_counts.c.count, 0))
+        .outerjoin(sub_chapter_counts, sub_chapter_counts.c.chapter_id == Chapter.id)
         .order_by(Chapter.order_index)
     ).all()
     return [(chapter, count) for chapter, count in rows]

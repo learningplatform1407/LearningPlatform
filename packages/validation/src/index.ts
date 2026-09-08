@@ -55,6 +55,17 @@ export const documentVersionResponseSchema = z.object({
   created_at: z.string(),
 });
 
+export const chapterSummarySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+});
+
+export const subChapterSummarySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  chapter: chapterSummarySchema,
+});
+
 export const documentResponseSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -62,6 +73,7 @@ export const documentResponseSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   current_version: documentVersionResponseSchema.nullable(),
+  sub_chapter: subChapterSummarySchema.nullable().optional(),
 });
 
 export const documentSummaryResponseSchema = z.object({
@@ -88,7 +100,7 @@ export const documentCreateRequestSchema = z.object({
   mime_type: z.literal("application/pdf"),
   size_bytes: z.number(),
   checksum: z.string(),
-  chapter_id: z.string().nullable().optional(),
+  sub_chapter_id: z.string().nullable().optional(),
 });
 
 export const recentLessonResponseSchema = z.object({
@@ -103,12 +115,50 @@ export const chapterResponseSchema = z.object({
   id: z.string(),
   title: z.string(),
   order_index: z.number(),
-  lesson_count: z.number(),
+  sub_chapter_count: z.number(),
   created_at: z.string(),
 });
 
 export const chapterCreateRequestSchema = z.object({
   title: z.string(),
+});
+
+export const subChapterResponseSchema = z.object({
+  id: z.string(),
+  chapter_id: z.string(),
+  title: z.string(),
+  order_index: z.number(),
+  lesson_count: z.number(),
+  created_at: z.string(),
+});
+
+export const subChapterCreateRequestSchema = z.object({
+  title: z.string(),
+});
+
+export const noteResponseSchema = z.object({
+  document_id: z.string(),
+  content: z.string(),
+  updated_at: z.string(),
+});
+
+export const noteUpsertRequestSchema = z.object({
+  content: z.string(),
+});
+
+export const quizResponseSchema = z.object({
+  id: z.string(),
+  document_id: z.string(),
+  title: z.string(),
+  created_at: z.string(),
+});
+
+export const flashcardResponseSchema = z.object({
+  id: z.string(),
+  document_id: z.string(),
+  front_text: z.string(),
+  back_text: z.string(),
+  order_index: z.number(),
 });
 
 export const annotationTypeSchema = z.enum(["highlight", "margin_note"]);

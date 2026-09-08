@@ -72,24 +72,14 @@ export default function LearnScreen() {
         </View>
       )}
 
-      <View style={styles.navGrid}>
-        <Pressable
-          style={styles.navCard}
-          onPress={() => router.push("/learn/lessons")}
-          accessibilityRole="button"
-        >
-          <Text style={styles.navCardTitle}>Lessons</Text>
-          <Text style={styles.navCardSubtitle}>Browse chapters and lessons.</Text>
-        </Pressable>
-        <Pressable
-          style={styles.navCard}
-          onPress={() => router.push("/learn/flashcards")}
-          accessibilityRole="button"
-        >
-          <Text style={styles.navCardTitle}>Flashcards</Text>
-          <Text style={styles.navCardSubtitle}>Coming soon.</Text>
-        </Pressable>
-      </View>
+      <Pressable
+        style={styles.navCard}
+        onPress={() => router.push("/learn/lessons")}
+        accessibilityRole="button"
+      >
+        <Text style={styles.navCardTitle}>Lessons</Text>
+        <Text style={styles.navCardSubtitle}>Browse chapters and lessons.</Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -157,12 +147,7 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.xs,
     color: colors.mutedForeground,
   },
-  navGrid: {
-    flexDirection: "row",
-    gap: spacing.md,
-  },
   navCard: {
-    flex: 1,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,

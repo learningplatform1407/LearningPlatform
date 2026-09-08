@@ -107,9 +107,119 @@ function AnnotatedParagraph({
   );
 }
 
+const TABS = [
+  { key: "lesson", label: "Lesson" },
+  { key: "quizzes", label: "Quizzes" },
+  { key: "flashcards", label: "Flashcards" },
+  { key: "notes", label: "Notes" },
+] as const;
+
+type TabKey = (typeof TABS)[number]["key"];
+
+function QuizzesTab({ documentId }: { documentId: string }) {
+  const { data, isPending } = useQuery({
+    queryKey: ["quizzes", documentId],
+    queryFn: () => getApiClient().listQuizzes(documentId),
+  });
+
+  if (isPending) {
+    return <Text style={styles.hint}>Loading...</Text>;
+  }
+  if (!data || data.length === 0) {
+    return <Text style={styles.hint}>Coming soon.</Text>;
+  }
+  return (
+    <View style={styles.tabList}>
+      {data.map((quiz) => (
+        <View key={quiz.id} style={styles.tabListRow}>
+          <Text style={styles.rowTitle}>{quiz.title}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function FlashcardsTab({ documentId }: { documentId: string }) {
+  const { data, isPending } = useQuery({
+    queryKey: ["flashcards", documentId],
+    queryFn: () => getApiClient().listFlashcards(documentId),
+  });
+
+  if (isPending) {
+    return <Text style={styles.hint}>Loading...</Text>;
+  }
+  if (!data || data.length === 0) {
+    return <Text style={styles.hint}>Coming soon.</Text>;
+  }
+  return (
+    <View style={styles.tabList}>
+      {data.map((flashcard) => (
+        <View key={flashcard.id} style={styles.tabListRow}>
+          <Text style={styles.rowTitle}>{flashcard.front_text}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function NotesTab({ documentId }: { documentId: string }) {
+  const queryClient = useQueryClient();
+  const { data: note, isPending } = useQuery({
+    queryKey: ["note", documentId],
+    queryFn: () => getApiClient().getNote(documentId),
+  });
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const value = draft ?? note?.content ?? "";
+
+  const saveMutation = useMutation({
+    mutationFn: (content: string) => getApiClient().upsertNote(documentId, content),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["note", documentId] });
+      setSaved(true);
+    },
+  });
+
+  if (isPending) {
+    return <Text style={styles.hint}>Loading...</Text>;
+  }
+
+  return (
+    <View style={styles.notesTab}>
+      <TextInput
+        style={styles.notesInput}
+        value={value}
+        onChangeText={(text) => {
+          setDraft(text);
+          setSaved(false);
+        }}
+        placeholder="Write your notes for this lesson..."
+        multiline
+      />
+      <View style={styles.notesActions}>
+        <Pressable
+          style={[styles.modalButton, styles.modalButtonPrimary]}
+          onPress={() => saveMutation.mutate(value)}
+          disabled={saveMutation.isPending}
+          accessibilityRole="button"
+        >
+          {saveMutation.isPending ? (
+            <ActivityIndicator color={colors.primaryForeground} />
+          ) : (
+            <Text style={styles.modalButtonPrimaryText}>Save</Text>
+          )}
+        </Pressable>
+        {saved && <Text style={styles.hint}>Saved.</Text>}
+      </View>
+    </View>
+  );
+}
+
 export default function LectureScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<TabKey>("lesson");
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["documents", id],
@@ -171,37 +281,76 @@ export default function LectureScreen() {
         <Pressable onPress={() => router.push("/learn")} accessibilityRole="button">
           <Text style={styles.backLink}>← Learn</Text>
         </Pressable>
+        {data.sub_chapter && (
+          <Pressable
+            onPress={() => router.push(`/learn/lessons/${data.sub_chapter!.chapter.id}`)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.breadcrumb}>
+              {data.sub_chapter.chapter.title} / {data.sub_chapter.title}
+            </Text>
+          </Pressable>
+        )}
         <Text style={styles.title}>{data.title}</Text>
 
-        {!version && <Text style={styles.hint}>Not processed yet.</Text>}
-        {version?.status === "processing" && <Text style={styles.hint}>Processing...</Text>}
-        {version?.status === "failed" && (
-          <Text style={styles.error}>Processing failed: {version.error_message ?? "Unknown error"}</Text>
+        <View style={styles.tabBar}>
+          {TABS.map((tab) => (
+            <Pressable
+              key={tab.key}
+              onPress={() => setActiveTab(tab.key)}
+              style={[styles.tabButton, activeTab === tab.key && styles.tabButtonActive]}
+              accessibilityRole="button"
+            >
+              <Text
+                style={[styles.tabButtonText, activeTab === tab.key && styles.tabButtonTextActive]}
+              >
+                {tab.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {activeTab === "quizzes" && <QuizzesTab documentId={id} />}
+        {activeTab === "flashcards" && <FlashcardsTab documentId={id} />}
+        {activeTab === "notes" && <NotesTab documentId={id} />}
+
+        {activeTab === "lesson" && (
+          <>
+            {!version && <Text style={styles.hint}>Not processed yet.</Text>}
+            {version?.status === "processing" && <Text style={styles.hint}>Processing...</Text>}
+            {version?.status === "failed" && (
+              <Text style={styles.error}>
+                Processing failed: {version.error_message ?? "Unknown error"}
+              </Text>
+            )}
+            {version?.status === "ready" &&
+              version.extracted_content &&
+              version.extracted_content.blocks.map((block, index) => {
+                if (block.type === "heading") {
+                  return (
+                    <Text key={index} style={styles.heading}>
+                      {block.text}
+                    </Text>
+                  );
+                }
+                if (block.type === "image") {
+                  return block.image_path ? (
+                    <ExtractedImage key={index} path={block.image_path} />
+                  ) : null;
+                }
+                return (
+                  <AnnotatedParagraph
+                    key={index}
+                    text={block.text ?? ""}
+                    blockIndex={index}
+                    annotations={annotations}
+                    onLongPress={() => setComposingBlockIndex(index)}
+                    onOpenNote={setViewingNote}
+                  />
+                );
+              })}
+          </>
         )}
-        {version?.status === "ready" &&
-          version.extracted_content &&
-          version.extracted_content.blocks.map((block, index) => {
-            if (block.type === "heading") {
-              return (
-                <Text key={index} style={styles.heading}>
-                  {block.text}
-                </Text>
-              );
-            }
-            if (block.type === "image") {
-              return block.image_path ? <ExtractedImage key={index} path={block.image_path} /> : null;
-            }
-            return (
-              <AnnotatedParagraph
-                key={index}
-                text={block.text ?? ""}
-                blockIndex={index}
-                annotations={annotations}
-                onLongPress={() => setComposingBlockIndex(index)}
-                onOpenNote={setViewingNote}
-              />
-            );
-          })}
       </ScrollView>
 
       <Modal
@@ -291,11 +440,65 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: colors.mutedForeground,
   },
+  breadcrumb: {
+    fontSize: fontSizes.xs,
+    color: colors.mutedForeground,
+  },
   title: {
     fontSize: fontSizes["2xl"],
     lineHeight: lineHeight(fontSizes["2xl"], "tight"),
     fontWeight: fontWeights.semibold,
     color: colors.foreground,
+  },
+  tabBar: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  tabButton: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  tabButtonActive: {
+    borderBottomWidth: 2,
+    borderBottomColor: colors.primary,
+  },
+  tabButtonText: {
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.medium,
+    color: colors.mutedForeground,
+  },
+  tabButtonTextActive: {
+    color: colors.foreground,
+  },
+  tabList: {
+    gap: spacing.xs,
+  },
+  tabListRow: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  notesTab: {
+    gap: spacing.sm,
+  },
+  notesInput: {
+    minHeight: 160,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    fontSize: fontSizes.base,
+    color: colors.foreground,
+    textAlignVertical: "top",
+  },
+  notesActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
   heading: {
     fontSize: fontSizes.xl,
@@ -331,6 +534,11 @@ const styles = StyleSheet.create({
   hint: {
     fontSize: fontSizes.sm,
     color: colors.mutedForeground,
+  },
+  rowTitle: {
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.medium,
+    color: colors.foreground,
   },
   image: {
     width: "100%",

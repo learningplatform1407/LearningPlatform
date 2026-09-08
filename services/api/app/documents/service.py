@@ -6,12 +6,20 @@ from typing import Any
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from app.chapters.models import Chapter
 from app.common.errors import ApiError
 from app.documents.constants import ALLOWED_MIME_TYPES, MAX_UPLOAD_BYTES
 from app.documents.extraction import ExtractedBlock, ExtractionError, extract_pdf
-from app.documents.models import Document, DocumentVersion, LessonView
-from app.documents.schemas import DocumentCreateRequest, UploadUrlRequest
+from app.documents.models import Document, DocumentVersion, Flashcard, LessonNote, LessonView, Quiz
+from app.documents.schemas import (
+    ChapterSummary,
+    DocumentCreateRequest,
+    NoteResponse,
+    SubChapterSummary,
+    UploadUrlRequest,
+)
 from app.documents.storage import create_signed_upload_url, download_object, upload_object
+from app.sub_chapters.models import SubChapter
 
 
 def create_upload_url(data: UploadUrlRequest) -> tuple[str, str]:
@@ -33,12 +41,17 @@ def register_document(db: Session, created_by: uuid.UUID, data: DocumentCreateRe
 
     order_index = (
         db.scalar(
-            select(func.count()).select_from(Document).where(Document.chapter_id == data.chapter_id)
+            select(func.count())
+            .select_from(Document)
+            .where(Document.sub_chapter_id == data.sub_chapter_id)
         )
         or 0
     )
     document = Document(
-        title=data.title, created_by=created_by, chapter_id=data.chapter_id, order_index=order_index
+        title=data.title,
+        created_by=created_by,
+        sub_chapter_id=data.sub_chapter_id,
+        order_index=order_index,
     )
     db.add(document)
     db.flush()
@@ -105,20 +118,38 @@ def _persist_images(
 
 
 def list_documents(
-    db: Session, chapter_id: uuid.UUID | None = None, filter_by_chapter: bool = False
+    db: Session, sub_chapter_id: uuid.UUID | None = None, filter_by_sub_chapter: bool = False
 ) -> list[Document]:
-    """With `filter_by_chapter=False` (default) returns every document,
-    unscoped. With `filter_by_chapter=True`, `chapter_id=None` filters to the
-    Uncategorized bucket (`chapter_id IS NULL`) and a real UUID filters to
-    that chapter."""
+    """With `filter_by_sub_chapter=False` (default) returns every document,
+    unscoped. With `filter_by_sub_chapter=True`, `sub_chapter_id=None` filters
+    to the Uncategorized bucket (`sub_chapter_id IS NULL`) and a real UUID
+    filters to that sub-chapter."""
     query = select(Document).order_by(Document.order_index, Document.created_at.desc())
-    if filter_by_chapter:
-        query = query.where(Document.chapter_id == chapter_id)
+    if filter_by_sub_chapter:
+        query = query.where(Document.sub_chapter_id == sub_chapter_id)
     return list(db.scalars(query))
 
 
 def get_document(db: Session, document_id: uuid.UUID) -> Document | None:
     return db.get(Document, document_id)
+
+
+def get_sub_chapter_summary(
+    db: Session, sub_chapter_id: uuid.UUID | None
+) -> SubChapterSummary | None:
+    if sub_chapter_id is None:
+        return None
+    sub_chapter = db.get(SubChapter, sub_chapter_id)
+    if sub_chapter is None:
+        return None
+    chapter = db.get(Chapter, sub_chapter.chapter_id)
+    if chapter is None:
+        return None
+    return SubChapterSummary(
+        id=sub_chapter.id,
+        title=sub_chapter.title,
+        chapter=ChapterSummary(id=chapter.id, title=chapter.title),
+    )
 
 
 def record_lesson_view(db: Session, user_id: uuid.UUID, document_id: uuid.UUID) -> None:
@@ -151,3 +182,47 @@ def list_recent_lessons(
         .limit(limit)
     ).all()
     return [(document, last_viewed_at) for document, last_viewed_at in rows]
+
+
+def get_note(db: Session, user_id: uuid.UUID, document_id: uuid.UUID) -> LessonNote | None:
+    return db.scalar(
+        select(LessonNote).where(
+            LessonNote.user_id == user_id, LessonNote.document_id == document_id
+        )
+    )
+
+
+def upsert_note(
+    db: Session, user_id: uuid.UUID, document_id: uuid.UUID, content: str
+) -> NoteResponse:
+    now = datetime.now(UTC)
+    existing = get_note(db, user_id, document_id)
+    if existing is None:
+        note = LessonNote(user_id=user_id, document_id=document_id, content=content, updated_at=now)
+        db.add(note)
+    else:
+        db.execute(
+            update(LessonNote)
+            .where(LessonNote.id == existing.id)
+            .values(content=content, updated_at=now)
+        )
+    db.commit()
+    return NoteResponse(document_id=document_id, content=content, updated_at=now)
+
+
+def list_quizzes(db: Session, document_id: uuid.UUID) -> list[Quiz]:
+    return list(
+        db.scalars(
+            select(Quiz).where(Quiz.document_id == document_id).order_by(Quiz.created_at)
+        )
+    )
+
+
+def list_flashcards(db: Session, document_id: uuid.UUID) -> list[Flashcard]:
+    return list(
+        db.scalars(
+            select(Flashcard)
+            .where(Flashcard.document_id == document_id)
+            .order_by(Flashcard.order_index)
+        )
+    )

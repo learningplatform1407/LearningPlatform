@@ -10,9 +10,22 @@ const createSignedUrl = vi.fn();
 const listAnnotations = vi.fn();
 const createAnnotation = vi.fn();
 const deleteAnnotation = vi.fn();
+const listQuizzes = vi.fn();
+const listFlashcards = vi.fn();
+const getNote = vi.fn();
+const upsertNote = vi.fn();
 
 vi.mock("@/lib/api-client.browser", () => ({
-  getBrowserApiClient: () => ({ getDocument, listAnnotations, createAnnotation, deleteAnnotation }),
+  getBrowserApiClient: () => ({
+    getDocument,
+    listAnnotations,
+    createAnnotation,
+    deleteAnnotation,
+    listQuizzes,
+    listFlashcards,
+    getNote,
+    upsertNote,
+  }),
 }));
 
 vi.mock("@/lib/supabase/client", () => ({
@@ -64,6 +77,10 @@ beforeEach(() => {
   listAnnotations.mockReset().mockResolvedValue([]);
   createAnnotation.mockReset().mockResolvedValue({});
   deleteAnnotation.mockReset().mockResolvedValue(undefined);
+  listQuizzes.mockReset().mockResolvedValue([]);
+  listFlashcards.mockReset().mockResolvedValue([]);
+  getNote.mockReset().mockResolvedValue(null);
+  upsertNote.mockReset().mockResolvedValue({ document_id: "d1", content: "", updated_at: "2026-01-01" });
 });
 
 describe("LecturePage", () => {
@@ -323,5 +340,115 @@ describe("LecturePage", () => {
     await userEvent.setup().click(mark);
 
     expect(deleteAnnotation).toHaveBeenCalledWith("d1", "a1");
+  });
+
+  test("renders a chapter / sub-chapter breadcrumb when the lesson is organized", async () => {
+    getDocument.mockResolvedValue({
+      ...readyDocumentWithParagraph("Hello world"),
+      sub_chapter: {
+        id: "sc1",
+        title: "Sub A",
+        chapter: { id: "c1", title: "Chapter One" },
+      },
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Chapter One")).toBeInTheDocument();
+    expect(screen.getByText(/Sub A/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Chapter One" })).toHaveAttribute(
+      "href",
+      "/learn/lessons/c1",
+    );
+  });
+
+  test("omits the breadcrumb when the lesson is uncategorized", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+    renderPage();
+
+    await screen.findByText("Hello world");
+    expect(screen.queryByRole("link", { name: /Chapter/ })).not.toBeInTheDocument();
+  });
+
+  test("switching to the Quizzes tab shows a Coming soon placeholder", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Quizzes" }));
+
+    expect(await screen.findByText("Coming soon.")).toBeInTheDocument();
+    expect(listQuizzes).toHaveBeenCalledWith("d1");
+  });
+
+  test("switching to the Flashcards tab shows a Coming soon placeholder", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Flashcards" }));
+
+    expect(await screen.findByText("Coming soon.")).toBeInTheDocument();
+    expect(listFlashcards).toHaveBeenCalledWith("d1");
+  });
+
+  test("switching back to the Lesson tab restores the reader content", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+    renderPage();
+    await screen.findByText("Hello world");
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Notes" }));
+    expect(screen.queryByText("Hello world")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Lesson" }));
+    expect(await screen.findByText("Hello world")).toBeInTheDocument();
+  });
+
+  test("Notes tab loads the existing note and saves edits", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    getNote.mockResolvedValue({
+      document_id: "d1",
+      content: "Existing note",
+      updated_at: "2026-01-01",
+    });
+    upsertNote.mockResolvedValue({
+      document_id: "d1",
+      content: "Updated note",
+      updated_at: "2026-01-02",
+    });
+
+    renderPage();
+    await screen.findByText("Hello world");
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Notes" }));
+
+    const textarea = await screen.findByPlaceholderText("Write your notes for this lesson...");
+    expect(textarea).toHaveValue("Existing note");
+
+    await user.clear(textarea);
+    await user.type(textarea, "Updated note");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await screen.findByText("Saved.");
+    expect(upsertNote).toHaveBeenCalledWith("d1", "Updated note");
+  });
+
+  test("Notes tab starts empty when the lesson has no note yet", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    getNote.mockResolvedValue(null);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Notes" }));
+
+    const textarea = await screen.findByPlaceholderText("Write your notes for this lesson...");
+    expect(textarea).toHaveValue("");
   });
 });

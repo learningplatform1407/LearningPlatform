@@ -12,9 +12,15 @@ import type {
   documentVersionResponseSchema,
   entitlementResponseSchema,
   extractedContentSchema,
+  flashcardResponseSchema,
   meResponseSchema,
+  noteResponseSchema,
+  noteUpsertRequestSchema,
   profileUpdateRequestSchema,
+  quizResponseSchema,
   recentLessonResponseSchema,
+  subChapterCreateRequestSchema,
+  subChapterResponseSchema,
   uploadUrlRequestSchema,
   uploadUrlResponseSchema,
 } from "@lp/validation";
@@ -35,3 +41,9 @@ export type AnnotationCreateRequest = z.infer<typeof annotationCreateRequestSche
 export type Chapter = z.infer<typeof chapterResponseSchema>;
 export type ChapterCreateRequest = z.infer<typeof chapterCreateRequestSchema>;
 export type RecentLesson = z.infer<typeof recentLessonResponseSchema>;
+export type SubChapter = z.infer<typeof subChapterResponseSchema>;
+export type SubChapterCreateRequest = z.infer<typeof subChapterCreateRequestSchema>;
+export type Note = z.infer<typeof noteResponseSchema>;
+export type NoteUpsertRequest = z.infer<typeof noteUpsertRequestSchema>;
+export type Quiz = z.infer<typeof quizResponseSchema>;
+export type Flashcard = z.infer<typeof flashcardResponseSchema>;

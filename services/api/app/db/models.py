@@ -8,8 +8,16 @@ Base.metadata being complete.
 from app.annotations.models import DocumentAnnotation
 from app.chapters.models import Chapter
 from app.db.external import auth_users
-from app.documents.models import Document, DocumentVersion, LessonView
+from app.documents.models import (
+    Document,
+    DocumentVersion,
+    Flashcard,
+    LessonNote,
+    LessonView,
+    Quiz,
+)
 from app.plans.models import Subscription
+from app.sub_chapters.models import SubChapter
 from app.users.models import AccountSettings, Consent, Profile
 
 __all__ = [
@@ -19,8 +27,12 @@ __all__ = [
     "Document",
     "DocumentAnnotation",
     "DocumentVersion",
+    "Flashcard",
+    "LessonNote",
     "LessonView",
     "Profile",
+    "Quiz",
+    "SubChapter",
     "Subscription",
     "auth_users",
 ]

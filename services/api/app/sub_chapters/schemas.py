@@ -4,15 +4,16 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 
-class ChapterResponse(BaseModel):
+class SubChapterResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    chapter_id: UUID
     title: str
     order_index: int
-    sub_chapter_count: int
+    lesson_count: int
     created_at: datetime
 
 
-class ChapterCreateRequest(BaseModel):
+class SubChapterCreateRequest(BaseModel):
     title: str

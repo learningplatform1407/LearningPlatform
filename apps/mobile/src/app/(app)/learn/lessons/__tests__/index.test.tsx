@@ -41,16 +41,16 @@ beforeEach(() => {
   (router.push as jest.Mock).mockReset();
 });
 
-test("renders chapters with their lesson counts and navigates on press", async () => {
+test("renders chapters with their sub-chapter counts and navigates on press", async () => {
   mockGetMe.mockResolvedValue(STUDENT_ME);
   mockListChapters.mockResolvedValue([
-    { id: "c1", title: "Intro to Systems", order_index: 0, lesson_count: 3 },
+    { id: "c1", title: "Intro to Systems", order_index: 0, sub_chapter_count: 3 },
   ]);
 
   renderScreen();
 
   expect(await screen.findByText("Intro to Systems")).toBeTruthy();
-  expect(screen.getByText("3 lessons")).toBeTruthy();
+  expect(screen.getByText("3 sub-chapters")).toBeTruthy();
 
   fireEvent.press(screen.getByText("Intro to Systems"));
   expect(router.push).toHaveBeenCalledWith("/learn/lessons/c1");
@@ -73,7 +73,7 @@ test("shows an Uncategorized row only when chapterless lessons exist", async () 
 test("hides Uncategorized when there are no chapterless lessons", async () => {
   mockGetMe.mockResolvedValue(STUDENT_ME);
   mockListChapters.mockResolvedValue([
-    { id: "c1", title: "Intro to Systems", order_index: 0, lesson_count: 1 },
+    { id: "c1", title: "Intro to Systems", order_index: 0, sub_chapter_count: 1 },
   ]);
 
   renderScreen();
@@ -108,7 +108,7 @@ test("an admin can create a new chapter", async () => {
     id: "c1",
     title: "New Chapter",
     order_index: 0,
-    lesson_count: 0,
+    sub_chapter_count: 0,
   });
 
   renderScreen();
