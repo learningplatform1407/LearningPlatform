@@ -353,9 +353,7 @@ export default function LecturePage() {
   }
 
   return (
-    // Arbitrary value, not max-w-lg — see the comment in auth-layout.tsx:
-    // Tailwind's width/max-width scale shares the --spacing-* namespace.
-    <main className="mx-auto max-w-[42rem] p-xl">
+    <main className="w-full p-xl">
       <Link href="/learn" className="text-sm text-muted-foreground hover:underline">
         ← Learn
       </Link>
@@ -370,7 +368,7 @@ export default function LecturePage() {
       )}
       <h1 className="mt-xs text-2xl font-semibold text-foreground">{data.title}</h1>
 
-      <div className="mt-lg flex gap-xs border-b border-border">
+      <div className="mt-lg flex w-full gap-xs border-b border-border">
         {TABS.map((tab) => (
           <button
             key={tab.key}
