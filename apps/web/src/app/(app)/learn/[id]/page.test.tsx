@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -14,6 +14,7 @@ const listQuizzes = vi.fn();
 const listFlashcards = vi.fn();
 const getNote = vi.fn();
 const upsertNote = vi.fn();
+const listDocuments = vi.fn();
 
 vi.mock("@/lib/api-client.browser", () => ({
   getBrowserApiClient: () => ({
@@ -25,6 +26,7 @@ vi.mock("@/lib/api-client.browser", () => ({
     listFlashcards,
     getNote,
     upsertNote,
+    listDocuments,
   }),
 }));
 
@@ -81,6 +83,7 @@ beforeEach(() => {
   listFlashcards.mockReset().mockResolvedValue([]);
   getNote.mockReset().mockResolvedValue(null);
   upsertNote.mockReset().mockResolvedValue({ document_id: "d1", content: "", updated_at: "2026-01-01" });
+  listDocuments.mockReset().mockResolvedValue([]);
 });
 
 describe("LecturePage", () => {
@@ -307,7 +310,7 @@ describe("LecturePage", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Add note" }));
     await user.type(screen.getByPlaceholderText("Note..."), "Check this later");
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(within(screen.getByRole("toolbar")).getByRole("button", { name: "Save" }));
 
     expect(createAnnotation).toHaveBeenCalledWith("d1", {
       type: "margin_note",
@@ -402,14 +405,14 @@ describe("LecturePage", () => {
     await screen.findByText("Hello world");
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("button", { name: "Notes" }));
+    await user.click(screen.getByRole("button", { name: "Quizzes" }));
     expect(screen.queryByText("Hello world")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Lesson" }));
     expect(await screen.findByText("Hello world")).toBeInTheDocument();
   });
 
-  test("Notes tab loads the existing note and saves edits", async () => {
+  test("the notes panel loads the existing note and saves edits, alongside the lesson text", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
     getNote.mockResolvedValue({
       document_id: "d1",
@@ -426,10 +429,10 @@ describe("LecturePage", () => {
     await screen.findByText("Hello world");
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("button", { name: "Notes" }));
-
     const textarea = await screen.findByPlaceholderText("Write your notes for this lesson...");
     expect(textarea).toHaveValue("Existing note");
+    // The notes panel is visible in parallel with the lesson text, not behind a tab.
+    expect(screen.getByText("Hello world")).toBeInTheDocument();
 
     await user.clear(textarea);
     await user.type(textarea, "Updated note");
@@ -439,16 +442,68 @@ describe("LecturePage", () => {
     expect(upsertNote).toHaveBeenCalledWith("d1", "Updated note");
   });
 
-  test("Notes tab starts empty when the lesson has no note yet", async () => {
+  test("the notes panel starts empty when the lesson has no note yet", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
     getNote.mockResolvedValue(null);
 
     renderPage();
-    await screen.findByText("Hello world");
-
-    await userEvent.setup().click(screen.getByRole("button", { name: "Notes" }));
 
     const textarea = await screen.findByPlaceholderText("Write your notes for this lesson...");
     expect(textarea).toHaveValue("");
+  });
+
+  test("the notes panel collapses and expands via its toggle button", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+    renderPage();
+    await screen.findByText("Hello world");
+    const user = userEvent.setup();
+
+    expect(
+      await screen.findByPlaceholderText("Write your notes for this lesson..."),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Collapse notes" }));
+    expect(screen.queryByPlaceholderText("Write your notes for this lesson...")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Expand notes" }));
+    expect(
+      await screen.findByPlaceholderText("Write your notes for this lesson..."),
+    ).toBeInTheDocument();
+  });
+
+  test("the table of contents lists the current sub-chapter's lessons and highlights the current one", async () => {
+    getDocument.mockResolvedValue({
+      ...readyDocumentWithParagraph("Hello world"),
+      sub_chapter: { id: "sc1", title: "Sub A", chapter: { id: "c1", title: "Chapter One" } },
+    });
+    listDocuments.mockResolvedValue([
+      { id: "d1", title: "Intro to Systems", created_at: "2026-01-01", status: "ready" },
+      { id: "d2", title: "Second lesson", created_at: "2026-01-01", status: "ready" },
+    ]);
+
+    renderPage();
+
+    expect(await screen.findByText("Second lesson")).toBeInTheDocument();
+    expect(listDocuments).toHaveBeenCalledWith("sc1");
+
+    const currentLink = screen.getByRole("link", { name: "Intro to Systems" });
+    const siblingLink = screen.getByRole("link", { name: "Second lesson" });
+    expect(currentLink).toHaveAttribute("href", "/learn/d1");
+    expect(siblingLink).toHaveAttribute("href", "/learn/d2");
+    expect(currentLink.className).toContain("font-semibold");
+    expect(siblingLink.className).not.toContain("font-semibold");
+  });
+
+  test("the table of contents falls back to the Uncategorized bucket when the lesson has no sub-chapter", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDocuments.mockResolvedValue([
+      { id: "d1", title: "Intro to Systems", created_at: "2026-01-01", status: "ready" },
+    ]);
+
+    renderPage();
+
+    await screen.findByText("Hello world");
+    expect(listDocuments).toHaveBeenCalledWith("none");
   });
 });

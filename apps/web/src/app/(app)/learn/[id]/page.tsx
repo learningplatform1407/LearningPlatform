@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 
 import type { Annotation, AnnotationCreateRequest } from "@lp/contracts";
 
@@ -134,8 +134,12 @@ const TABS = [
   { key: "lesson", label: "Lesson" },
   { key: "quizzes", label: "Quizzes" },
   { key: "flashcards", label: "Flashcards" },
-  { key: "notes", label: "Notes" },
 ] as const;
+
+const NOTES_PANEL_MIN_WIDTH = 240;
+const NOTES_PANEL_MAX_WIDTH = 560;
+const NOTES_PANEL_DEFAULT_WIDTH = 320;
+const NOTES_PANEL_COLLAPSED_WIDTH = 40;
 
 type TabKey = (typeof TABS)[number]["key"];
 
@@ -215,16 +219,15 @@ function NotesTab({ documentId }: { documentId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-sm">
+    <div className="flex flex-1 flex-col gap-sm">
       <textarea
         value={value}
         onChange={(event) => {
           setDraft(event.target.value);
           setSaved(false);
         }}
-        rows={10}
         placeholder="Write your notes for this lesson..."
-        className="w-full rounded-md border border-border p-sm text-sm text-foreground focus:border-primary focus:outline-none"
+        className="w-full flex-1 resize-none rounded-md border border-border p-sm text-sm text-foreground focus:border-primary focus:outline-none"
       />
       <div className="flex items-center gap-sm">
         <button
@@ -236,6 +239,123 @@ function NotesTab({ documentId }: { documentId: string }) {
           {saveMutation.isPending ? "Saving..." : "Save"}
         </button>
         {saved && <span className="text-xs text-muted-foreground">Saved.</span>}
+      </div>
+    </div>
+  );
+}
+
+function TocPanel({ scopeId, currentDocumentId }: { scopeId: string; currentDocumentId: string }) {
+  const { data, isPending } = useQuery({
+    queryKey: ["documents", scopeId],
+    queryFn: () => getBrowserApiClient().listDocuments(scopeId),
+  });
+
+  return (
+    <nav
+      aria-label="Table of contents"
+      className="sticky top-0 flex h-screen w-64 shrink-0 flex-col gap-xs overflow-y-auto border-r border-border p-md"
+    >
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Contents
+      </h2>
+      {isPending && <p className="text-sm text-muted-foreground">Loading...</p>}
+      {!isPending && (!data || data.length === 0) && (
+        <p className="text-sm text-muted-foreground">No lessons.</p>
+      )}
+      {data && data.length > 0 && (
+        <ul className="flex flex-col gap-xs">
+          {data.map((doc) => (
+            <li key={doc.id}>
+              <Link
+                href={`/learn/${doc.id}`}
+                className={`block rounded-md px-sm py-xs text-sm ${
+                  doc.id === currentDocumentId
+                    ? "bg-muted font-semibold text-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {doc.title}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </nav>
+  );
+}
+
+function NotesPanel({ documentId }: { documentId: string }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [width, setWidth] = useState(NOTES_PANEL_DEFAULT_WIDTH);
+  const draggingRef = useRef(false);
+
+  function handleDragStart(event: ReactMouseEvent) {
+    event.preventDefault();
+    draggingRef.current = true;
+    const startX = event.clientX;
+    const startWidth = width;
+
+    function handleMouseMove(moveEvent: MouseEvent) {
+      if (!draggingRef.current) return;
+      const next = startWidth + (startX - moveEvent.clientX);
+      setWidth(Math.min(NOTES_PANEL_MAX_WIDTH, Math.max(NOTES_PANEL_MIN_WIDTH, next)));
+    }
+
+    function handleMouseUp() {
+      draggingRef.current = false;
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    }
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  }
+
+  if (collapsed) {
+    return (
+      <div
+        style={{ width: NOTES_PANEL_COLLAPSED_WIDTH }}
+        className="sticky top-0 flex h-screen shrink-0 flex-col items-center border-l border-border p-xs"
+      >
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          aria-label="Expand notes"
+          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+        >
+          «
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{ width }}
+      className="sticky top-0 relative flex h-screen shrink-0 flex-col border-l border-border"
+    >
+      <div
+        onMouseDown={handleDragStart}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize notes panel"
+        className="absolute top-0 left-0 h-full w-2 -translate-x-1/2 cursor-col-resize"
+      />
+      <div className="flex flex-1 flex-col gap-sm overflow-y-auto p-md">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Notes
+          </h2>
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            aria-label="Collapse notes"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+          >
+            »
+          </button>
+        </div>
+        <NotesTab documentId={documentId} />
       </div>
     </div>
   );
@@ -352,138 +472,145 @@ export default function LecturePage() {
     );
   }
 
+  const tocScopeId = data.sub_chapter?.id ?? "none";
+
   return (
-    <main className="w-full p-xl">
-      <Link href="/learn" className="text-sm text-muted-foreground hover:underline">
-        ← Learn
-      </Link>
-      {data.sub_chapter && (
-        <p className="mt-xs text-xs text-muted-foreground">
-          <Link href={`/learn/lessons/${data.sub_chapter.chapter.id}`} className="hover:underline">
-            {data.sub_chapter.chapter.title}
-          </Link>
-          {" / "}
-          {data.sub_chapter.title}
-        </p>
-      )}
-      <h1 className="mt-xs text-2xl font-semibold text-foreground">{data.title}</h1>
+    <main className="flex w-full">
+      <TocPanel scopeId={tocScopeId} currentDocumentId={params.id} />
 
-      <div className="mt-lg flex w-full gap-xs border-b border-border">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveTab(tab.key)}
-            className={`px-md py-sm text-sm font-medium ${
-              activeTab === tab.key
-                ? "border-b-2 border-primary text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <div className="min-w-0 flex-1 p-xl">
+        <Link href="/learn" className="text-sm text-muted-foreground hover:underline">
+          ← Learn
+        </Link>
+        {data.sub_chapter && (
+          <p className="mt-xs text-xs text-muted-foreground">
+            <Link href={`/learn/lessons/${data.sub_chapter.chapter.id}`} className="hover:underline">
+              {data.sub_chapter.chapter.title}
+            </Link>
+            {" / "}
+            {data.sub_chapter.title}
+          </p>
+        )}
+        <h1 className="mt-xs text-2xl font-semibold text-foreground">{data.title}</h1>
 
-      <div className="mt-lg">
-        {activeTab === "quizzes" && <QuizzesTab documentId={params.id} />}
-        {activeTab === "flashcards" && <FlashcardsTab documentId={params.id} />}
-        {activeTab === "notes" && <NotesTab documentId={params.id} />}
+        <div className="mt-lg flex w-full gap-xs border-b border-border">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-md py-sm text-sm font-medium ${
+                activeTab === tab.key
+                  ? "border-b-2 border-primary text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-        {activeTab === "lesson" && (
-          <>
-            {!version && <p className="text-sm text-muted-foreground">Not processed yet.</p>}
-            {version?.status === "processing" && (
-              <p className="text-sm text-muted-foreground">Processing...</p>
-            )}
-            {version?.status === "failed" && (
-              <p role="alert" className="text-sm text-danger">
-                Processing failed: {version.error_message ?? "Unknown error"}
-              </p>
-            )}
-            {version?.status === "ready" && version.extracted_content && (
-              <article
-                ref={articleRef}
-                onMouseUp={handleMouseUp}
-                className="flex flex-col gap-md"
-              >
-                {version.extracted_content.blocks.map((block, index) => {
-                  if (block.type === "heading") {
+        <div className="mt-lg">
+          {activeTab === "quizzes" && <QuizzesTab documentId={params.id} />}
+          {activeTab === "flashcards" && <FlashcardsTab documentId={params.id} />}
+
+          {activeTab === "lesson" && (
+            <>
+              {!version && <p className="text-sm text-muted-foreground">Not processed yet.</p>}
+              {version?.status === "processing" && (
+                <p className="text-sm text-muted-foreground">Processing...</p>
+              )}
+              {version?.status === "failed" && (
+                <p role="alert" className="text-sm text-danger">
+                  Processing failed: {version.error_message ?? "Unknown error"}
+                </p>
+              )}
+              {version?.status === "ready" && version.extracted_content && (
+                <article
+                  ref={articleRef}
+                  onMouseUp={handleMouseUp}
+                  className="flex flex-col gap-md"
+                >
+                  {version.extracted_content.blocks.map((block, index) => {
+                    if (block.type === "heading") {
+                      return (
+                        <h2 key={index} className="text-xl font-semibold text-foreground">
+                          {block.text}
+                        </h2>
+                      );
+                    }
+                    if (block.type === "image") {
+                      return block.image_path ? (
+                        <ExtractedImage key={index} path={block.image_path} />
+                      ) : null;
+                    }
                     return (
-                      <h2 key={index} className="text-xl font-semibold text-foreground">
-                        {block.text}
-                      </h2>
+                      <AnnotatedParagraph
+                        key={index}
+                        text={block.text ?? ""}
+                        blockIndex={index}
+                        annotations={annotations}
+                        onDeleteAnnotation={(annotationId) =>
+                          deleteAnnotationMutation.mutate(annotationId)
+                        }
+                      />
                     );
-                  }
-                  if (block.type === "image") {
-                    return block.image_path ? (
-                      <ExtractedImage key={index} path={block.image_path} />
-                    ) : null;
-                  }
-                  return (
-                    <AnnotatedParagraph
-                      key={index}
-                      text={block.text ?? ""}
-                      blockIndex={index}
-                      annotations={annotations}
-                      onDeleteAnnotation={(annotationId) =>
-                        deleteAnnotationMutation.mutate(annotationId)
-                      }
-                    />
-                  );
-                })}
-              </article>
+                  })}
+                </article>
+              )}
+            </>
+          )}
+        </div>
+
+        {activeTab === "lesson" && pendingSelection && (
+          <div
+            role="toolbar"
+            aria-label="Annotation actions"
+            className="fixed z-20 flex items-center gap-xs rounded-md border border-border bg-background p-xs shadow-md"
+            style={{ top: pendingSelection.top - 44, left: pendingSelection.left }}
+          >
+            {noteDraft === null ? (
+              <>
+                <button
+                  type="button"
+                  className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
+                  onClick={handleHighlight}
+                >
+                  Highlight
+                </button>
+                <button
+                  type="button"
+                  className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
+                  onClick={() => setNoteDraft("")}
+                >
+                  Add note
+                </button>
+              </>
+            ) : (
+              <form
+                className="flex items-center gap-xs"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  handleSaveNote();
+                }}
+              >
+                <input
+                  autoFocus
+                  value={noteDraft}
+                  onChange={(event) => setNoteDraft(event.target.value)}
+                  placeholder="Note..."
+                  className="rounded-sm border border-border px-sm py-xs text-sm"
+                />
+                <button type="submit" className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted">
+                  Save
+                </button>
+              </form>
             )}
-          </>
+          </div>
         )}
       </div>
 
-      {activeTab === "lesson" && pendingSelection && (
-        <div
-          role="toolbar"
-          aria-label="Annotation actions"
-          className="fixed z-20 flex items-center gap-xs rounded-md border border-border bg-background p-xs shadow-md"
-          style={{ top: pendingSelection.top - 44, left: pendingSelection.left }}
-        >
-          {noteDraft === null ? (
-            <>
-              <button
-                type="button"
-                className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
-                onClick={handleHighlight}
-              >
-                Highlight
-              </button>
-              <button
-                type="button"
-                className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
-                onClick={() => setNoteDraft("")}
-              >
-                Add note
-              </button>
-            </>
-          ) : (
-            <form
-              className="flex items-center gap-xs"
-              onSubmit={(event) => {
-                event.preventDefault();
-                handleSaveNote();
-              }}
-            >
-              <input
-                autoFocus
-                value={noteDraft}
-                onChange={(event) => setNoteDraft(event.target.value)}
-                placeholder="Note..."
-                className="rounded-sm border border-border px-sm py-xs text-sm"
-              />
-              <button type="submit" className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted">
-                Save
-              </button>
-            </form>
-          )}
-        </div>
-      )}
+      <NotesPanel documentId={params.id} />
     </main>
   );
 }

@@ -111,7 +111,6 @@ const TABS = [
   { key: "lesson", label: "Lesson" },
   { key: "quizzes", label: "Quizzes" },
   { key: "flashcards", label: "Flashcards" },
-  { key: "notes", label: "Notes" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -216,10 +215,95 @@ function NotesTab({ documentId }: { documentId: string }) {
   );
 }
 
+function TocModal({
+  visible,
+  onClose,
+  scopeId,
+  currentDocumentId,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  scopeId: string;
+  currentDocumentId: string;
+}) {
+  const { data, isPending } = useQuery({
+    queryKey: ["documents", scopeId],
+    queryFn: () => getApiClient().listDocuments(scopeId),
+    enabled: visible,
+  });
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={styles.overlayContainer}>
+        <View style={styles.overlayHeader}>
+          <Text style={styles.overlayTitle}>Contents</Text>
+          <Pressable onPress={onClose} accessibilityRole="button">
+            <Text style={styles.overlayClose}>Close</Text>
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.overlayContent}>
+          {isPending && <Text style={styles.hint}>Loading...</Text>}
+          {!isPending && (!data || data.length === 0) && (
+            <Text style={styles.hint}>No lessons.</Text>
+          )}
+          {data?.map((doc) => (
+            <Pressable
+              key={doc.id}
+              style={[styles.tocRow, doc.id === currentDocumentId && styles.tocRowActive]}
+              onPress={() => {
+                onClose();
+                router.push(`/learn/${doc.id}`);
+              }}
+              accessibilityRole="button"
+            >
+              <Text
+                style={[
+                  styles.rowTitle,
+                  doc.id === currentDocumentId && styles.tocRowActiveText,
+                ]}
+              >
+                {doc.title}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
+function NotesModal({
+  visible,
+  onClose,
+  documentId,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  documentId: string;
+}) {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={styles.overlayContainer}>
+        <View style={styles.overlayHeader}>
+          <Text style={styles.overlayTitle}>Notes</Text>
+          <Pressable onPress={onClose} accessibilityRole="button">
+            <Text style={styles.overlayClose}>Close</Text>
+          </Pressable>
+        </View>
+        <View style={styles.overlayContent}>
+          <NotesTab documentId={documentId} />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function LectureScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<TabKey>("lesson");
+  const [tocOpen, setTocOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["documents", id],
@@ -293,6 +377,23 @@ export default function LectureScreen() {
         )}
         <Text style={styles.title}>{data.title}</Text>
 
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => setTocOpen(true)}
+            style={styles.headerActionButton}
+            accessibilityRole="button"
+          >
+            <Text style={styles.headerActionText}>Contents</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setNotesOpen(true)}
+            style={styles.headerActionButton}
+            accessibilityRole="button"
+          >
+            <Text style={styles.headerActionText}>Notes</Text>
+          </Pressable>
+        </View>
+
         <View style={styles.tabBar}>
           {TABS.map((tab) => (
             <Pressable
@@ -312,7 +413,6 @@ export default function LectureScreen() {
 
         {activeTab === "quizzes" && <QuizzesTab documentId={id} />}
         {activeTab === "flashcards" && <FlashcardsTab documentId={id} />}
-        {activeTab === "notes" && <NotesTab documentId={id} />}
 
         {activeTab === "lesson" && (
           <>
@@ -423,6 +523,14 @@ export default function LectureScreen() {
           </View>
         </View>
       </Modal>
+
+      <TocModal
+        visible={tocOpen}
+        onClose={() => setTocOpen(false)}
+        scopeId={data.sub_chapter?.id ?? "none"}
+        currentDocumentId={id}
+      />
+      <NotesModal visible={notesOpen} onClose={() => setNotesOpen(false)} documentId={id} />
     </>
   );
 }
@@ -449,6 +557,63 @@ const styles = StyleSheet.create({
     lineHeight: lineHeight(fontSizes["2xl"], "tight"),
     fontWeight: fontWeights.semibold,
     color: colors.foreground,
+  },
+  headerActions: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  headerActionButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
+  headerActionText: {
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.medium,
+    color: colors.foreground,
+  },
+  overlayContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  overlayHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: spacing.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  overlayTitle: {
+    fontSize: fontSizes.xl,
+    fontWeight: fontWeights.semibold,
+    color: colors.foreground,
+  },
+  overlayClose: {
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.medium,
+    color: colors.primary,
+  },
+  overlayContent: {
+    flex: 1,
+    padding: spacing.xl,
+    gap: spacing.xs,
+  },
+  tocRow: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  tocRowActive: {
+    backgroundColor: colors.muted,
+  },
+  tocRowActiveText: {
+    fontWeight: fontWeights.semibold,
   },
   tabBar: {
     flexDirection: "row",

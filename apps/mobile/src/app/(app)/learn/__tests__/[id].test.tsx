@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { router } from "expo-router";
 
 import LectureScreen from "../[id]";
 
@@ -12,6 +13,7 @@ const mockListQuizzes = jest.fn();
 const mockListFlashcards = jest.fn();
 const mockGetNote = jest.fn();
 const mockUpsertNote = jest.fn();
+const mockListDocuments = jest.fn();
 
 jest.mock("@/lib/api-client", () => ({
   getApiClient: () => ({
@@ -23,6 +25,7 @@ jest.mock("@/lib/api-client", () => ({
     listFlashcards: mockListFlashcards,
     getNote: mockGetNote,
     upsertNote: mockUpsertNote,
+    listDocuments: mockListDocuments,
   }),
 }));
 
@@ -70,6 +73,8 @@ beforeEach(() => {
   mockUpsertNote
     .mockReset()
     .mockResolvedValue({ document_id: "d1", content: "", updated_at: "2026-01-01" });
+  mockListDocuments.mockReset().mockResolvedValue([]);
+  (router.push as jest.Mock).mockReset();
 });
 
 test("renders extracted headings and paragraphs when ready", async () => {
@@ -360,14 +365,14 @@ test("switching back to the Lesson tab restores the reader content", async () =>
   renderScreen();
   await screen.findByText("Hello world");
 
-  fireEvent.press(screen.getByText("Notes"));
+  fireEvent.press(screen.getByText("Quizzes"));
   expect(screen.queryByText("Hello world")).toBeNull();
 
   fireEvent.press(screen.getByText("Lesson"));
   expect(await screen.findByText("Hello world")).toBeTruthy();
 });
 
-test("Notes tab loads the existing note and saves edits", async () => {
+test("the Notes overlay loads the existing note and saves edits", async () => {
   mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
   mockGetNote.mockResolvedValue({
     document_id: "d1",
@@ -395,7 +400,7 @@ test("Notes tab loads the existing note and saves edits", async () => {
   expect(mockUpsertNote).toHaveBeenCalledWith("d1", "Updated note");
 });
 
-test("Notes tab starts empty when the lesson has no note yet", async () => {
+test("the Notes overlay starts empty when the lesson has no note yet", async () => {
   mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
   mockGetNote.mockResolvedValue(null);
 
@@ -406,4 +411,57 @@ test("Notes tab starts empty when the lesson has no note yet", async () => {
 
   const textarea = await screen.findByPlaceholderText("Write your notes for this lesson...");
   expect(textarea.props.value).toBe("");
+});
+
+test("the Notes overlay closes via its Close button", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Notes"));
+  await screen.findByPlaceholderText("Write your notes for this lesson...");
+
+  fireEvent.press(screen.getByText("Close"));
+
+  await waitFor(() =>
+    expect(screen.queryByPlaceholderText("Write your notes for this lesson...")).toBeNull(),
+  );
+});
+
+test("the Contents overlay lists the current sub-chapter's lessons and navigates on press", async () => {
+  mockGetDocument.mockResolvedValue({
+    ...readyDocumentWithParagraph("Hello world"),
+    sub_chapter: { id: "sc1", title: "Sub A", chapter: { id: "c1", title: "Chapter One" } },
+  });
+  mockListDocuments.mockResolvedValue([
+    { id: "d1", title: "Intro to Systems", created_at: "2026-01-01", status: "ready" },
+    { id: "d2", title: "Second lesson", created_at: "2026-01-01", status: "ready" },
+  ]);
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Contents"));
+
+  await screen.findByText("Second lesson");
+  expect(mockListDocuments).toHaveBeenCalledWith("sc1");
+
+  fireEvent.press(screen.getByText("Second lesson"));
+
+  expect(router.push).toHaveBeenCalledWith("/learn/d2");
+});
+
+test("the Contents overlay falls back to the Uncategorized bucket when the lesson has no sub-chapter", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListDocuments.mockResolvedValue([
+    { id: "d1", title: "Intro to Systems", created_at: "2026-01-01", status: "ready" },
+  ]);
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Contents"));
+
+  await waitFor(() => expect(mockListDocuments).toHaveBeenCalledWith("none"));
 });
