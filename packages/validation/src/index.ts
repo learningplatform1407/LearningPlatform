@@ -197,3 +197,44 @@ export const annotationCreateRequestSchema = z.object({
   note_text: z.string().nullable().optional(),
   color: z.string().nullable().optional(),
 });
+
+export const noteWithLessonResponseSchema = z.object({
+  document_id: z.string(),
+  document_title: z.string(),
+  content: z.string(),
+  updated_at: z.string(),
+});
+
+export const strokePointSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  pressure: z.number().nullable().optional(),
+});
+
+export const strokeSchema = z.object({
+  color: z.string(),
+  width: z.number(),
+  points: z.array(strokePointSchema),
+});
+
+export const notebookEntryTypeSchema = z.enum(["text", "drawing"]);
+
+export const notebookEntryResponseSchema = z.object({
+  id: z.string(),
+  type: notebookEntryTypeSchema,
+  content: z.string().nullable(),
+  strokes: z.array(strokeSchema).nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const notebookEntryCreateRequestSchema = z.object({
+  type: notebookEntryTypeSchema,
+  content: z.string().nullable().optional(),
+  strokes: z.array(strokeSchema).nullable().optional(),
+});
+
+export const notebookEntryUpdateRequestSchema = z.object({
+  content: z.string().nullable().optional(),
+  strokes: z.array(strokeSchema).nullable().optional(),
+});

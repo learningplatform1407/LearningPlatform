@@ -18,6 +18,41 @@ def admin_user() -> AuthenticatedUser:
 
 
 @pytest.fixture
+def admin_client(
+    client: TestClient, admin_user: AuthenticatedUser, db_session: Session
+) -> TestClient:
+    db_session.add(
+        Profile(id=admin_user.id, role="admin", settings=AccountSettings(user_id=admin_user.id))
+    )
+    db_session.commit()
+
+    app.dependency_overrides[get_current_user] = lambda: admin_user
+    yield client
+    app.dependency_overrides.pop(get_current_user, None)
+
+
+def _create_document(admin_client: TestClient, title: str) -> str:
+    fake_pdf_bytes = b"%PDF-1.4 fake"
+    checksum = hashlib.sha256(fake_pdf_bytes).hexdigest()
+    with (
+        patch("app.documents.service.download_object", return_value=fake_pdf_bytes),
+        patch("app.documents.service.extract_pdf", return_value=[]),
+    ):
+        response = admin_client.post(
+            "/v1/documents",
+            json={
+                "title": title,
+                "storage_path": f"{title}.pdf",
+                "mime_type": "application/pdf",
+                "size_bytes": len(fake_pdf_bytes),
+                "checksum": checksum,
+            },
+        )
+    assert response.status_code == 200
+    return response.json()["id"]  # type: ignore[no-any-return]
+
+
+@pytest.fixture
 def document_id(client: TestClient, admin_user: AuthenticatedUser, db_session: Session) -> str:
     # Deliberately does *not* depend on `admin_client` — that fixture only
     # pops its `get_current_user` override at test teardown, which would
@@ -117,3 +152,44 @@ def test_put_note_auto_creates_profile_if_missing(
     assert response.status_code == 200
     assert db_session.get(Profile, authenticated_user.id) is not None
     app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_my_notes_empty_before_any_note(authed_client: TestClient) -> None:
+    response = authed_client.get("/v1/me/notes")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_my_notes_aggregates_across_lessons_most_recent_first(
+    admin_client: TestClient, authenticated_user: AuthenticatedUser
+) -> None:
+    first_id = _create_document(admin_client, "First lesson")
+    second_id = _create_document(admin_client, "Second lesson")
+
+    app.dependency_overrides[get_current_user] = lambda: authenticated_user
+    admin_client.put(f"/v1/documents/{first_id}/notes", json={"content": "Note on first"})
+    admin_client.put(f"/v1/documents/{second_id}/notes", json={"content": "Note on second"})
+
+    response = admin_client.get("/v1/me/notes")
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 2
+    assert body[0]["document_id"] == second_id
+    assert body[0]["document_title"] == "Second lesson"
+    assert body[0]["content"] == "Note on second"
+    assert body[1]["document_id"] == first_id
+    assert body[1]["document_title"] == "First lesson"
+
+
+def test_my_notes_scoped_per_user(
+    admin_client: TestClient, authenticated_user: AuthenticatedUser
+) -> None:
+    document_id = _create_document(admin_client, "Lesson 1")
+
+    app.dependency_overrides[get_current_user] = lambda: authenticated_user
+    admin_client.put(f"/v1/documents/{document_id}/notes", json={"content": "mine"})
+
+    other_user = AuthenticatedUser(id=UUID(int=2), email="other@example.com")
+    app.dependency_overrides[get_current_user] = lambda: other_user
+    response = admin_client.get("/v1/me/notes")
+    assert response.json() == []

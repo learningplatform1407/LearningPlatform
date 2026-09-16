@@ -320,4 +320,74 @@ describe("createApiClient", () => {
     const [url] = lastCall(fetchMock);
     expect(url).toBe("http://api.test/v1/documents/d1/flashcards");
   });
+
+  test("listMyNotes hits GET /v1/me/notes", async () => {
+    const notes = [
+      { document_id: "d1", document_title: "Lesson 1", content: "x", updated_at: "2026-01-01" },
+    ];
+    fetchMock.mockResolvedValueOnce(jsonResponse(notes));
+
+    const result = await client().listMyNotes();
+
+    expect(result).toEqual(notes);
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/me/notes");
+  });
+
+  test("listNotebookEntries hits GET /v1/notebook-entries", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    await client().listNotebookEntries();
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/notebook-entries");
+    expect(init.method ?? "GET").toBe("GET");
+  });
+
+  test("createNotebookEntry POSTs to /v1/notebook-entries", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ id: "n1", type: "text", content: "Idea", strokes: null }),
+    );
+
+    await client().createNotebookEntry({ type: "text", content: "Idea" });
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/notebook-entries");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ type: "text", content: "Idea" });
+  });
+
+  test("createNotebookEntry POSTs a drawing with stroke data", async () => {
+    const strokes = [{ color: "#000", width: 0.01, points: [{ x: 0.1, y: 0.1, pressure: 0.5 }] }];
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ id: "n2", type: "drawing", content: null, strokes }),
+    );
+
+    await client().createNotebookEntry({ type: "drawing", strokes });
+
+    const [, init] = lastCall(fetchMock);
+    expect(JSON.parse(init.body as string)).toEqual({ type: "drawing", strokes });
+  });
+
+  test("updateNotebookEntry PUTs to /v1/notebook-entries/{id}", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "n1", content: "Revised" }));
+
+    await client().updateNotebookEntry("n1", { content: "Revised" });
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/notebook-entries/n1");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body as string)).toEqual({ content: "Revised" });
+  });
+
+  test("deleteNotebookEntry DELETEs to /v1/notebook-entries/{id}", async () => {
+    fetchMock.mockResolvedValueOnce(noContentResponse());
+
+    const result = await client().deleteNotebookEntry("n1");
+
+    expect(result).toBeUndefined();
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/notebook-entries/n1");
+    expect(init.method).toBe("DELETE");
+  });
 });

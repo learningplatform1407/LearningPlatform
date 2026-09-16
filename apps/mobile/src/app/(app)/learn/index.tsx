@@ -97,6 +97,14 @@ export default function LearnScreen() {
           <Text style={styles.navCardTitle}>Flashcards</Text>
           <Text style={styles.navCardSubtitle}>Coming soon.</Text>
         </Pressable>
+        <Pressable
+          style={styles.navCard}
+          onPress={() => router.push("/learn/notebook")}
+          accessibilityRole="button"
+        >
+          <Text style={styles.navCardTitle}>Notebook</Text>
+          <Text style={styles.navCardSubtitle}>All your notes and drawings in one place.</Text>
+        </Pressable>
       </View>
     </ScrollView>
   );
@@ -167,10 +175,12 @@ const styles = StyleSheet.create({
   },
   navGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.md,
   },
   navCard: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: "45%",
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,

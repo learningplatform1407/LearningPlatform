@@ -94,6 +94,13 @@ class NoteUpsertRequest(BaseModel):
     content: str
 
 
+class NoteWithLessonResponse(BaseModel):
+    document_id: UUID
+    document_title: str
+    content: str
+    updated_at: datetime
+
+
 class QuizResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

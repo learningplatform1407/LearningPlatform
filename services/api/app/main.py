@@ -11,6 +11,7 @@ from app.common.errors import ApiError, ErrorResponse, FieldError
 from app.core.config import settings
 from app.db import models as _db_models  # noqa: F401 -- registers all tables on Base.metadata
 from app.documents.router import router as documents_router
+from app.notebook.router import router as notebook_router
 from app.plans.router import router as plans_router
 from app.sub_chapters.router import router as sub_chapters_router
 from app.users.router import router as users_router
@@ -33,6 +34,7 @@ app.include_router(chapters_router)
 app.include_router(sub_chapters_router)
 app.include_router(documents_router)
 app.include_router(annotations_router)
+app.include_router(notebook_router)
 
 
 @app.exception_handler(ApiError)

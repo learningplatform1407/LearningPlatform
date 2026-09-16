@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
 from app.db.session import get_db
-from app.documents.schemas import RecentLessonResponse
-from app.documents.service import list_recent_lessons
+from app.documents.schemas import NoteWithLessonResponse, RecentLessonResponse
+from app.documents.service import list_my_notes, list_recent_lessons
 from app.users.models import Profile
 from app.users.schemas import AccountSettingsResponse, MeResponse, ProfileUpdateRequest
 from app.users.service import get_or_create_profile, update_profile
@@ -64,3 +64,11 @@ def read_recent_lessons(
         )
         for document, last_viewed_at in rows
     ]
+
+
+@router.get("/me/notes", response_model=list[NoteWithLessonResponse])
+def read_my_notes(
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[NoteWithLessonResponse]:
+    return list_my_notes(db, user.id)

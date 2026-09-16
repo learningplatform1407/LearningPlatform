@@ -12,6 +12,10 @@ import type {
   Flashcard,
   MeResponse,
   Note,
+  NotebookEntry,
+  NotebookEntryCreateRequest,
+  NotebookEntryUpdateRequest,
+  NoteWithLesson,
   ProfileUpdateRequest,
   Quiz,
   RecentLesson,
@@ -119,5 +123,19 @@ export function createApiClient(config: ApiClientConfig) {
     listQuizzes: (documentId: string) => request<Quiz[]>(`/v1/documents/${documentId}/quizzes`),
     listFlashcards: (documentId: string) =>
       request<Flashcard[]>(`/v1/documents/${documentId}/flashcards`),
+    listMyNotes: () => request<NoteWithLesson[]>("/v1/me/notes"),
+    listNotebookEntries: () => request<NotebookEntry[]>("/v1/notebook-entries"),
+    createNotebookEntry: (data: NotebookEntryCreateRequest) =>
+      request<NotebookEntry>("/v1/notebook-entries", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    updateNotebookEntry: (id: string, data: NotebookEntryUpdateRequest) =>
+      request<NotebookEntry>(`/v1/notebook-entries/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    deleteNotebookEntry: (id: string) =>
+      request<void>(`/v1/notebook-entries/${id}`, { method: "DELETE" }),
   };
 }

@@ -73,7 +73,7 @@ export default function LearnPage() {
         </section>
       )}
 
-      <div className="mt-2xl grid max-w-[48rem] grid-cols-1 gap-md sm:grid-cols-3">
+      <div className="mt-2xl grid max-w-[64rem] grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-4">
         <Link href="/learn/library" className="block rounded-md border border-border p-lg hover:bg-muted">
           <p className="text-lg font-semibold text-foreground">Library</p>
           <p className="mt-xs text-sm text-muted-foreground">Browse books, chapters, and lessons.</p>
@@ -88,6 +88,15 @@ export default function LearnPage() {
         >
           <p className="text-lg font-semibold text-foreground">Flashcards</p>
           <p className="mt-xs text-sm text-muted-foreground">Coming soon.</p>
+        </Link>
+        <Link
+          href="/learn/notebook"
+          className="block rounded-md border border-border p-lg hover:bg-muted"
+        >
+          <p className="text-lg font-semibold text-foreground">Notebook</p>
+          <p className="mt-xs text-sm text-muted-foreground">
+            All your notes and drawings in one place.
+          </p>
         </Link>
       </div>
     </main>

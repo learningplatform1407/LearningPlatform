@@ -24,7 +24,7 @@ beforeEach(() => {
 });
 
 describe("LearnPage", () => {
-  test("shows Library, Quizzes, and Flashcards when nothing has been viewed yet", async () => {
+  test("shows Library, Quizzes, Flashcards, and Notebook when nothing has been viewed yet", async () => {
     listRecentLessons.mockResolvedValue([]);
 
     renderPage();
@@ -35,6 +35,8 @@ describe("LearnPage", () => {
     expect(quizzesLink).toHaveAttribute("href", "/learn/quizzes");
     const flashcardsLink = screen.getByRole("link", { name: /Flashcards/ });
     expect(flashcardsLink).toHaveAttribute("href", "/learn/flashcards");
+    const notebookLink = screen.getByRole("link", { name: /Notebook/ });
+    expect(notebookLink).toHaveAttribute("href", "/learn/notebook");
     expect(screen.queryByText("Continue where you left off")).not.toBeInTheDocument();
     expect(screen.queryByText("Recently opened")).not.toBeInTheDocument();
   });

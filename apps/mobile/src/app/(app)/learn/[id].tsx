@@ -257,7 +257,7 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
   );
 }
 
-function NotesTab({ documentId }: { documentId: string }) {
+export function NotesTab({ documentId }: { documentId: string }) {
   const queryClient = useQueryClient();
   const { data: note, isPending } = useQuery({
     queryKey: ["note", documentId],

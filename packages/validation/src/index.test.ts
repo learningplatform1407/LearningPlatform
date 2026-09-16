@@ -14,6 +14,10 @@ import {
   meResponseSchema,
   noteResponseSchema,
   noteUpsertRequestSchema,
+  noteWithLessonResponseSchema,
+  notebookEntryCreateRequestSchema,
+  notebookEntryResponseSchema,
+  notebookEntryUpdateRequestSchema,
   quizResponseSchema,
   recentLessonResponseSchema,
   subChapterCreateRequestSchema,
@@ -414,6 +418,116 @@ describe("noteUpsertRequestSchema", () => {
 
   test("rejects a missing content field", () => {
     expect(noteUpsertRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("noteWithLessonResponseSchema", () => {
+  test("accepts a real backend-shaped payload", () => {
+    const payload = {
+      document_id: "2879a273-236d-429e-985b-db6c43672a1b",
+      document_title: "Intro to Systems",
+      content: "Remember the key formula.",
+      updated_at: "2026-09-08T22:10:05.372022Z",
+    };
+
+    expect(noteWithLessonResponseSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("rejects a missing document_title", () => {
+    const payload = {
+      document_id: "2879a273-236d-429e-985b-db6c43672a1b",
+      content: "Remember the key formula.",
+      updated_at: "2026-09-08T22:10:05.372022Z",
+    };
+
+    expect(noteWithLessonResponseSchema.safeParse(payload).success).toBe(false);
+  });
+});
+
+describe("notebookEntryResponseSchema", () => {
+  test("accepts a text entry", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      type: "text",
+      content: "Idea for the project",
+      strokes: null,
+      created_at: "2026-09-08T22:10:05.372022Z",
+      updated_at: "2026-09-08T22:10:05.372022Z",
+    };
+
+    expect(notebookEntryResponseSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("accepts a drawing entry with real stroke data", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      type: "drawing",
+      content: null,
+      strokes: [
+        {
+          color: "#1a1a1a",
+          width: 0.008,
+          points: [
+            { x: 0.12, y: 0.3, pressure: 0.5 },
+            { x: 0.2, y: 0.35, pressure: 0.7 },
+            { x: 0.25, y: 0.4 },
+          ],
+        },
+        {
+          color: "#fbbf24",
+          width: 0.02,
+          points: [{ x: 0.5, y: 0.5, pressure: 1 }],
+        },
+      ],
+      created_at: "2026-09-08T22:10:05.372022Z",
+      updated_at: "2026-09-08T22:10:05.372022Z",
+    };
+
+    expect(notebookEntryResponseSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("rejects an unknown type", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      type: "audio",
+      content: null,
+      strokes: null,
+      created_at: "2026-09-08T22:10:05.372022Z",
+      updated_at: "2026-09-08T22:10:05.372022Z",
+    };
+
+    expect(notebookEntryResponseSchema.safeParse(payload).success).toBe(false);
+  });
+});
+
+describe("notebookEntryCreateRequestSchema", () => {
+  test("accepts a text-only request", () => {
+    expect(
+      notebookEntryCreateRequestSchema.safeParse({ type: "text", content: "New note" }).success,
+    ).toBe(true);
+  });
+
+  test("accepts a drawing request with strokes", () => {
+    const payload = {
+      type: "drawing",
+      strokes: [{ color: "#000", width: 0.01, points: [{ x: 0.1, y: 0.1 }] }],
+    };
+
+    expect(notebookEntryCreateRequestSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("rejects a missing type", () => {
+    expect(notebookEntryCreateRequestSchema.safeParse({ content: "x" }).success).toBe(false);
+  });
+});
+
+describe("notebookEntryUpdateRequestSchema", () => {
+  test("accepts a content-only update", () => {
+    expect(notebookEntryUpdateRequestSchema.safeParse({ content: "Revised" }).success).toBe(true);
+  });
+
+  test("accepts an empty update (no-op)", () => {
+    expect(notebookEntryUpdateRequestSchema.safeParse({}).success).toBe(true);
   });
 });
 
