@@ -97,9 +97,7 @@ function AnnotatedParagraph({
           return (
             <mark
               key={index}
-              title="Click to remove highlight"
-              className="cursor-pointer rounded-sm bg-yellow-200 px-0.5"
-              onClick={() => onDeleteAnnotation(segment.annotation!.id)}
+              className={highlightMarkClass(segment.annotation.color)}
             >
               {segment.text}
             </mark>
@@ -142,6 +140,64 @@ const NOTES_PANEL_DEFAULT_WIDTH = 320;
 const NOTES_PANEL_COLLAPSED_WIDTH = 40;
 
 type TabKey = (typeof TABS)[number]["key"];
+
+const HIGHLIGHT_COLORS = [
+  { name: "yellow", swatchClass: "bg-yellow-300", markClass: "bg-yellow-200" },
+  { name: "green", swatchClass: "bg-green-300", markClass: "bg-green-200" },
+  { name: "blue", swatchClass: "bg-blue-300", markClass: "bg-blue-200" },
+  { name: "pink", swatchClass: "bg-pink-300", markClass: "bg-pink-200" },
+] as const;
+
+function highlightMarkClass(color: string | null): string {
+  return HIGHLIGHT_COLORS.find((c) => c.name === color)?.markClass ?? "bg-yellow-200";
+}
+
+type ActiveTool = { type: "highlight"; color: string } | { type: "eraser" } | null;
+
+function AnnotationToolbar({
+  activeTool,
+  onToolChange,
+}: {
+  activeTool: ActiveTool;
+  onToolChange: (tool: ActiveTool) => void;
+}) {
+  return (
+    <div
+      role="toolbar"
+      aria-label="Annotation tools"
+      className="flex items-center gap-xs border-t border-border p-sm"
+    >
+      {HIGHLIGHT_COLORS.map((color) => {
+        const isActive = activeTool?.type === "highlight" && activeTool.color === color.name;
+        return (
+          <button
+            key={color.name}
+            type="button"
+            aria-label={`Highlight — ${color.name}`}
+            aria-pressed={isActive}
+            onClick={() =>
+              onToolChange(isActive ? null : { type: "highlight", color: color.name })
+            }
+            className={`h-6 w-6 rounded-full border border-border ${color.swatchClass} ${
+              isActive ? "ring-2 ring-primary ring-offset-1" : ""
+            }`}
+          />
+        );
+      })}
+      <button
+        type="button"
+        aria-label="Eraser"
+        aria-pressed={activeTool?.type === "eraser"}
+        onClick={() => onToolChange(activeTool?.type === "eraser" ? null : { type: "eraser" })}
+        className={`flex h-6 w-6 items-center justify-center rounded-md border border-border text-xs ${
+          activeTool?.type === "eraser" ? "bg-muted ring-2 ring-primary ring-offset-1" : ""
+        }`}
+      >
+        🧹
+      </button>
+    </div>
+  );
+}
 
 function QuizzesTab({ documentId }: { documentId: string }) {
   const { data, isPending } = useQuery({
@@ -244,7 +300,17 @@ function NotesTab({ documentId }: { documentId: string }) {
   );
 }
 
-function TocPanel({ scopeId, currentDocumentId }: { scopeId: string; currentDocumentId: string }) {
+function TocPanel({
+  scopeId,
+  currentDocumentId,
+  activeTool,
+  onToolChange,
+}: {
+  scopeId: string;
+  currentDocumentId: string;
+  activeTool: ActiveTool;
+  onToolChange: (tool: ActiveTool) => void;
+}) {
   const { data, isPending } = useQuery({
     queryKey: ["documents", scopeId],
     queryFn: () => getBrowserApiClient().listDocuments(scopeId),
@@ -253,33 +319,36 @@ function TocPanel({ scopeId, currentDocumentId }: { scopeId: string; currentDocu
   return (
     <nav
       aria-label="Table of contents"
-      className="sticky top-0 flex h-screen w-64 shrink-0 flex-col gap-xs overflow-y-auto border-r border-border p-md"
+      className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-border"
     >
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Contents
-      </h2>
-      {isPending && <p className="text-sm text-muted-foreground">Loading...</p>}
-      {!isPending && (!data || data.length === 0) && (
-        <p className="text-sm text-muted-foreground">No lessons.</p>
-      )}
-      {data && data.length > 0 && (
-        <ul className="flex flex-col gap-xs">
-          {data.map((doc) => (
-            <li key={doc.id}>
-              <Link
-                href={`/learn/${doc.id}`}
-                className={`block rounded-md px-sm py-xs text-sm ${
-                  doc.id === currentDocumentId
-                    ? "bg-muted font-semibold text-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                {doc.title}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="flex flex-1 flex-col gap-xs overflow-y-auto p-md">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Contents
+        </h2>
+        {isPending && <p className="text-sm text-muted-foreground">Loading...</p>}
+        {!isPending && (!data || data.length === 0) && (
+          <p className="text-sm text-muted-foreground">No lessons.</p>
+        )}
+        {data && data.length > 0 && (
+          <ul className="flex flex-col gap-xs">
+            {data.map((doc) => (
+              <li key={doc.id}>
+                <Link
+                  href={`/learn/${doc.id}`}
+                  className={`block rounded-md px-sm py-xs text-sm ${
+                    doc.id === currentDocumentId
+                      ? "bg-muted font-semibold text-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  {doc.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <AnnotationToolbar activeTool={activeTool} onToolChange={onToolChange} />
     </nav>
   );
 }
@@ -368,6 +437,7 @@ export default function LecturePage() {
   const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("lesson");
+  const [activeTool, setActiveTool] = useState<ActiveTool>(null);
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["documents", params.id],
@@ -418,28 +488,77 @@ export default function LecturePage() {
       return;
     }
 
+    const blockIndex = Number(blockEl.getAttribute("data-block-index"));
+
+    if (activeTool?.type === "highlight") {
+      createAnnotationMutation.mutate({
+        type: "highlight",
+        block_index: blockIndex,
+        start_offset: offsets.start,
+        end_offset: offsets.end,
+        color: activeTool.color,
+      });
+      clearSelectionState();
+      return;
+    }
+
+    if (activeTool?.type === "eraser") {
+      const overlapping = annotations.filter(
+        (a) =>
+          a.type === "highlight" &&
+          a.block_index === blockIndex &&
+          a.start_offset !== null &&
+          a.end_offset !== null &&
+          a.start_offset < offsets.end &&
+          a.end_offset > offsets.start,
+      );
+      // Erasing only removes the selected portion of a highlight, not the whole
+      // thing — the original annotation is deleted and replaced with new ones
+      // for whatever's left before/after the erased range (there's no update
+      // endpoint, so this is delete + recreate rather than a resize).
+      for (const a of overlapping) {
+        const before = a.start_offset! < offsets.start
+          ? { start: a.start_offset!, end: offsets.start }
+          : null;
+        const after = a.end_offset! > offsets.end
+          ? { start: offsets.end, end: a.end_offset! }
+          : null;
+
+        deleteAnnotationMutation.mutate(a.id);
+        if (before) {
+          createAnnotationMutation.mutate({
+            type: "highlight",
+            block_index: blockIndex,
+            start_offset: before.start,
+            end_offset: before.end,
+            color: a.color,
+          });
+        }
+        if (after) {
+          createAnnotationMutation.mutate({
+            type: "highlight",
+            block_index: blockIndex,
+            start_offset: after.start,
+            end_offset: after.end,
+            color: a.color,
+          });
+        }
+      }
+      clearSelectionState();
+      return;
+    }
+
     // jsdom's Range doesn't implement getBoundingClientRect (no layout engine) — guard so
     // selection-driven tests can run without a real browser.
     const rect = range.getBoundingClientRect?.() ?? { top: 0, left: 0 };
     setPendingSelection({
-      blockIndex: Number(blockEl.getAttribute("data-block-index")),
+      blockIndex,
       start: offsets.start,
       end: offsets.end,
       top: rect.top,
       left: rect.left,
     });
     setNoteDraft(null);
-  }
-
-  function handleHighlight() {
-    if (!pendingSelection) return;
-    createAnnotationMutation.mutate({
-      type: "highlight",
-      block_index: pendingSelection.blockIndex,
-      start_offset: pendingSelection.start,
-      end_offset: pendingSelection.end,
-    });
-    clearSelectionState();
   }
 
   function handleSaveNote() {
@@ -476,7 +595,12 @@ export default function LecturePage() {
 
   return (
     <main className="flex w-full">
-      <TocPanel scopeId={tocScopeId} currentDocumentId={params.id} />
+      <TocPanel
+        scopeId={tocScopeId}
+        currentDocumentId={params.id}
+        activeTool={activeTool}
+        onToolChange={setActiveTool}
+      />
 
       <div className="min-w-0 flex-1 p-xl">
         <Link href="/learn" className="text-sm text-muted-foreground hover:underline">
@@ -570,22 +694,13 @@ export default function LecturePage() {
             style={{ top: pendingSelection.top - 44, left: pendingSelection.left }}
           >
             {noteDraft === null ? (
-              <>
-                <button
-                  type="button"
-                  className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
-                  onClick={handleHighlight}
-                >
-                  Highlight
-                </button>
-                <button
-                  type="button"
-                  className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
-                  onClick={() => setNoteDraft("")}
-                >
-                  Add note
-                </button>
-              </>
+              <button
+                type="button"
+                className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
+                onClick={() => setNoteDraft("")}
+              >
+                Add note
+              </button>
             ) : (
               <form
                 className="flex items-center gap-xs"

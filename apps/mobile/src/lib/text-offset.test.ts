@@ -50,3 +50,24 @@ test("handles multiple non-overlapping highlights out of order", () => {
 test("returns an empty-text plain segment for an empty block", () => {
   expect(spliceAnnotations("", [])).toEqual([{ text: "", annotation: null }]);
 });
+
+test("overlapping highlights (created on web) do not duplicate the shared text", () => {
+  const segments = spliceAnnotations("abcdefghij", [
+    highlight({ id: "a1", start_offset: 0, end_offset: 6, created_at: "2026-01-01T00:00:00Z" }),
+    highlight({ id: "a2", start_offset: 3, end_offset: 9, created_at: "2026-01-02T00:00:00Z" }),
+  ]);
+
+  expect(segments.map((s) => s.text).join("")).toBe("abcdefghij");
+  expect(segments.map((s) => s.text)).toEqual(["abc", "def", "ghi", "j"]);
+});
+
+test("the most recently created annotation wins the visual in an overlapping region", () => {
+  const segments = spliceAnnotations("abcdefghij", [
+    highlight({ id: "older", start_offset: 0, end_offset: 6, created_at: "2026-01-01T00:00:00Z" }),
+    highlight({ id: "newer", start_offset: 3, end_offset: 9, created_at: "2026-01-02T00:00:00Z" }),
+  ]);
+
+  expect(segments.find((s) => s.text === "def")?.annotation?.id).toBe("newer");
+  expect(segments.find((s) => s.text === "abc")?.annotation?.id).toBe("older");
+  expect(segments.find((s) => s.text === "ghi")?.annotation?.id).toBe("newer");
+});

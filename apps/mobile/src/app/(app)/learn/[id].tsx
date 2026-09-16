@@ -1,7 +1,7 @@
-import type { Annotation } from "@lp/contracts";
+import type { Annotation, AnnotationCreateRequest } from "@lp/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -80,7 +80,10 @@ function AnnotatedParagraph({
         <Text style={styles.paragraph}>
           {segments.map((segment, index) =>
             segment.annotation?.type === "highlight" ? (
-              <Text key={index} style={styles.highlight}>
+              <Text
+                key={index}
+                style={{ backgroundColor: highlightMarkColor(segment.annotation.color) }}
+              >
                 {segment.text}
               </Text>
             ) : (
@@ -114,6 +117,99 @@ const TABS = [
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
+
+const HIGHLIGHT_COLORS = [
+  { name: "yellow", swatch: "#FDE047", mark: "#FEF08A" },
+  { name: "green", swatch: "#4ADE80", mark: "#BBF7D0" },
+  { name: "blue", swatch: "#60A5FA", mark: "#BFDBFE" },
+  { name: "pink", swatch: "#F472B6", mark: "#FBCFE8" },
+] as const;
+
+function highlightMarkColor(color: string | null): string {
+  return HIGHLIGHT_COLORS.find((c) => c.name === color)?.mark ?? HIGHLIGHT_COLORS[0].mark;
+}
+
+type ActiveTool = { type: "highlight"; color: string } | { type: "eraser" } | null;
+
+// Debounce for detecting "the user finished selecting" — RN's TextInput
+// onSelectionChange fires continuously while dragging, with no distinct
+// "selection ended" event the way web's mouseup gives us.
+const SELECTION_SETTLE_MS = 400;
+
+function AnnotationToolbar({
+  activeTool,
+  onToolChange,
+}: {
+  activeTool: ActiveTool;
+  onToolChange: (tool: ActiveTool) => void;
+}) {
+  return (
+    <View style={styles.annotationToolbar} accessibilityRole="toolbar">
+      {HIGHLIGHT_COLORS.map((color) => {
+        const isActive = activeTool?.type === "highlight" && activeTool.color === color.name;
+        return (
+          <Pressable
+            key={color.name}
+            onPress={() =>
+              onToolChange(isActive ? null : { type: "highlight", color: color.name })
+            }
+            accessibilityRole="button"
+            accessibilityLabel={`Highlight — ${color.name}`}
+            accessibilityState={{ selected: isActive }}
+            style={[
+              styles.colorSwatch,
+              { backgroundColor: color.swatch },
+              isActive && styles.colorSwatchActive,
+            ]}
+          />
+        );
+      })}
+      <Pressable
+        onPress={() => onToolChange(activeTool?.type === "eraser" ? null : { type: "eraser" })}
+        accessibilityRole="button"
+        accessibilityLabel="Eraser"
+        accessibilityState={{ selected: activeTool?.type === "eraser" }}
+        style={[styles.eraserButton, activeTool?.type === "eraser" && styles.eraserButtonActive]}
+      >
+        <Text style={styles.eraserButtonText}>🧹</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function SelectableParagraph({
+  text,
+  blockIndex,
+  onSelectionSettled,
+}: {
+  text: string;
+  blockIndex: number;
+  onSelectionSettled: (blockIndex: number, start: number, end: number) => void;
+}) {
+  const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  return (
+    <TextInput
+      testID={`selectable-paragraph-${blockIndex}`}
+      style={styles.paragraph}
+      value={text}
+      editable={false}
+      multiline
+      selection={selection}
+      onSelectionChange={(event) => {
+        const next = event.nativeEvent.selection;
+        setSelection(next);
+        if (timerRef.current) clearTimeout(timerRef.current);
+        if (next.start === next.end) return;
+        timerRef.current = setTimeout(() => {
+          onSelectionSettled(blockIndex, next.start, next.end);
+          setSelection({ start: 0, end: 0 });
+        }, SELECTION_SETTLE_MS);
+      }}
+    />
+  );
+}
 
 function QuizzesTab({ documentId }: { documentId: string }) {
   const { data, isPending } = useQuery({
@@ -304,6 +400,7 @@ export default function LectureScreen() {
   const [activeTab, setActiveTab] = useState<TabKey>("lesson");
   const [tocOpen, setTocOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
+  const [activeTool, setActiveTool] = useState<ActiveTool>(null);
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["documents", id],
@@ -342,6 +439,65 @@ export default function LectureScreen() {
       setViewingNote(null);
     },
   });
+
+  const createAnnotationMutation = useMutation({
+    mutationFn: (body: AnnotationCreateRequest) => getApiClient().createAnnotation(id, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["annotations", id] }),
+  });
+
+  function handleSelectionSettled(blockIndex: number, start: number, end: number) {
+    if (start === end) return;
+
+    if (activeTool?.type === "highlight") {
+      createAnnotationMutation.mutate({
+        type: "highlight",
+        block_index: blockIndex,
+        start_offset: start,
+        end_offset: end,
+        color: activeTool.color,
+      });
+      return;
+    }
+
+    if (activeTool?.type === "eraser") {
+      const overlapping = annotations.filter(
+        (a) =>
+          a.type === "highlight" &&
+          a.block_index === blockIndex &&
+          a.start_offset !== null &&
+          a.end_offset !== null &&
+          a.start_offset < end &&
+          a.end_offset > start,
+      );
+      // Same partial-trim behavior as web: erasing only removes the selected
+      // portion — the original annotation is deleted and replaced with
+      // whatever's left before/after the erased range.
+      for (const a of overlapping) {
+        const before = a.start_offset! < start ? { start: a.start_offset!, end: start } : null;
+        const after = a.end_offset! > end ? { start: end, end: a.end_offset! } : null;
+
+        deleteAnnotationMutation.mutate(a.id);
+        if (before) {
+          createAnnotationMutation.mutate({
+            type: "highlight",
+            block_index: blockIndex,
+            start_offset: before.start,
+            end_offset: before.end,
+            color: a.color,
+          });
+        }
+        if (after) {
+          createAnnotationMutation.mutate({
+            type: "highlight",
+            block_index: blockIndex,
+            start_offset: after.start,
+            end_offset: after.end,
+            color: a.color,
+          });
+        }
+      }
+    }
+  }
 
   if (isPending) {
     return (
@@ -416,6 +572,8 @@ export default function LectureScreen() {
 
         {activeTab === "lesson" && (
           <>
+            <AnnotationToolbar activeTool={activeTool} onToolChange={setActiveTool} />
+
             {!version && <Text style={styles.hint}>Not processed yet.</Text>}
             {version?.status === "processing" && <Text style={styles.hint}>Processing...</Text>}
             {version?.status === "failed" && (
@@ -437,6 +595,16 @@ export default function LectureScreen() {
                   return block.image_path ? (
                     <ExtractedImage key={index} path={block.image_path} />
                   ) : null;
+                }
+                if (activeTool) {
+                  return (
+                    <SelectableParagraph
+                      key={index}
+                      text={block.text ?? ""}
+                      blockIndex={index}
+                      onSelectionSettled={handleSelectionSettled}
+                    />
+                  );
                 }
                 return (
                   <AnnotatedParagraph
@@ -620,6 +788,40 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  annotationToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  colorSwatch: {
+    height: 28,
+    width: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  colorSwatchActive: {
+    borderWidth: 3,
+    borderColor: colors.primary,
+  },
+  eraserButton: {
+    height: 28,
+    width: 28,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  eraserButtonActive: {
+    backgroundColor: colors.muted,
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  eraserButtonText: {
+    fontSize: fontSizes.sm,
+  },
   tabButton: {
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
@@ -674,11 +876,6 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.base,
     lineHeight: lineHeight(fontSizes.base, "relaxed"),
     color: colors.foreground,
-  },
-  highlight: {
-    // Matches web's bg-yellow-200 — no shared "highlight" token exists in
-    // @lp/ui's closed color set, and this is a fixed v1 color (no picker).
-    backgroundColor: "#FEF08A",
   },
   noteRow: {
     flexDirection: "row",

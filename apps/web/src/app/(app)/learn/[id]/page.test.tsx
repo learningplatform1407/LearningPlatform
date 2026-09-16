@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -54,10 +54,26 @@ function readyDocumentWithParagraph(text: string) {
   };
 }
 
+// Walks the paragraph's text nodes (same technique as text-offset.ts's forward
+// conversion) so selection still works once existing highlights fragment the
+// paragraph into multiple <mark>/<span> children, not just a single text node.
+function positionAt(container: Node, offset: number): { node: Node; offset: number } {
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  let remaining = offset;
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const length = node.textContent?.length ?? 0;
+    if (remaining <= length) return { node, offset: remaining };
+    remaining -= length;
+  }
+  throw new Error(`offset ${offset} is beyond the container's text content`);
+}
+
 function selectTextInParagraph(paragraph: HTMLElement, start: number, end: number) {
   const range = document.createRange();
-  range.setStart(paragraph.firstChild!, start);
-  range.setEnd(paragraph.firstChild!, end);
+  const startPos = positionAt(paragraph, start);
+  const endPos = positionAt(paragraph, end);
+  range.setStart(startPos.node, startPos.offset);
+  range.setEnd(endPos.node, endPos.offset);
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
@@ -280,23 +296,255 @@ describe("LecturePage", () => {
     expect(screen.queryByText("world", { selector: "mark" })).not.toBeInTheDocument();
   });
 
-  test("selecting text and clicking Highlight creates a highlight annotation", async () => {
+  test("activating the yellow highlight tool and selecting text creates a highlight immediately, with no floating toolbar", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
 
     renderPage();
-
     const paragraph = await screen.findByText("Hello world");
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Highlight — yellow" }));
     selectTextInParagraph(paragraph, 0, 5);
 
-    const highlightButton = await screen.findByRole("button", { name: "Highlight" });
-    await userEvent.setup().click(highlightButton);
+    await waitFor(() =>
+      expect(createAnnotation).toHaveBeenCalledWith("d1", {
+        type: "highlight",
+        block_index: 0,
+        start_offset: 0,
+        end_offset: 5,
+        color: "yellow",
+      }),
+    );
+    expect(screen.queryByRole("toolbar", { name: "Annotation actions" })).not.toBeInTheDocument();
+  });
 
+  test("a different color can be chosen and is sent with the highlight", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+    renderPage();
+    const paragraph = await screen.findByText("Hello world");
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Highlight — green" }));
+    selectTextInParagraph(paragraph, 0, 5);
+
+    await waitFor(() =>
+      expect(createAnnotation).toHaveBeenCalledWith("d1", {
+        type: "highlight",
+        block_index: 0,
+        start_offset: 0,
+        end_offset: 5,
+        color: "green",
+      }),
+    );
+  });
+
+  test("clicking an active color again deactivates the highlight tool", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+    renderPage();
+    const paragraph = await screen.findByText("Hello world");
+    const user = userEvent.setup();
+
+    const yellowButton = screen.getByRole("button", { name: "Highlight — yellow" });
+    await user.click(yellowButton);
+    expect(yellowButton).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(yellowButton);
+    expect(yellowButton).toHaveAttribute("aria-pressed", "false");
+
+    selectTextInParagraph(paragraph, 0, 5);
+
+    expect(createAnnotation).not.toHaveBeenCalled();
+    // With no tool active, selecting text falls back to the old floating "Add note" toolbar.
+    expect(await screen.findByRole("button", { name: "Add note" })).toBeInTheDocument();
+  });
+
+  test("choosing a different color switches the active tool instead of stacking", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+    renderPage();
+    await screen.findByText("Hello world");
+    const user = userEvent.setup();
+
+    const yellowButton = screen.getByRole("button", { name: "Highlight — yellow" });
+    const blueButton = screen.getByRole("button", { name: "Highlight — blue" });
+    await user.click(yellowButton);
+    await user.click(blueButton);
+
+    expect(yellowButton).toHaveAttribute("aria-pressed", "false");
+    expect(blueButton).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("the eraser tool deletes highlights overlapping the selection, not unrelated ones", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listAnnotations.mockResolvedValue([
+      {
+        id: "overlapping",
+        document_version_id: "v1",
+        type: "highlight",
+        block_index: 0,
+        start_offset: 0,
+        end_offset: 5,
+        note_text: null,
+        color: "yellow",
+        created_at: "2026-01-01",
+      },
+      {
+        id: "far-away",
+        document_version_id: "v1",
+        type: "highlight",
+        block_index: 0,
+        start_offset: 6,
+        end_offset: 11,
+        note_text: null,
+        color: "yellow",
+        created_at: "2026-01-01",
+      },
+    ]);
+
+    renderPage();
+    const mark = await screen.findByText("Hello", { selector: "mark" });
+    const paragraph = mark.closest("p")!;
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Eraser" }));
+    selectTextInParagraph(paragraph, 2, 4);
+
+    await waitFor(() => expect(deleteAnnotation).toHaveBeenCalledWith("d1", "overlapping"));
+    expect(deleteAnnotation).not.toHaveBeenCalledWith("d1", "far-away");
+    // Erasing [2,4) out of the middle of "overlapping" [0,5) leaves two remainders,
+    // not a full delete — the highlight isn't an atomic cell, only the erased
+    // portion goes away.
     expect(createAnnotation).toHaveBeenCalledWith("d1", {
       type: "highlight",
       block_index: 0,
       start_offset: 0,
-      end_offset: 5,
+      end_offset: 2,
+      color: "yellow",
     });
+    expect(createAnnotation).toHaveBeenCalledWith("d1", {
+      type: "highlight",
+      block_index: 0,
+      start_offset: 4,
+      end_offset: 5,
+      color: "yellow",
+    });
+  });
+
+  test("erasing an entire highlight removes it with no remainder", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listAnnotations.mockResolvedValue([
+      {
+        id: "a1",
+        document_version_id: "v1",
+        type: "highlight",
+        block_index: 0,
+        start_offset: 0,
+        end_offset: 5,
+        note_text: null,
+        color: "yellow",
+        created_at: "2026-01-01",
+      },
+    ]);
+
+    renderPage();
+    const mark = await screen.findByText("Hello", { selector: "mark" });
+    const paragraph = mark.closest("p")!;
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Eraser" }));
+    selectTextInParagraph(paragraph, 0, 5);
+
+    await waitFor(() => expect(deleteAnnotation).toHaveBeenCalledWith("d1", "a1"));
+    expect(createAnnotation).not.toHaveBeenCalled();
+  });
+
+  test("erasing from one edge of a highlight shrinks it instead of splitting it in two", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listAnnotations.mockResolvedValue([
+      {
+        id: "a1",
+        document_version_id: "v1",
+        type: "highlight",
+        block_index: 0,
+        start_offset: 0,
+        end_offset: 10,
+        note_text: null,
+        color: "blue",
+        created_at: "2026-01-01",
+      },
+    ]);
+
+    renderPage();
+    const mark = await screen.findByText("Hello worl", { selector: "mark" });
+    const paragraph = mark.closest("p")!;
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Eraser" }));
+    selectTextInParagraph(paragraph, 0, 4);
+
+    await waitFor(() => expect(deleteAnnotation).toHaveBeenCalledWith("d1", "a1"));
+    expect(createAnnotation).toHaveBeenCalledTimes(1);
+    expect(createAnnotation).toHaveBeenCalledWith("d1", {
+      type: "highlight",
+      block_index: 0,
+      start_offset: 4,
+      end_offset: 10,
+      color: "blue",
+    });
+  });
+
+  test("adjacent highlights render with no gap-causing padding between them", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listAnnotations.mockResolvedValue([
+      {
+        id: "a1",
+        document_version_id: "v1",
+        type: "highlight",
+        block_index: 0,
+        start_offset: 0,
+        end_offset: 5,
+        note_text: null,
+        color: "yellow",
+        created_at: "2026-01-01",
+      },
+      {
+        id: "a2",
+        document_version_id: "v1",
+        type: "highlight",
+        block_index: 0,
+        start_offset: 5,
+        end_offset: 11,
+        note_text: null,
+        color: "blue",
+        created_at: "2026-01-02",
+      },
+    ]);
+
+    renderPage();
+    const marks = await screen.findAllByText(/./, { selector: "mark" });
+
+    for (const mark of marks) {
+      expect(mark.className).not.toContain("px-");
+    }
+  });
+
+  test("a highlight renders with its stored color", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listAnnotations.mockResolvedValue([
+      {
+        id: "a1",
+        document_version_id: "v1",
+        type: "highlight",
+        block_index: 0,
+        start_offset: 0,
+        end_offset: 5,
+        note_text: null,
+        color: "green",
+        created_at: "2026-01-01",
+      },
+    ]);
+
+    renderPage();
+
+    const mark = await screen.findByText("Hello", { selector: "mark" });
+    expect(mark.className).toContain("bg-green-200");
   });
 
   test("selecting text and adding a note creates a range-anchored margin note", async () => {
@@ -310,7 +558,11 @@ describe("LecturePage", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Add note" }));
     await user.type(screen.getByPlaceholderText("Note..."), "Check this later");
-    await user.click(within(screen.getByRole("toolbar")).getByRole("button", { name: "Save" }));
+    await user.click(
+      within(screen.getByRole("toolbar", { name: "Annotation actions" })).getByRole("button", {
+        name: "Save",
+      }),
+    );
 
     expect(createAnnotation).toHaveBeenCalledWith("d1", {
       type: "margin_note",
@@ -321,7 +573,7 @@ describe("LecturePage", () => {
     });
   });
 
-  test("clicking a highlight deletes it", async () => {
+  test("clicking a highlight does not delete it — only the eraser tool can", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
     listAnnotations.mockResolvedValue([
       {
@@ -342,7 +594,8 @@ describe("LecturePage", () => {
     const mark = await screen.findByText("Hello", { selector: "mark" });
     await userEvent.setup().click(mark);
 
-    expect(deleteAnnotation).toHaveBeenCalledWith("d1", "a1");
+    expect(deleteAnnotation).not.toHaveBeenCalled();
+    expect(mark).toBeInTheDocument();
   });
 
   test("renders a chapter / sub-chapter breadcrumb when the lesson is organized", async () => {

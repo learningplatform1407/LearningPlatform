@@ -102,4 +102,44 @@ describe("spliceAnnotations", () => {
   test("returns an empty-text plain segment for an empty block", () => {
     expect(spliceAnnotations("", [])).toEqual([{ text: "", annotation: null }]);
   });
+
+  test("overlapping highlights do not duplicate the shared text", () => {
+    // "abcdefghij" — a1 covers "abcdef" (0-6), a2 covers "defghi" (3-9, created later).
+    const segments = spliceAnnotations("abcdefghij", [
+      highlight({ id: "a1", start_offset: 0, end_offset: 6, created_at: "2026-01-01T00:00:00Z" }),
+      highlight({ id: "a2", start_offset: 3, end_offset: 9, created_at: "2026-01-02T00:00:00Z" }),
+    ]);
+
+    // Every character appears exactly once across all segments — no duplication.
+    expect(segments.map((s) => s.text).join("")).toBe("abcdefghij");
+    expect(segments.map((s) => s.text)).toEqual(["abc", "def", "ghi", "j"]);
+  });
+
+  test("the most recently created annotation wins the visual in an overlapping region", () => {
+    const segments = spliceAnnotations("abcdefghij", [
+      highlight({ id: "older", start_offset: 0, end_offset: 6, created_at: "2026-01-01T00:00:00Z" }),
+      highlight({ id: "newer", start_offset: 3, end_offset: 9, created_at: "2026-01-02T00:00:00Z" }),
+    ]);
+
+    const overlap = segments.find((s) => s.text === "def");
+    expect(overlap?.annotation?.id).toBe("newer");
+    const olderOnly = segments.find((s) => s.text === "abc");
+    expect(olderOnly?.annotation?.id).toBe("older");
+    const newerOnly = segments.find((s) => s.text === "ghi");
+    expect(newerOnly?.annotation?.id).toBe("newer");
+  });
+
+  test("a highlight fully inside another still renders every character once", () => {
+    // a1 covers the whole word "abcdefghij", a2 (created later) covers just "def" inside it.
+    const segments = spliceAnnotations("abcdefghij", [
+      highlight({ id: "a1", start_offset: 0, end_offset: 10, created_at: "2026-01-01T00:00:00Z" }),
+      highlight({ id: "a2", start_offset: 3, end_offset: 6, created_at: "2026-01-02T00:00:00Z" }),
+    ]);
+
+    expect(segments.map((s) => s.text).join("")).toBe("abcdefghij");
+    expect(segments.map((s) => s.text)).toEqual(["abc", "def", "ghij"]);
+    expect(segments.find((s) => s.text === "def")?.annotation?.id).toBe("a2");
+    expect(segments.find((s) => s.text === "abc")?.annotation?.id).toBe("a1");
+    expect(segments.find((s) => s.text === "ghij")?.annotation?.id).toBe("a1");
+  });
 });
