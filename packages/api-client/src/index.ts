@@ -1,6 +1,8 @@
 import type {
   Annotation,
   AnnotationCreateRequest,
+  Book,
+  BookCreateRequest,
   Chapter,
   ChapterCreateRequest,
   DocumentCreateRequest,
@@ -90,9 +92,15 @@ export function createApiClient(config: ApiClientConfig) {
       request<void>(`/v1/documents/${documentId}/annotations/${annotationId}`, {
         method: "DELETE",
       }),
-    listChapters: () => request<Chapter[]>("/v1/chapters"),
-    createChapter: (data: ChapterCreateRequest) =>
-      request<Chapter>("/v1/chapters", { method: "POST", body: JSON.stringify(data) }),
+    listBooks: () => request<Book[]>("/v1/books"),
+    createBook: (data: BookCreateRequest) =>
+      request<Book>("/v1/books", { method: "POST", body: JSON.stringify(data) }),
+    listChapters: (bookId: string) => request<Chapter[]>(`/v1/books/${bookId}/chapters`),
+    createChapter: (bookId: string, data: ChapterCreateRequest) =>
+      request<Chapter>(`/v1/books/${bookId}/chapters`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
     listRecentLessons: (limit?: number) =>
       request<RecentLesson[]>(`/v1/me/recent-lessons${limit ? `?limit=${limit}` : ""}`),
     listSubChapters: (chapterId: string) =>

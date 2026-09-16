@@ -47,7 +47,8 @@ def chapter_id(client: TestClient, admin_user: AuthenticatedUser, db_session: Se
         db_session.commit()
     previous_override = app.dependency_overrides.get(get_current_user)
     app.dependency_overrides[get_current_user] = lambda: admin_user
-    response = client.post("/v1/chapters", json={"title": "Chapter One"})
+    book_id = client.post("/v1/books", json={"title": "Book One"}).json()["id"]
+    response = client.post(f"/v1/books/{book_id}/chapters", json={"title": "Chapter One"})
     if previous_override is not None:
         app.dependency_overrides[get_current_user] = previous_override
     else:
@@ -129,7 +130,10 @@ def test_sub_chapters_ordered_by_creation(admin_client: TestClient, chapter_id: 
 
 
 def test_sub_chapters_scoped_to_their_chapter(admin_client: TestClient, chapter_id: str) -> None:
-    other_chapter_id = admin_client.post("/v1/chapters", json={"title": "Chapter Two"}).json()["id"]
+    other_book_id = admin_client.post("/v1/books", json={"title": "Book Two"}).json()["id"]
+    other_chapter_id = admin_client.post(
+        f"/v1/books/{other_book_id}/chapters", json={"title": "Chapter Two"}
+    ).json()["id"]
     admin_client.post(f"/v1/chapters/{chapter_id}/sub-chapters", json={"title": "Sub A"})
     admin_client.post(f"/v1/chapters/{other_chapter_id}/sub-chapters", json={"title": "Sub B"})
 

@@ -188,27 +188,52 @@ describe("createApiClient", () => {
     expect(init.method).toBe("DELETE");
   });
 
-  test("listChapters hits GET /v1/chapters", async () => {
-    const chapters = [{ id: "c1", title: "Intro", order_index: 0, sub_chapter_count: 2 }];
+  test("listChapters hits GET /v1/books/{id}/chapters", async () => {
+    const chapters = [
+      { id: "c1", book_id: "b1", title: "Intro", order_index: 0, sub_chapter_count: 2 },
+    ];
     fetchMock.mockResolvedValueOnce(jsonResponse(chapters));
 
-    const result = await client().listChapters();
+    const result = await client().listChapters("b1");
 
     expect(result).toEqual(chapters);
     const [url, init] = lastCall(fetchMock);
-    expect(url).toBe("http://api.test/v1/chapters");
+    expect(url).toBe("http://api.test/v1/books/b1/chapters");
     expect(init.method ?? "GET").toBe("GET");
   });
 
-  test("createChapter POSTs to /v1/chapters", async () => {
+  test("createChapter POSTs to /v1/books/{id}/chapters", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ id: "c1", title: "Intro" }));
 
-    await client().createChapter({ title: "Intro" });
+    await client().createChapter("b1", { title: "Intro" });
 
     const [url, init] = lastCall(fetchMock);
-    expect(url).toBe("http://api.test/v1/chapters");
+    expect(url).toBe("http://api.test/v1/books/b1/chapters");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ title: "Intro" });
+  });
+
+  test("listBooks hits GET /v1/books", async () => {
+    const books = [{ id: "b1", title: "Main Library", order_index: 0, chapter_count: 1 }];
+    fetchMock.mockResolvedValueOnce(jsonResponse(books));
+
+    const result = await client().listBooks();
+
+    expect(result).toEqual(books);
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/books");
+    expect(init.method ?? "GET").toBe("GET");
+  });
+
+  test("createBook POSTs to /v1/books", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "b1", title: "Main Library" }));
+
+    await client().createBook({ title: "Main Library" });
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/books");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ title: "Main Library" });
   });
 
   test("listRecentLessons hits GET /v1/me/recent-lessons", async () => {

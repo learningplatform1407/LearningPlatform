@@ -341,7 +341,7 @@ test("renders a chapter / sub-chapter breadcrumb when the lesson is organized", 
     sub_chapter: {
       id: "sc1",
       title: "Sub A",
-      chapter: { id: "c1", title: "Chapter One" },
+      chapter: { id: "c1", book_id: "b1", title: "Chapter One" },
     },
   });
 
@@ -456,7 +456,7 @@ test("the Notes overlay closes via its Close button", async () => {
 test("the Contents overlay lists the current sub-chapter's lessons and navigates on press", async () => {
   mockGetDocument.mockResolvedValue({
     ...readyDocumentWithParagraph("Hello world"),
-    sub_chapter: { id: "sc1", title: "Sub A", chapter: { id: "c1", title: "Chapter One" } },
+    sub_chapter: { id: "sc1", title: "Sub A", chapter: { id: "c1", book_id: "b1", title: "Chapter One" } },
   });
   mockListDocuments.mockResolvedValue([
     { id: "d1", title: "Intro to Systems", created_at: "2026-01-01", status: "ready" },

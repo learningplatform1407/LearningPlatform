@@ -148,7 +148,7 @@ def get_sub_chapter_summary(
     return SubChapterSummary(
         id=sub_chapter.id,
         title=sub_chapter.title,
-        chapter=ChapterSummary(id=chapter.id, title=chapter.title),
+        chapter=ChapterSummary(id=chapter.id, book_id=chapter.book_id, title=chapter.title),
     )
 
 

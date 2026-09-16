@@ -608,7 +608,10 @@ export default function LecturePage() {
         </Link>
         {data.sub_chapter && (
           <p className="mt-xs text-xs text-muted-foreground">
-            <Link href={`/learn/lessons/${data.sub_chapter.chapter.id}`} className="hover:underline">
+            <Link
+              href={`/learn/library/${data.sub_chapter.chapter.book_id}/${data.sub_chapter.chapter.id}`}
+              className="hover:underline"
+            >
               {data.sub_chapter.chapter.title}
             </Link>
             {" / "}

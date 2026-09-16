@@ -3,6 +3,8 @@ import { describe, expect, test } from "vitest";
 import {
   annotationCreateRequestSchema,
   annotationResponseSchema,
+  bookCreateRequestSchema,
+  bookResponseSchema,
   chapterCreateRequestSchema,
   chapterResponseSchema,
   documentCreateRequestSchema,
@@ -97,7 +99,11 @@ describe("documentResponseSchema", () => {
       sub_chapter: {
         id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
         title: "Sub A",
-        chapter: { id: "20501741-6a13-4701-9ee5-b70d713f5a85", title: "Chapter One" },
+        chapter: {
+          id: "20501741-6a13-4701-9ee5-b70d713f5a85",
+          book_id: "8e6b0a1d-4b4a-4a3e-9c1e-2f7b6d5a4c3b",
+          title: "Chapter One",
+        },
       },
     };
 
@@ -278,6 +284,7 @@ describe("chapterResponseSchema", () => {
   test("accepts a real backend-shaped payload", () => {
     const payload = {
       id: "2879a273-236d-429e-985b-db6c43672a1b",
+      book_id: "d3a9e3d1-5c3a-4b9e-9e3a-3d1c5a3b9e3a",
       title: "Intro to Systems",
       order_index: 0,
       sub_chapter_count: 3,
@@ -295,6 +302,30 @@ describe("chapterCreateRequestSchema", () => {
 
   test("rejects a missing title", () => {
     expect(chapterCreateRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("bookResponseSchema", () => {
+  test("accepts a real backend-shaped payload", () => {
+    const payload = {
+      id: "2879a273-236d-429e-985b-db6c43672a1b",
+      title: "Main Library",
+      order_index: 0,
+      chapter_count: 1,
+      created_at: "2026-09-08T22:10:05.372022Z",
+    };
+
+    expect(bookResponseSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("bookCreateRequestSchema", () => {
+  test("accepts a title-only request", () => {
+    expect(bookCreateRequestSchema.safeParse({ title: "Main Library" }).success).toBe(true);
+  });
+
+  test("rejects a missing title", () => {
+    expect(bookCreateRequestSchema.safeParse({}).success).toBe(false);
   });
 });
 

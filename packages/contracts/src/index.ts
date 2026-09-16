@@ -4,6 +4,8 @@ import type {
   accountSettingsSchema,
   annotationCreateRequestSchema,
   annotationResponseSchema,
+  bookCreateRequestSchema,
+  bookResponseSchema,
   chapterCreateRequestSchema,
   chapterResponseSchema,
   documentCreateRequestSchema,
@@ -38,6 +40,8 @@ export type UploadUrlResponse = z.infer<typeof uploadUrlResponseSchema>;
 export type DocumentCreateRequest = z.infer<typeof documentCreateRequestSchema>;
 export type Annotation = z.infer<typeof annotationResponseSchema>;
 export type AnnotationCreateRequest = z.infer<typeof annotationCreateRequestSchema>;
+export type Book = z.infer<typeof bookResponseSchema>;
+export type BookCreateRequest = z.infer<typeof bookCreateRequestSchema>;
 export type Chapter = z.infer<typeof chapterResponseSchema>;
 export type ChapterCreateRequest = z.infer<typeof chapterCreateRequestSchema>;
 export type RecentLesson = z.infer<typeof recentLessonResponseSchema>;

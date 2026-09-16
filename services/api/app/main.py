@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.annotations.router import router as annotations_router
+from app.books.router import router as books_router
 from app.chapters.router import router as chapters_router
 from app.common.errors import ApiError, ErrorResponse, FieldError
 from app.core.config import settings
@@ -27,6 +28,7 @@ if settings.cors_allowed_origins:
 
 app.include_router(users_router)
 app.include_router(plans_router)
+app.include_router(books_router)
 app.include_router(chapters_router)
 app.include_router(sub_chapters_router)
 app.include_router(documents_router)

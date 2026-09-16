@@ -19,6 +19,7 @@ class ChapterSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    book_id: UUID
     title: str
 
 

@@ -6,19 +6,19 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, Vi
 import { getApiClient } from "@/lib/api-client";
 import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
 
-interface ChapterRow {
+interface BookRow {
   id: string;
   title: string;
   count: number;
   countLabel: string;
 }
 
-export default function LessonsScreen() {
+export default function LibraryScreen() {
   const queryClient = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => getApiClient().getMe() });
-  const chapters = useQuery({
-    queryKey: ["chapters"],
-    queryFn: () => getApiClient().listChapters(),
+  const books = useQuery({
+    queryKey: ["books"],
+    queryFn: () => getApiClient().listBooks(),
   });
   const uncategorized = useQuery({
     queryKey: ["documents", "uncategorized"],
@@ -28,18 +28,18 @@ export default function LessonsScreen() {
   const [title, setTitle] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const createChapterMutation = useMutation({
-    mutationFn: () => getApiClient().createChapter({ title }),
+  const createBookMutation = useMutation({
+    mutationFn: () => getApiClient().createBook({ title }),
     onSuccess: () => {
       setTitle("");
-      queryClient.invalidateQueries({ queryKey: ["chapters"] });
+      queryClient.invalidateQueries({ queryKey: ["books"] });
     },
     onError: (err) => {
-      setCreateError(err instanceof Error ? err.message : "Failed to create chapter.");
+      setCreateError(err instanceof Error ? err.message : "Failed to create book.");
     },
   });
 
-  if (me.isPending || chapters.isPending || uncategorized.isPending) {
+  if (me.isPending || books.isPending || uncategorized.isPending) {
     return (
       <View style={styles.container}>
         <Text style={styles.loading}>Loading...</Text>
@@ -47,10 +47,10 @@ export default function LessonsScreen() {
     );
   }
 
-  if (chapters.isError) {
+  if (books.isError) {
     return (
       <View style={styles.container}>
-        <Text style={styles.error}>Failed to load lessons: {(chapters.error as Error).message}</Text>
+        <Text style={styles.error}>Failed to load the library: {(books.error as Error).message}</Text>
       </View>
     );
   }
@@ -58,39 +58,39 @@ export default function LessonsScreen() {
   const isAdmin = me.data?.role === "admin";
   const uncategorizedLessons = uncategorized.data ?? [];
   const hasUncategorized = uncategorizedLessons.length > 0;
-  const chapterRows: ChapterRow[] = chapters.data.map((chapter) => ({
-    id: chapter.id,
-    title: chapter.title,
-    count: chapter.sub_chapter_count,
-    countLabel: chapter.sub_chapter_count === 1 ? "sub-chapter" : "sub-chapters",
+  const bookRows: BookRow[] = books.data.map((book) => ({
+    id: book.id,
+    title: book.title,
+    count: book.chapter_count,
+    countLabel: book.chapter_count === 1 ? "chapter" : "chapters",
   }));
-  const uncategorizedRow: ChapterRow = {
+  const uncategorizedRow: BookRow = {
     id: "uncategorized",
     title: "Uncategorized",
     count: uncategorizedLessons.length,
     countLabel: uncategorizedLessons.length === 1 ? "lesson" : "lessons",
   };
-  const rows: ChapterRow[] = hasUncategorized ? [...chapterRows, uncategorizedRow] : chapterRows;
+  const rows: BookRow[] = hasUncategorized ? [...bookRows, uncategorizedRow] : bookRows;
 
   return (
     <FlatList
       style={styles.container}
       contentContainerStyle={styles.listContent}
       data={rows}
-      keyExtractor={(chapter) => chapter.id}
+      keyExtractor={(book) => book.id}
       ListHeaderComponent={
         <>
           <Pressable onPress={() => router.push("/learn")} accessibilityRole="button">
             <Text style={styles.backLink}>← Learn</Text>
           </Pressable>
-          <Text style={styles.title}>Lessons</Text>
+          <Text style={styles.title}>Library</Text>
         </>
       }
-      ListEmptyComponent={<Text style={styles.empty}>No chapters yet.</Text>}
+      ListEmptyComponent={<Text style={styles.empty}>No books yet.</Text>}
       renderItem={({ item }) => (
         <Pressable
           style={styles.row}
-          onPress={() => router.push(`/learn/lessons/${item.id}`)}
+          onPress={() => router.push(`/learn/library/${item.id}`)}
           accessibilityRole="button"
         >
           <Text style={styles.rowTitle}>{item.title}</Text>
@@ -102,7 +102,7 @@ export default function LessonsScreen() {
       ListFooterComponent={
         isAdmin ? (
           <View style={styles.uploadForm}>
-            <Text style={styles.uploadHeading}>New chapter</Text>
+            <Text style={styles.uploadHeading}>New book</Text>
             <Text style={styles.label}>Title</Text>
             <TextInput style={styles.input} value={title} onChangeText={setTitle} />
 
@@ -110,14 +110,14 @@ export default function LessonsScreen() {
 
             <Pressable
               style={[styles.button, styles.uploadButton]}
-              onPress={() => createChapterMutation.mutate()}
-              disabled={createChapterMutation.isPending || !title}
+              onPress={() => createBookMutation.mutate()}
+              disabled={createBookMutation.isPending || !title}
               accessibilityRole="button"
             >
-              {createChapterMutation.isPending ? (
+              {createBookMutation.isPending ? (
                 <ActivityIndicator color={colors.primaryForeground} />
               ) : (
-                <Text style={styles.uploadButtonText}>Create chapter</Text>
+                <Text style={styles.uploadButtonText}>Create book</Text>
               )}
             </Pressable>
           </View>

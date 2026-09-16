@@ -14,8 +14,6 @@ const mockRequestDocumentUploadUrl = jest.fn();
 const mockCreateDocument = jest.fn();
 const mockUploadToSignedUrl = jest.fn();
 
-let mockChapterId = "c1";
-
 jest.mock("@/lib/api-client", () => ({
   getApiClient: () => ({
     getMe: mockGetMe,
@@ -54,14 +52,15 @@ function renderScreen() {
 
 const STUDENT_ME = { id: "u1", role: "student" };
 const ADMIN_ME = { id: "u1", role: "admin" };
-const CHAPTERS = [{ id: "c1", title: "Intro to Systems", order_index: 0, sub_chapter_count: 1 }];
+const CHAPTERS = [
+  { id: "c1", book_id: "b1", title: "Intro to Systems", order_index: 0, sub_chapter_count: 1 },
+];
 const SUB_CHAPTERS = [
   { id: "sc1", chapter_id: "c1", title: "Sub A", order_index: 0, lesson_count: 1 },
 ];
 
 beforeEach(() => {
-  mockChapterId = "c1";
-  (useLocalSearchParams as jest.Mock).mockImplementation(() => ({ chapterId: mockChapterId }));
+  (useLocalSearchParams as jest.Mock).mockImplementation(() => ({ bookId: "b1", chapterId: "c1" }));
   mockGetMe.mockReset();
   mockListChapters.mockReset().mockResolvedValue(CHAPTERS);
   mockListSubChapters.mockReset().mockResolvedValue(SUB_CHAPTERS);
@@ -199,44 +198,5 @@ describe("ChapterLessonsScreen (real chapter)", () => {
 
     expect(await screen.findByText("Only PDF files are supported.")).toBeTruthy();
     expect(mockRequestDocumentUploadUrl).not.toHaveBeenCalled();
-  });
-});
-
-describe("ChapterLessonsScreen (Uncategorized)", () => {
-  beforeEach(() => {
-    mockChapterId = "uncategorized";
-  });
-
-  test("lists chapterless lessons directly, no accordion, and uploads without a sub_chapter_id", async () => {
-    mockGetMe.mockResolvedValue(ADMIN_ME);
-    mockListDocuments.mockResolvedValue([
-      { id: "d1", title: "Loose lesson", created_at: "2026-01-01", status: "ready" },
-    ]);
-    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
-      canceled: false,
-      assets: [{ uri: "file:///lesson.pdf", name: "lesson.pdf", size: 1234, mimeType: "application/pdf" }],
-    });
-    mockRequestDocumentUploadUrl.mockResolvedValue({ storage_path: "abc.pdf", token: "tok" });
-    mockUploadToSignedUrl.mockResolvedValue({ data: {}, error: null });
-    mockCreateDocument.mockResolvedValue({ id: "d2", title: "Another loose lesson" });
-    globalThis.fetch = jest.fn().mockResolvedValue({
-      blob: () => Promise.resolve({ arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)) }),
-    }) as unknown as typeof fetch;
-
-    renderScreen();
-
-    expect(await screen.findByText("Uncategorized")).toBeTruthy();
-    expect(screen.getByText("Loose lesson")).toBeTruthy();
-    expect(mockListDocuments).toHaveBeenCalledWith("none");
-    expect(mockListChapters).not.toHaveBeenCalled();
-    expect(mockListSubChapters).not.toHaveBeenCalled();
-
-    fireEvent.changeText(screen.getByTestId("lesson-title-input"), "Another loose lesson");
-    fireEvent.press(screen.getByText("Choose PDF file"));
-    await screen.findByText("lesson.pdf");
-    fireEvent.press(screen.getByRole("button", { name: "Upload" }));
-
-    await waitFor(() => expect(mockCreateDocument).toHaveBeenCalledTimes(1));
-    expect(mockCreateDocument.mock.calls[0]![0].sub_chapter_id).toBeUndefined();
   });
 });

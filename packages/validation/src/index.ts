@@ -57,6 +57,7 @@ export const documentVersionResponseSchema = z.object({
 
 export const chapterSummarySchema = z.object({
   id: z.string(),
+  book_id: z.string(),
   title: z.string(),
 });
 
@@ -113,6 +114,7 @@ export const recentLessonResponseSchema = z.object({
 
 export const chapterResponseSchema = z.object({
   id: z.string(),
+  book_id: z.string(),
   title: z.string(),
   order_index: z.number(),
   sub_chapter_count: z.number(),
@@ -120,6 +122,18 @@ export const chapterResponseSchema = z.object({
 });
 
 export const chapterCreateRequestSchema = z.object({
+  title: z.string(),
+});
+
+export const bookResponseSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  order_index: z.number(),
+  chapter_count: z.number(),
+  created_at: z.string(),
+});
+
+export const bookCreateRequestSchema = z.object({
   title: z.string(),
 });
 

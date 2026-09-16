@@ -200,20 +200,17 @@ function SubChapterRow({
 }
 
 export default function ChapterLessonsPage() {
-  const params = useParams<{ chapterId: string }>();
-  const isUncategorized = params.chapterId === "uncategorized";
+  const params = useParams<{ bookId: string; chapterId: string }>();
   const queryClient = useQueryClient();
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => getBrowserApiClient().getMe() });
   const chapters = useQuery({
-    queryKey: ["chapters"],
-    queryFn: () => getBrowserApiClient().listChapters(),
-    enabled: !isUncategorized,
+    queryKey: ["chapters", params.bookId],
+    queryFn: () => getBrowserApiClient().listChapters(params.bookId),
   });
   const subChapters = useQuery({
     queryKey: ["sub-chapters", params.chapterId],
     queryFn: () => getBrowserApiClient().listSubChapters(params.chapterId),
-    enabled: !isUncategorized,
   });
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -226,33 +223,12 @@ export default function ChapterLessonsPage() {
     onSuccess: () => {
       setNewSubChapterTitle("");
       queryClient.invalidateQueries({ queryKey: ["sub-chapters", params.chapterId] });
-      queryClient.invalidateQueries({ queryKey: ["chapters"] });
+      queryClient.invalidateQueries({ queryKey: ["chapters", params.bookId] });
     },
     onError: (err) => {
       setCreateError(err instanceof Error ? err.message : "Failed to create sub-chapter.");
     },
   });
-
-  if (isUncategorized) {
-    if (me.isPending) {
-      return (
-        <main className="p-xl">
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        </main>
-      );
-    }
-    return (
-      <main className="p-xl">
-        <Link href="/learn/lessons" className="text-sm text-muted-foreground hover:underline">
-          ← All chapters
-        </Link>
-        <h1 className="mt-xs text-2xl font-semibold text-foreground">Uncategorized</h1>
-        <div className="mt-lg">
-          <LessonList subChapterId="none" isAdmin={me.data?.role === "admin"} />
-        </div>
-      </main>
-    );
-  }
 
   if (me.isPending || chapters.isPending || subChapters.isPending) {
     return (
@@ -277,8 +253,11 @@ export default function ChapterLessonsPage() {
 
   return (
     <main className="p-xl">
-      <Link href="/learn/lessons" className="text-sm text-muted-foreground hover:underline">
-        ← All chapters
+      <Link
+        href={`/learn/library/${params.bookId}`}
+        className="text-sm text-muted-foreground hover:underline"
+      >
+        ← Chapters
       </Link>
       <h1 className="mt-xs text-2xl font-semibold text-foreground">{chapterTitle ?? "Chapter"}</h1>
 

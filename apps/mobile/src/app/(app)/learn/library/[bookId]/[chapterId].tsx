@@ -203,20 +203,17 @@ function SubChapterRow({
 }
 
 export default function ChapterLessonsScreen() {
-  const { chapterId } = useLocalSearchParams<{ chapterId: string }>();
-  const isUncategorized = chapterId === "uncategorized";
+  const { bookId, chapterId } = useLocalSearchParams<{ bookId: string; chapterId: string }>();
   const queryClient = useQueryClient();
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => getApiClient().getMe() });
   const chapters = useQuery({
-    queryKey: ["chapters"],
-    queryFn: () => getApiClient().listChapters(),
-    enabled: !isUncategorized,
+    queryKey: ["chapters", bookId],
+    queryFn: () => getApiClient().listChapters(bookId),
   });
   const subChapters = useQuery({
     queryKey: ["sub-chapters", chapterId],
     queryFn: () => getApiClient().listSubChapters(chapterId),
-    enabled: !isUncategorized,
   });
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -228,7 +225,7 @@ export default function ChapterLessonsScreen() {
     onSuccess: () => {
       setNewSubChapterTitle("");
       queryClient.invalidateQueries({ queryKey: ["sub-chapters", chapterId] });
-      queryClient.invalidateQueries({ queryKey: ["chapters"] });
+      queryClient.invalidateQueries({ queryKey: ["chapters", bookId] });
     },
     onError: (err) => {
       setCreateError(err instanceof Error ? err.message : "Failed to create sub-chapter.");
@@ -237,25 +234,6 @@ export default function ChapterLessonsScreen() {
 
   function invalidateSubChapters() {
     queryClient.invalidateQueries({ queryKey: ["sub-chapters", chapterId] });
-  }
-
-  if (isUncategorized) {
-    if (me.isPending) {
-      return (
-        <View style={styles.container}>
-          <Text style={styles.loading}>Loading...</Text>
-        </View>
-      );
-    }
-    return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <Pressable onPress={() => router.push("/learn/lessons")} accessibilityRole="button">
-          <Text style={styles.backLink}>← All chapters</Text>
-        </Pressable>
-        <Text style={styles.title}>Uncategorized</Text>
-        <LessonList subChapterId="none" isAdmin={me.data?.role === "admin"} />
-      </ScrollView>
-    );
   }
 
   if (me.isPending || chapters.isPending || subChapters.isPending) {
@@ -281,8 +259,11 @@ export default function ChapterLessonsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Pressable onPress={() => router.push("/learn/lessons")} accessibilityRole="button">
-        <Text style={styles.backLink}>← All chapters</Text>
+      <Pressable
+        onPress={() => router.push(`/learn/library/${bookId}`)}
+        accessibilityRole="button"
+      >
+        <Text style={styles.backLink}>← Chapters</Text>
       </Pressable>
       <Text style={styles.title}>{chapterTitle ?? "Chapter"}</Text>
 

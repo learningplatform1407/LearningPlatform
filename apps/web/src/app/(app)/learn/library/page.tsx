@@ -6,12 +6,12 @@ import { useState } from "react";
 
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
-export default function LessonsPage() {
+export default function LibraryPage() {
   const queryClient = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => getBrowserApiClient().getMe() });
-  const chapters = useQuery({
-    queryKey: ["chapters"],
-    queryFn: () => getBrowserApiClient().listChapters(),
+  const books = useQuery({
+    queryKey: ["books"],
+    queryFn: () => getBrowserApiClient().listBooks(),
   });
   const uncategorized = useQuery({
     queryKey: ["documents", "uncategorized"],
@@ -21,18 +21,18 @@ export default function LessonsPage() {
   const [title, setTitle] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const createChapterMutation = useMutation({
-    mutationFn: () => getBrowserApiClient().createChapter({ title }),
+  const createBookMutation = useMutation({
+    mutationFn: () => getBrowserApiClient().createBook({ title }),
     onSuccess: () => {
       setTitle("");
-      queryClient.invalidateQueries({ queryKey: ["chapters"] });
+      queryClient.invalidateQueries({ queryKey: ["books"] });
     },
     onError: (err) => {
-      setCreateError(err instanceof Error ? err.message : "Failed to create chapter.");
+      setCreateError(err instanceof Error ? err.message : "Failed to create book.");
     },
   });
 
-  if (me.isPending || chapters.isPending || uncategorized.isPending) {
+  if (me.isPending || books.isPending || uncategorized.isPending) {
     return (
       <main className="p-xl">
         <p className="text-sm text-muted-foreground">Loading...</p>
@@ -40,11 +40,11 @@ export default function LessonsPage() {
     );
   }
 
-  if (chapters.isError) {
+  if (books.isError) {
     return (
       <main className="p-xl">
         <p role="alert" className="text-sm text-danger">
-          Failed to load lessons: {(chapters.error as Error).message}
+          Failed to load the library: {(books.error as Error).message}
         </p>
       </main>
     );
@@ -59,22 +59,21 @@ export default function LessonsPage() {
       <Link href="/learn" className="text-sm text-muted-foreground hover:underline">
         ← Learn
       </Link>
-      <h1 className="mt-xs text-2xl font-semibold text-foreground">Lessons</h1>
+      <h1 className="mt-xs text-2xl font-semibold text-foreground">Library</h1>
 
-      {chapters.data.length === 0 && !hasUncategorized ? (
-        <p className="mt-md text-sm text-muted-foreground">No chapters yet.</p>
+      {books.data.length === 0 && !hasUncategorized ? (
+        <p className="mt-md text-sm text-muted-foreground">No books yet.</p>
       ) : (
         <ul className="mt-lg flex flex-col gap-xs">
-          {chapters.data.map((chapter) => (
-            <li key={chapter.id}>
+          {books.data.map((book) => (
+            <li key={book.id}>
               <Link
-                href={`/learn/lessons/${chapter.id}`}
+                href={`/learn/library/${book.id}`}
                 className="flex items-center justify-between rounded-md border border-border px-md py-sm hover:bg-muted"
               >
-                <span className="text-sm font-medium text-foreground">{chapter.title}</span>
+                <span className="text-sm font-medium text-foreground">{book.title}</span>
                 <span className="text-xs text-muted-foreground">
-                  {chapter.sub_chapter_count}{" "}
-                  {chapter.sub_chapter_count === 1 ? "sub-chapter" : "sub-chapters"}
+                  {book.chapter_count} {book.chapter_count === 1 ? "chapter" : "chapters"}
                 </span>
               </Link>
             </li>
@@ -82,7 +81,7 @@ export default function LessonsPage() {
           {hasUncategorized && (
             <li>
               <Link
-                href="/learn/lessons/uncategorized"
+                href="/learn/library/uncategorized"
                 className="flex items-center justify-between rounded-md border border-border px-md py-sm hover:bg-muted"
               >
                 <span className="text-sm font-medium text-foreground">Uncategorized</span>
@@ -102,10 +101,10 @@ export default function LessonsPage() {
           onSubmit={(event) => {
             event.preventDefault();
             setCreateError(null);
-            createChapterMutation.mutate();
+            createBookMutation.mutate();
           }}
         >
-          <h2 className="text-sm font-semibold text-foreground">New chapter</h2>
+          <h2 className="text-sm font-semibold text-foreground">New book</h2>
           <label className="flex flex-col gap-xs text-sm text-foreground">
             Title
             <input
@@ -123,10 +122,10 @@ export default function LessonsPage() {
           )}
           <button
             type="submit"
-            disabled={createChapterMutation.isPending}
+            disabled={createBookMutation.isPending}
             className="self-start rounded-md bg-primary px-md py-sm text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
-            {createChapterMutation.isPending ? "Creating..." : "Create chapter"}
+            {createBookMutation.isPending ? "Creating..." : "Create book"}
           </button>
         </form>
       )}

@@ -32,8 +32,6 @@ const requestDocumentUploadUrl = vi.fn();
 const createDocument = vi.fn();
 const uploadToSignedUrl = vi.fn();
 
-let mockChapterId = "c1";
-
 vi.mock("@/lib/api-client.browser", () => ({
   getBrowserApiClient: () => ({
     getMe,
@@ -60,7 +58,7 @@ vi.mock("@/lib/checksum", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useParams: () => ({ chapterId: mockChapterId }),
+  useParams: () => ({ bookId: "b1", chapterId: "c1" }),
 }));
 
 function renderPage() {
@@ -76,13 +74,14 @@ function renderPage() {
 
 const STUDENT_ME = { id: "u1", role: "student" };
 const ADMIN_ME = { id: "u1", role: "admin" };
-const CHAPTERS = [{ id: "c1", title: "Intro to Systems", order_index: 0, sub_chapter_count: 1 }];
+const CHAPTERS = [
+  { id: "c1", book_id: "b1", title: "Intro to Systems", order_index: 0, sub_chapter_count: 1 },
+];
 const SUB_CHAPTERS = [
   { id: "sc1", chapter_id: "c1", title: "Sub A", order_index: 0, lesson_count: 1 },
 ];
 
 beforeEach(() => {
-  mockChapterId = "c1";
   getMe.mockReset();
   listChapters.mockReset().mockResolvedValue(CHAPTERS);
   listSubChapters.mockReset().mockResolvedValue(SUB_CHAPTERS);
@@ -241,55 +240,5 @@ describe("ChapterLessonsPage (real chapter)", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Only PDF files are supported.");
     expect(requestDocumentUploadUrl).not.toHaveBeenCalled();
-  });
-});
-
-describe("ChapterLessonsPage (Uncategorized)", () => {
-  beforeEach(() => {
-    mockChapterId = "uncategorized";
-  });
-
-  test("lists chapterless lessons directly, no accordion, and uploads without a sub_chapter_id", async () => {
-    getMe.mockResolvedValue(ADMIN_ME);
-    listDocuments.mockResolvedValue([
-      { id: "d1", title: "Loose lesson", created_at: "2026-01-01", status: "ready" },
-    ]);
-    requestDocumentUploadUrl.mockResolvedValue({ storage_path: "abc.pdf", token: "tok" });
-    uploadToSignedUrl.mockResolvedValue({ data: {}, error: null });
-    createDocument.mockResolvedValue({ id: "d2", title: "Another loose lesson" });
-
-    renderPage();
-    const user = userEvent.setup();
-
-    expect(await screen.findByRole("heading", { name: "Uncategorized" })).toBeInTheDocument();
-    expect(await screen.findByText("Loose lesson")).toBeInTheDocument();
-    expect(listDocuments).toHaveBeenCalledWith("none");
-    expect(listChapters).not.toHaveBeenCalled();
-    expect(listSubChapters).not.toHaveBeenCalled();
-
-    await user.type(screen.getByLabelText("Title"), "Another loose lesson");
-    selectFile(
-      screen.getByLabelText("PDF file"),
-      new File(["%PDF-1.4"], "lesson.pdf", { type: "application/pdf" }),
-    );
-    submitForm(screen.getByLabelText("PDF file"));
-
-    await waitFor(() => expect(createDocument).toHaveBeenCalledTimes(1));
-    expect(createDocument.mock.calls[0]![0].sub_chapter_id).toBeUndefined();
-  });
-
-  test("status labels render for each lesson status", async () => {
-    getMe.mockResolvedValue(STUDENT_ME);
-    listDocuments.mockResolvedValue([
-      { id: "d1", title: "A", created_at: "2026-01-01", status: "processing" },
-      { id: "d2", title: "B", created_at: "2026-01-01", status: "failed" },
-    ]);
-
-    renderPage();
-
-    const listA = await screen.findByText("A");
-    expect(within(listA.closest("a")!).getByText("Processing...")).toBeInTheDocument();
-    const listB = screen.getByText("B");
-    expect(within(listB.closest("a")!).getByText("Failed")).toBeInTheDocument();
   });
 });

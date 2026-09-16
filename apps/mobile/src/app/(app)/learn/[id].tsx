@@ -523,7 +523,11 @@ export default function LectureScreen() {
         </Pressable>
         {data.sub_chapter && (
           <Pressable
-            onPress={() => router.push(`/learn/lessons/${data.sub_chapter!.chapter.id}`)}
+            onPress={() =>
+              router.push(
+                `/learn/library/${data.sub_chapter!.chapter.book_id}/${data.sub_chapter!.chapter.id}`,
+              )
+            }
             accessibilityRole="button"
           >
             <Text style={styles.breadcrumb}>

@@ -604,7 +604,7 @@ describe("LecturePage", () => {
       sub_chapter: {
         id: "sc1",
         title: "Sub A",
-        chapter: { id: "c1", title: "Chapter One" },
+        chapter: { id: "c1", book_id: "b1", title: "Chapter One" },
       },
     });
 
@@ -614,7 +614,7 @@ describe("LecturePage", () => {
     expect(screen.getByText(/Sub A/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Chapter One" })).toHaveAttribute(
       "href",
-      "/learn/lessons/c1",
+      "/learn/library/b1/c1",
     );
   });
 
