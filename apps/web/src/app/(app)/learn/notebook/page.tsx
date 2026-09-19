@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import type { NotebookEntry } from "@lp/contracts";
 
+import { Button } from "@/components/button";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 import { NotesTab } from "../[id]/page";
@@ -69,26 +70,20 @@ function TextEntryEditor({
           setSaved(false);
         }}
         placeholder="Write a new note..."
-        className="min-h-[240px] w-full flex-1 resize-none rounded-md border border-border p-sm text-sm text-foreground focus:border-primary focus:outline-none"
+        className="min-h-[240px] w-full flex-1 resize-none rounded-md border border-border p-sm text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
       />
       <div className="flex items-center gap-sm">
-        <button
-          type="button"
+        <Button
           onClick={() => (entry ? updateMutation.mutate() : createMutation.mutate())}
           disabled={createMutation.isPending || updateMutation.isPending || !draft.trim()}
-          className="self-start rounded-md bg-primary px-md py-sm text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          className="self-start"
         >
           {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save"}
-        </button>
+        </Button>
         {entry && (
-          <button
-            type="button"
-            onClick={() => deleteMutation.mutate()}
-            disabled={deleteMutation.isPending}
-            className="rounded-md border border-border px-md py-sm text-sm text-danger hover:bg-muted disabled:opacity-50"
-          >
+          <Button variant="danger" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
             Delete
-          </button>
+          </Button>
         )}
         {saved && <span className="text-xs text-muted-foreground">Saved.</span>}
       </div>
@@ -144,23 +139,17 @@ function DrawingEntryEditor({
         }}
       />
       <div className="flex items-center gap-sm">
-        <button
-          type="button"
+        <Button
           onClick={() => (entry ? updateMutation.mutate() : createMutation.mutate())}
           disabled={createMutation.isPending || updateMutation.isPending || strokes.length === 0}
-          className="self-start rounded-md bg-primary px-md py-sm text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          className="self-start"
         >
           {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save"}
-        </button>
+        </Button>
         {entry && (
-          <button
-            type="button"
-            onClick={() => deleteMutation.mutate()}
-            disabled={deleteMutation.isPending}
-            className="rounded-md border border-border px-md py-sm text-sm text-danger hover:bg-muted disabled:opacity-50"
-          >
+          <Button variant="danger" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
             Delete
-          </button>
+          </Button>
         )}
         {saved && <span className="text-xs text-muted-foreground">Saved.</span>}
       </div>
@@ -226,10 +215,10 @@ export default function NotebookPage() {
                   <button
                     type="button"
                     onClick={() => setSelection({ kind: "lesson", documentId: note.document_id })}
-                    className={`block w-full rounded-md px-sm py-xs text-left text-sm ${
+                    className={`block w-full rounded-md border-l-2 px-sm py-xs text-left text-sm ${
                       selection?.kind === "lesson" && selection.documentId === note.document_id
-                        ? "bg-muted font-semibold text-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        ? "border-primary bg-primary/5 font-semibold text-primary"
+                        : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
                     }`}
                   >
                     <span className="block truncate font-medium text-foreground">
@@ -255,10 +244,10 @@ export default function NotebookPage() {
                   <button
                     type="button"
                     onClick={() => setSelection({ kind: "entry", entryId: entry.id })}
-                    className={`block w-full rounded-md px-sm py-xs text-left text-sm ${
+                    className={`block w-full rounded-md border-l-2 px-sm py-xs text-left text-sm ${
                       selection?.kind === "entry" && selection.entryId === entry.id
-                        ? "bg-muted font-semibold text-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        ? "border-primary bg-primary/5 font-semibold text-primary"
+                        : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
                     }`}
                   >
                     {entry.type === "text" ? (

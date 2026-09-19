@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { colors, fontSizes, fontWeights, lineHeight, radii, shadows, spacing } from "@/lib/theme";
 
 const STATUS_LABEL: Record<string, string> = {
   processing: "Processing...",
@@ -42,7 +42,7 @@ export default function LearnScreen() {
 
       {continueLesson && (
         <Pressable
-          style={styles.continueCard}
+          style={({ pressed }) => [styles.continueCard, pressed && styles.cardPressed]}
           onPress={() => router.push(`/learn/${continueLesson.id}`)}
           accessibilityRole="button"
         >
@@ -74,7 +74,7 @@ export default function LearnScreen() {
 
       <View style={styles.navGrid}>
         <Pressable
-          style={styles.navCard}
+          style={({ pressed }) => [styles.navCard, pressed && styles.cardPressed]}
           onPress={() => router.push("/learn/library")}
           accessibilityRole="button"
         >
@@ -82,7 +82,7 @@ export default function LearnScreen() {
           <Text style={styles.navCardSubtitle}>Browse books, chapters, and lessons.</Text>
         </Pressable>
         <Pressable
-          style={styles.navCard}
+          style={({ pressed }) => [styles.navCard, pressed && styles.cardPressed]}
           onPress={() => router.push("/learn/quizzes")}
           accessibilityRole="button"
         >
@@ -90,7 +90,7 @@ export default function LearnScreen() {
           <Text style={styles.navCardSubtitle}>Coming soon.</Text>
         </Pressable>
         <Pressable
-          style={styles.navCard}
+          style={({ pressed }) => [styles.navCard, pressed && styles.cardPressed]}
           onPress={() => router.push("/learn/flashcards")}
           accessibilityRole="button"
         >
@@ -98,7 +98,7 @@ export default function LearnScreen() {
           <Text style={styles.navCardSubtitle}>Coming soon.</Text>
         </Pressable>
         <Pressable
-          style={styles.navCard}
+          style={({ pressed }) => [styles.navCard, pressed && styles.cardPressed]}
           onPress={() => router.push("/learn/notebook")}
           accessibilityRole="button"
         >
@@ -128,9 +128,13 @@ const styles = StyleSheet.create({
   continueCard: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: radii.md,
     backgroundColor: colors.muted,
     padding: spacing.lg,
+    ...shadows.sm,
+  },
+  cardPressed: {
+    opacity: 0.85,
   },
   continueLabel: {
     fontSize: fontSizes.xs,
@@ -183,8 +187,10 @@ const styles = StyleSheet.create({
     flexBasis: "45%",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: radii.md,
+    backgroundColor: colors.background,
     padding: spacing.lg,
+    ...shadows.sm,
   },
   navCardTitle: {
     fontSize: fontSizes.lg,

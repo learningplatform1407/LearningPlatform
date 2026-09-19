@@ -290,13 +290,17 @@ test("renders an existing margin note as a badge and reveals its text when press
   expect(await screen.findByText("Remember this")).toBeTruthy();
 });
 
-test("long-pressing a paragraph opens the note composer and saves a block-level note", async () => {
+test("long-pressing a paragraph shows a Notes/Explain menu, and Notes opens the composer", async () => {
   mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
 
   renderScreen();
 
   await screen.findByText("Hello world");
   fireEvent(screen.getByTestId("paragraph-0"), "longPress");
+
+  // Queried by accessibility label, not text — the header's own "Notes"
+  // button (whole-lesson notes panel) has the same visible text.
+  fireEvent.press(await screen.findByLabelText("Add note"));
 
   const input = await screen.findByPlaceholderText("Note...");
   fireEvent.changeText(input, "Check this later");
@@ -308,6 +312,26 @@ test("long-pressing a paragraph opens the note composer and saves a block-level 
       block_index: 0,
       note_text: "Check this later",
     }),
+  );
+});
+
+test("long-pressing a paragraph and choosing Explain shows a coming-soon message", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+  renderScreen();
+
+  await screen.findByText("Hello world");
+  fireEvent(screen.getByTestId("paragraph-0"), "longPress");
+
+  fireEvent.press(await screen.findByText("Explain"));
+
+  expect(await screen.findByText("AI explanations are coming soon.")).toBeTruthy();
+  expect(screen.queryByPlaceholderText("Note...")).toBeNull();
+
+  fireEvent.press(screen.getByText("Got it"));
+
+  await waitFor(() =>
+    expect(screen.queryByText("AI explanations are coming soon.")).toBeNull(),
   );
 });
 

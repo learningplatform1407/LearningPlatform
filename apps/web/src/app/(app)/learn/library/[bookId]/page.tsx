@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
+import { Button } from "@/components/button";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { sha256Hex } from "@/lib/checksum";
 import { createClient } from "@/lib/supabase/client";
@@ -121,7 +122,7 @@ function UncategorizedLessonsPage() {
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 required
-                className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none"
+                className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
             </label>
             <label className="flex flex-col gap-xs text-sm text-foreground">
@@ -138,13 +139,9 @@ function UncategorizedLessonsPage() {
                 {uploadError}
               </p>
             )}
-            <button
-              type="submit"
-              disabled={uploadMutation.isPending}
-              className="self-start rounded-md bg-primary px-md py-sm text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
+            <Button type="submit" disabled={uploadMutation.isPending} className="self-start">
               {uploadMutation.isPending ? "Uploading..." : "Upload"}
-            </button>
+            </Button>
           </form>
         )}
       </div>
@@ -240,7 +237,7 @@ function BookChaptersPage({ bookId }: { bookId: string }) {
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               required
-              className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none"
+              className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </label>
           {createError && (
@@ -248,13 +245,9 @@ function BookChaptersPage({ bookId }: { bookId: string }) {
               {createError}
             </p>
           )}
-          <button
-            type="submit"
-            disabled={createChapterMutation.isPending}
-            className="self-start rounded-md bg-primary px-md py-sm text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
+          <Button type="submit" disabled={createChapterMutation.isPending} className="self-start">
             {createChapterMutation.isPending ? "Creating..." : "Create chapter"}
-          </button>
+          </Button>
         </form>
       )}
     </main>

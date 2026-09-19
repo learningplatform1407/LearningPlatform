@@ -7,6 +7,7 @@ import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 
 import type { Annotation, AnnotationCreateRequest } from "@lp/contracts";
 
+import { Button } from "@/components/button";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { createClient } from "@/lib/supabase/client";
 import { findBlockElement, getOffsetsWithinContainer, spliceAnnotations } from "@/lib/text-offset";
@@ -283,17 +284,12 @@ export function NotesTab({ documentId }: { documentId: string }) {
           setSaved(false);
         }}
         placeholder="Write your notes for this lesson..."
-        className="w-full flex-1 resize-none rounded-md border border-border p-sm text-sm text-foreground focus:border-primary focus:outline-none"
+        className="w-full flex-1 resize-none rounded-md border border-border p-sm text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
       />
       <div className="flex items-center gap-sm">
-        <button
-          type="button"
-          onClick={() => saveMutation.mutate(value)}
-          disabled={saveMutation.isPending}
-          className="self-start rounded-md bg-primary px-md py-sm text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
+        <Button onClick={() => saveMutation.mutate(value)} disabled={saveMutation.isPending} className="self-start">
           {saveMutation.isPending ? "Saving..." : "Save"}
-        </button>
+        </Button>
         {saved && <span className="text-xs text-muted-foreground">Saved.</span>}
       </div>
     </div>
@@ -436,6 +432,7 @@ export default function LecturePage() {
   const articleRef = useRef<HTMLElement>(null);
   const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
+  const [showExplainComingSoon, setShowExplainComingSoon] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>("lesson");
   const [activeTool, setActiveTool] = useState<ActiveTool>(null);
 
@@ -466,6 +463,7 @@ export default function LecturePage() {
     window.getSelection()?.removeAllRanges();
     setPendingSelection(null);
     setNoteDraft(null);
+    setShowExplainComingSoon(false);
   }
 
   function handleMouseUp() {
@@ -559,6 +557,7 @@ export default function LecturePage() {
       left: rect.left,
     });
     setNoteDraft(null);
+    setShowExplainComingSoon(false);
   }
 
   function handleSaveNote() {
@@ -696,15 +695,25 @@ export default function LecturePage() {
             className="fixed z-20 flex items-center gap-xs rounded-md border border-border bg-background p-xs shadow-md"
             style={{ top: pendingSelection.top - 44, left: pendingSelection.left }}
           >
-            {noteDraft === null ? (
-              <button
-                type="button"
-                className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
-                onClick={() => setNoteDraft("")}
-              >
-                Add note
-              </button>
-            ) : (
+            {noteDraft === null && !showExplainComingSoon && (
+              <>
+                <button
+                  type="button"
+                  className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
+                  onClick={() => setNoteDraft("")}
+                >
+                  Notes
+                </button>
+                <button
+                  type="button"
+                  className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
+                  onClick={() => setShowExplainComingSoon(true)}
+                >
+                  Explain
+                </button>
+              </>
+            )}
+            {noteDraft !== null && (
               <form
                 className="flex items-center gap-xs"
                 onSubmit={(event) => {
@@ -723,6 +732,18 @@ export default function LecturePage() {
                   Save
                 </button>
               </form>
+            )}
+            {showExplainComingSoon && (
+              <div className="flex items-center gap-sm px-sm py-xs">
+                <span className="text-sm text-muted-foreground">AI explanations are coming soon.</span>
+                <button
+                  type="button"
+                  className="text-xs font-medium text-primary hover:underline"
+                  onClick={() => setShowExplainComingSoon(false)}
+                >
+                  Got it
+                </button>
+              </div>
             )}
           </div>
         )}

@@ -76,3 +76,44 @@ def test_multiple_images_are_all_detected():
 
     image_blocks = [b for b in blocks if b["type"] == "image"]
     assert len(image_blocks) == 2
+
+
+def test_merges_consecutive_close_lines_into_one_flowing_paragraph():
+    # Some PDFs (this platform's own generated lesson content included) place
+    # each visual line as its own text block rather than one block per
+    # paragraph — without merging, the reader renders a new short block per
+    # line instead of text that reflows to fill the available width.
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "Chapter One", fontsize=22)
+    page.insert_text((72, 100), "This line was originally split", fontsize=11)
+    page.insert_text((72, 114), "across three separate text insertions", fontsize=11)
+    page.insert_text((72, 128), "that all belong to the same paragraph.", fontsize=11)
+    page.insert_text(
+        (72, 200), "This is a distinct second paragraph, much further down.", fontsize=11
+    )
+
+    blocks = extract_pdf(doc.tobytes())
+
+    assert [b["type"] for b in blocks] == ["heading", "paragraph", "paragraph"]
+    assert blocks[1]["text"] == (
+        "This line was originally split across three separate text insertions "
+        "that all belong to the same paragraph."
+    )
+    assert blocks[2]["text"] == "This is a distinct second paragraph, much further down."
+
+
+def test_does_not_merge_paragraphs_split_by_an_image():
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "First line of paragraph one", fontsize=11)
+    page.insert_text((72, 86), "continuing right up to the image.", fontsize=11)
+    page.insert_image(pymupdf.Rect(72, 100, 172, 200), stream=_SMALL_PNG)
+    page.insert_text((72, 214), "First line of paragraph two", fontsize=11)
+    page.insert_text((72, 228), "continuing right after the image.", fontsize=11)
+
+    blocks = extract_pdf(doc.tobytes())
+
+    assert [b["type"] for b in blocks] == ["paragraph", "image", "paragraph"]
+    assert blocks[0]["text"] == "First line of paragraph one continuing right up to the image."
+    assert blocks[2]["text"] == "First line of paragraph two continuing right after the image."

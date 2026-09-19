@@ -1,7 +1,14 @@
 import { lineHeights } from "@lp/ui";
 
-export { colors, fontSizes, fontWeights, spacing } from "@lp/ui";
-export type { ColorToken, FontSizeToken, FontWeightToken, SpacingToken } from "@lp/ui";
+export { colors, fontSizes, fontWeights, radii, shadows, spacing } from "@lp/ui";
+export type {
+  ColorToken,
+  FontSizeToken,
+  FontWeightToken,
+  RadiusToken,
+  ShadowToken,
+  SpacingToken,
+} from "@lp/ui";
 
 /**
  * React Native's `lineHeight` style prop is an absolute pixel value, unlike

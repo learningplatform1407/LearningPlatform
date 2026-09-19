@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 
 import { AuthLayout } from "@/components/auth-layout";
+import { Button } from "@/components/button";
 
 import { login, type LoginState } from "./actions";
 
@@ -23,7 +24,7 @@ export default function LoginPage() {
             name="email"
             required
             autoComplete="email"
-            className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none"
+            className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </label>
         <label className="flex flex-col gap-xs text-sm text-foreground">
@@ -33,7 +34,7 @@ export default function LoginPage() {
             name="password"
             required
             autoComplete="current-password"
-            className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none"
+            className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </label>
         {state.error && (
@@ -41,13 +42,9 @@ export default function LoginPage() {
             {state.error}
           </p>
         )}
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-md bg-primary px-md py-sm text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
+        <Button type="submit" disabled={pending}>
           {pending ? "Logging in..." : "Log in"}
-        </button>
+        </Button>
       </form>
       <p className="mt-md text-sm text-muted-foreground">
         Don&apos;t have an account?{" "}

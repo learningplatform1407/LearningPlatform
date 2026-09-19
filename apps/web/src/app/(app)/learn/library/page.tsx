@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 
+import { Button } from "@/components/button";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 export default function LibraryPage() {
@@ -112,7 +113,7 @@ export default function LibraryPage() {
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               required
-              className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none"
+              className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </label>
           {createError && (
@@ -120,13 +121,9 @@ export default function LibraryPage() {
               {createError}
             </p>
           )}
-          <button
-            type="submit"
-            disabled={createBookMutation.isPending}
-            className="self-start rounded-md bg-primary px-md py-sm text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
+          <Button type="submit" disabled={createBookMutation.isPending} className="self-start">
             {createBookMutation.isPending ? "Creating..." : "Create book"}
-          </button>
+          </Button>
         </form>
       )}
     </main>

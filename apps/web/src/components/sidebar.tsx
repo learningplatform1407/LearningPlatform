@@ -61,9 +61,13 @@ function NavLink({
         href={item.href}
         title={collapsed ? item.label : undefined}
         aria-label={collapsed ? item.label : undefined}
-        className={`flex h-9 items-center overflow-hidden rounded-md px-sm text-sm font-medium whitespace-nowrap ${
+        className={`flex h-9 items-center overflow-hidden rounded-md border-l-2 px-sm text-sm font-medium whitespace-nowrap ${
           collapsed ? "justify-center" : ""
-        } ${active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+        } ${
+          active
+            ? "border-primary bg-primary/5 text-primary"
+            : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
+        }`}
       >
         {collapsed ? (
           <span aria-hidden="true" className="text-base leading-none">

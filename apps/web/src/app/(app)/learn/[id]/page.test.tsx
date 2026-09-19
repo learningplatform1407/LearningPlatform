@@ -354,8 +354,9 @@ describe("LecturePage", () => {
     selectTextInParagraph(paragraph, 0, 5);
 
     expect(createAnnotation).not.toHaveBeenCalled();
-    // With no tool active, selecting text falls back to the old floating "Add note" toolbar.
-    expect(await screen.findByRole("button", { name: "Add note" })).toBeInTheDocument();
+    // With no tool active, selecting text falls back to the floating Notes/Explain toolbar.
+    expect(await screen.findByRole("button", { name: "Notes" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Explain" })).toBeInTheDocument();
   });
 
   test("choosing a different color switches the active tool instead of stacking", async () => {
@@ -556,7 +557,7 @@ describe("LecturePage", () => {
     selectTextInParagraph(paragraph, 6, 11);
 
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Add note" }));
+    await user.click(await screen.findByRole("button", { name: "Notes" }));
     await user.type(screen.getByPlaceholderText("Note..."), "Check this later");
     await user.click(
       within(screen.getByRole("toolbar", { name: "Annotation actions" })).getByRole("button", {
@@ -571,6 +572,27 @@ describe("LecturePage", () => {
       end_offset: 11,
       note_text: "Check this later",
     });
+  });
+
+  test("selecting text and clicking Explain shows a coming-soon message instead of a form", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+    renderPage();
+
+    const paragraph = await screen.findByText("Hello world");
+    selectTextInParagraph(paragraph, 6, 11);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Explain" }));
+
+    expect(screen.getByText("AI explanations are coming soon.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Notes" })).not.toBeInTheDocument();
+    expect(createAnnotation).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Got it" }));
+
+    expect(screen.queryByText("AI explanations are coming soon.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Notes" })).toBeInTheDocument();
   });
 
   test("clicking a highlight does not delete it — only the eraser tool can", async () => {

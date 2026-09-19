@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
+import { Button } from "@/components/button";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { sha256Hex } from "@/lib/checksum";
 import { createClient } from "@/lib/supabase/client";
@@ -129,7 +130,7 @@ function LessonList({
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               required
-              className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none"
+              className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </label>
           <label className="flex flex-col gap-xs text-sm text-foreground">
@@ -146,13 +147,9 @@ function LessonList({
               {uploadError}
             </p>
           )}
-          <button
-            type="submit"
-            disabled={uploadMutation.isPending}
-            className="self-start rounded-md bg-primary px-md py-sm text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
+          <Button type="submit" disabled={uploadMutation.isPending} className="self-start">
             {uploadMutation.isPending ? "Uploading..." : "Upload"}
-          </button>
+          </Button>
         </form>
       )}
     </div>
@@ -297,7 +294,7 @@ export default function ChapterLessonsPage() {
               value={newSubChapterTitle}
               onChange={(event) => setNewSubChapterTitle(event.target.value)}
               required
-              className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none"
+              className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </label>
           {createError && (
@@ -305,13 +302,9 @@ export default function ChapterLessonsPage() {
               {createError}
             </p>
           )}
-          <button
-            type="submit"
-            disabled={createSubChapterMutation.isPending}
-            className="self-start rounded-md bg-primary px-md py-sm text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
+          <Button type="submit" disabled={createSubChapterMutation.isPending} className="self-start">
             {createSubChapterMutation.isPending ? "Creating..." : "Create sub-chapter"}
-          </button>
+          </Button>
         </form>
       )}
     </main>

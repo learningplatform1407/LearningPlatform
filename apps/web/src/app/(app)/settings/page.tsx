@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { MeResponse } from "@lp/contracts";
 import { useState } from "react";
 
+import { Button } from "@/components/button";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 import { logout } from "../actions";
@@ -108,7 +109,7 @@ export default function SettingsPage() {
           <select
             value={language}
             onChange={(event) => setLanguage(event.target.value)}
-            className="w-fit rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none"
+            className="w-fit rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
             {LANGUAGES.map((option) => (
               <option key={option.value} value={option.value}>
@@ -124,13 +125,9 @@ export default function SettingsPage() {
           </p>
         )}
         <div className="flex items-center gap-md">
-          <button
-            type="submit"
-            disabled={saveMutation.isPending}
-            className="rounded-md bg-primary px-md py-sm text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
+          <Button type="submit" disabled={saveMutation.isPending}>
             {saveMutation.isPending ? "Saving..." : "Save"}
-          </button>
+          </Button>
           {saveMutation.isSuccess && <span className="text-sm text-success">Saved.</span>}
         </div>
       </form>

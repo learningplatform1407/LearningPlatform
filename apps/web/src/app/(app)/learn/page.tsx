@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
+import { Card } from "@/components/card";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -43,13 +44,15 @@ export default function LearnPage() {
       <h1 className="text-2xl font-semibold text-foreground">Learn</h1>
 
       {continueLesson && (
-        <Link
+        <Card
+          as={Link}
           href={`/learn/${continueLesson.id}`}
-          className="mt-lg block rounded-md border border-border bg-muted px-lg py-md hover:bg-muted/70"
+          interactive
+          className="mt-lg block bg-muted px-lg py-md"
         >
           <p className="text-xs font-medium text-muted-foreground">Continue where you left off</p>
           <p className="mt-xs text-lg font-semibold text-foreground">{continueLesson.title}</p>
-        </Link>
+        </Card>
       )}
 
       {recentlyOpened.length > 0 && (
@@ -74,30 +77,24 @@ export default function LearnPage() {
       )}
 
       <div className="mt-2xl grid max-w-[64rem] grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-4">
-        <Link href="/learn/library" className="block rounded-md border border-border p-lg hover:bg-muted">
+        <Card as={Link} href="/learn/library" interactive className="block p-lg">
           <p className="text-lg font-semibold text-foreground">Library</p>
           <p className="mt-xs text-sm text-muted-foreground">Browse books, chapters, and lessons.</p>
-        </Link>
-        <Link href="/learn/quizzes" className="block rounded-md border border-border p-lg hover:bg-muted">
+        </Card>
+        <Card as={Link} href="/learn/quizzes" interactive className="block p-lg">
           <p className="text-lg font-semibold text-foreground">Quizzes</p>
           <p className="mt-xs text-sm text-muted-foreground">Coming soon.</p>
-        </Link>
-        <Link
-          href="/learn/flashcards"
-          className="block rounded-md border border-border p-lg hover:bg-muted"
-        >
+        </Card>
+        <Card as={Link} href="/learn/flashcards" interactive className="block p-lg">
           <p className="text-lg font-semibold text-foreground">Flashcards</p>
           <p className="mt-xs text-sm text-muted-foreground">Coming soon.</p>
-        </Link>
-        <Link
-          href="/learn/notebook"
-          className="block rounded-md border border-border p-lg hover:bg-muted"
-        >
+        </Card>
+        <Card as={Link} href="/learn/notebook" interactive className="block p-lg">
           <p className="text-lg font-semibold text-foreground">Notebook</p>
           <p className="mt-xs text-sm text-muted-foreground">
             All your notes and drawings in one place.
           </p>
-        </Link>
+        </Card>
       </div>
     </main>
   );

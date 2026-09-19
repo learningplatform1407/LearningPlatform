@@ -414,9 +414,11 @@ export default function LectureScreen() {
     enabled: version?.status === "ready",
   });
 
+  const [actionMenuBlockIndex, setActionMenuBlockIndex] = useState<number | null>(null);
   const [composingBlockIndex, setComposingBlockIndex] = useState<number | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [viewingNote, setViewingNote] = useState<Annotation | null>(null);
+  const [explainComingSoonVisible, setExplainComingSoonVisible] = useState(false);
 
   const createNoteMutation = useMutation({
     mutationFn: (blockIndex: number) =>
@@ -616,7 +618,7 @@ export default function LectureScreen() {
                     text={block.text ?? ""}
                     blockIndex={index}
                     annotations={annotations}
-                    onLongPress={() => setComposingBlockIndex(index)}
+                    onLongPress={() => setActionMenuBlockIndex(index)}
                     onOpenNote={setViewingNote}
                   />
                 );
@@ -624,6 +626,71 @@ export default function LectureScreen() {
           </>
         )}
       </ScrollView>
+
+      <Modal
+        visible={actionMenuBlockIndex !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setActionMenuBlockIndex(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Pressable
+              onPress={() => {
+                setComposingBlockIndex(actionMenuBlockIndex);
+                setActionMenuBlockIndex(null);
+              }}
+              style={styles.actionMenuItem}
+              accessibilityRole="button"
+              // The header's "Notes" button (whole-lesson notes panel) has the
+              // same visible label as this menu item (adds a margin note on
+              // the selected block) — distinct accessible names keep screen
+              // readers from announcing two identically-named buttons.
+              accessibilityLabel="Add note"
+            >
+              <Text style={styles.actionMenuItemText}>Notes</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setExplainComingSoonVisible(true);
+                setActionMenuBlockIndex(null);
+              }}
+              style={styles.actionMenuItem}
+              accessibilityRole="button"
+            >
+              <Text style={styles.actionMenuItemText}>Explain</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setActionMenuBlockIndex(null)}
+              style={styles.modalButton}
+              accessibilityRole="button"
+            >
+              <Text style={styles.modalButtonText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={explainComingSoonVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setExplainComingSoonVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Explain</Text>
+            <Text style={styles.hint}>AI explanations are coming soon.</Text>
+            <Pressable
+              onPress={() => setExplainComingSoonVisible(false)}
+              style={[styles.modalButton, styles.modalButtonPrimary]}
+              accessibilityRole="button"
+            >
+              <Text style={styles.modalButtonPrimaryText}>Got it</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={composingBlockIndex !== null}
@@ -962,6 +1029,15 @@ const styles = StyleSheet.create({
   },
   noteText: {
     fontSize: fontSizes.base,
+    color: colors.foreground,
+  },
+  actionMenuItem: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  actionMenuItemText: {
+    fontSize: fontSizes.base,
+    fontWeight: fontWeights.medium,
     color: colors.foreground,
   },
   modalActions: {
