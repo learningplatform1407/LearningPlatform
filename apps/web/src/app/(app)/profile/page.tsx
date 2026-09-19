@@ -109,9 +109,7 @@ export default function ProfilePage() {
   }
 
   return (
-    // Arbitrary value, not max-w-lg — see the comment in auth-layout.tsx:
-    // Tailwind's width/max-width scale shares the --spacing-* namespace.
-    <main className="mx-auto max-w-[32rem] p-xl">
+    <main className="p-xl">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-foreground">Profile</h1>
         <Link
