@@ -50,7 +50,7 @@ test("new-text sentinel shows an empty text editor with Save disabled until type
   const saveButton = screen.getByRole("button", { name: "Save" });
   expect(saveButton.props.accessibilityState?.disabled).toBe(true);
 
-  fireEvent.changeText(screen.getByPlaceholderText("Write a new note..."), "Fresh idea");
+  fireEvent.changeText(screen.getByPlaceholderText("Title"), "Fresh idea");
   fireEvent.press(screen.getByRole("button", { name: "Save" }));
 
   await waitFor(() =>

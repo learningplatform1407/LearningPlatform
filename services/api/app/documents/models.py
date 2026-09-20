@@ -105,21 +105,3 @@ class Flashcard(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
-
-
-class LessonNote(Base):
-    """One evolving free-text note per (user, lesson) — edited in place and
-    upserted on save, same shape as `LessonView`."""
-
-    __tablename__ = "lesson_notes"
-    __table_args__ = (
-        UniqueConstraint("user_id", "document_id", name="uq_lesson_notes_user_document"),
-    )
-
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("profiles.id", ondelete="CASCADE"))
-    document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
-    content: Mapped[str] = mapped_column(String)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )

@@ -15,6 +15,7 @@ import {
 } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
+import { NewEntryButtons, NotebookEntryEditor, NotebookEntryList } from "@/lib/notebook-entry-editor";
 import { supabase } from "@/lib/supabase";
 import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
 import { spliceAnnotations } from "@/lib/text-offset";
@@ -257,59 +258,11 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
   );
 }
 
-export function NotesTab({ documentId }: { documentId: string }) {
-  const queryClient = useQueryClient();
-  const { data: note, isPending } = useQuery({
-    queryKey: ["note", documentId],
-    queryFn: () => getApiClient().getNote(documentId),
-  });
-  const [draft, setDraft] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-
-  const value = draft ?? note?.content ?? "";
-
-  const saveMutation = useMutation({
-    mutationFn: (content: string) => getApiClient().upsertNote(documentId, content),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["note", documentId] });
-      setSaved(true);
-    },
-  });
-
-  if (isPending) {
-    return <Text style={styles.hint}>Loading...</Text>;
-  }
-
-  return (
-    <View style={styles.notesTab}>
-      <TextInput
-        style={styles.notesInput}
-        value={value}
-        onChangeText={(text) => {
-          setDraft(text);
-          setSaved(false);
-        }}
-        placeholder="Write your notes for this lesson..."
-        multiline
-      />
-      <View style={styles.notesActions}>
-        <Pressable
-          style={[styles.modalButton, styles.modalButtonPrimary]}
-          onPress={() => saveMutation.mutate(value)}
-          disabled={saveMutation.isPending}
-          accessibilityRole="button"
-        >
-          {saveMutation.isPending ? (
-            <ActivityIndicator color={colors.primaryForeground} />
-          ) : (
-            <Text style={styles.modalButtonPrimaryText}>Save</Text>
-          )}
-        </Pressable>
-        {saved && <Text style={styles.hint}>Saved.</Text>}
-      </View>
-    </View>
-  );
-}
+type NotesView =
+  | { kind: "list" }
+  | { kind: "entry"; entryId: string }
+  | { kind: "new-text" }
+  | { kind: "new-drawing" };
 
 function TocModal({
   visible,
@@ -377,6 +330,16 @@ function NotesModal({
   onClose: () => void;
   documentId: string;
 }) {
+  const [view, setView] = useState<NotesView>({ kind: "list" });
+  const entries = useQuery({
+    queryKey: ["notebook-entries"],
+    queryFn: () => getApiClient().listNotebookEntries(),
+    enabled: visible,
+  });
+
+  const selectedEntry =
+    view.kind === "entry" ? entries.data?.find((e) => e.id === view.entryId) : undefined;
+
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlayContainer}>
@@ -386,9 +349,54 @@ function NotesModal({
             <Text style={styles.overlayClose}>Close</Text>
           </Pressable>
         </View>
-        <View style={styles.overlayContent}>
-          <NotesTab documentId={documentId} />
-        </View>
+        <ScrollView contentContainerStyle={styles.overlayContent}>
+          {entries.isPending && <Text style={styles.hint}>Loading...</Text>}
+          {entries.isError && <Text style={styles.error}>Failed to load notes.</Text>}
+          {entries.data && (
+            <>
+              {view.kind !== "list" && (
+                <Pressable onPress={() => setView({ kind: "list" })} accessibilityRole="button">
+                  <Text style={styles.backLink}>← Notes</Text>
+                </Pressable>
+              )}
+              {view.kind === "list" && (
+                <NotebookEntryList
+                  entries={entries.data}
+                  onSelect={(entryId) => setView({ kind: "entry", entryId })}
+                />
+              )}
+              {view.kind === "new-text" && (
+                <NotebookEntryEditor
+                  type="text"
+                  sourceDocumentId={documentId}
+                  onCreated={(id) => setView({ kind: "entry", entryId: id })}
+                />
+              )}
+              {view.kind === "new-drawing" && (
+                <NotebookEntryEditor
+                  type="drawing"
+                  sourceDocumentId={documentId}
+                  onCreated={(id) => setView({ kind: "entry", entryId: id })}
+                />
+              )}
+              {view.kind === "entry" && selectedEntry && (
+                <NotebookEntryEditor
+                  key={selectedEntry.id}
+                  entry={selectedEntry}
+                  onDeleted={() => setView({ kind: "list" })}
+                />
+              )}
+            </>
+          )}
+        </ScrollView>
+        {view.kind === "list" && (
+          <View style={styles.overlayFooter}>
+            <NewEntryButtons
+              onNewText={() => setView({ kind: "new-text" })}
+              onNewDrawing={() => setView({ kind: "new-drawing" })}
+            />
+          </View>
+        )}
       </View>
     </Modal>
   );
@@ -837,9 +845,14 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   overlayContent: {
-    flex: 1,
+    flexGrow: 1,
     padding: spacing.xl,
     gap: spacing.xs,
+  },
+  overlayFooter: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    padding: spacing.md,
   },
   tocRow: {
     borderWidth: 1,
@@ -918,25 +931,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
-  },
-  notesTab: {
-    gap: spacing.sm,
-  },
-  notesInput: {
-    minHeight: 160,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    fontSize: fontSizes.base,
-    color: colors.foreground,
-    textAlignVertical: "top",
-  },
-  notesActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
   },
   heading: {
     fontSize: fontSizes.xl,

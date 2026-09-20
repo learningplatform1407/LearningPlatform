@@ -1,4 +1,6 @@
+import hashlib
 import uuid
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -6,7 +8,36 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
 from app.main import app
-from app.users.models import Profile
+from app.users.models import AccountSettings, Profile
+
+
+def _create_document(client: TestClient, admin_user: AuthenticatedUser, db_session: Session) -> str:
+    db_session.add(
+        Profile(id=admin_user.id, role="admin", settings=AccountSettings(user_id=admin_user.id))
+    )
+    db_session.commit()
+    app.dependency_overrides[get_current_user] = lambda: admin_user
+    try:
+        fake_pdf_bytes = b"%PDF-1.4 fake"
+        checksum = hashlib.sha256(fake_pdf_bytes).hexdigest()
+        with (
+            patch("app.documents.service.download_object", return_value=fake_pdf_bytes),
+            patch("app.documents.service.extract_pdf", return_value=[]),
+        ):
+            response = client.post(
+                "/v1/documents",
+                json={
+                    "title": "Lesson",
+                    "storage_path": "lesson.pdf",
+                    "mime_type": "application/pdf",
+                    "size_bytes": len(fake_pdf_bytes),
+                    "checksum": checksum,
+                },
+            )
+        assert response.status_code == 200
+        return response.json()["id"]  # type: ignore[no-any-return]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
 
 
 def test_notebook_entries_require_auth(client: TestClient) -> None:
@@ -160,3 +191,30 @@ def test_cannot_delete_another_users_entry(
     delete_response = client.delete(f"/v1/notebook-entries/{entry_id}")
     assert delete_response.status_code == 404
     app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_create_entry_with_source_document_records_soft_metadata(
+    client: TestClient,
+    authenticated_user: AuthenticatedUser,
+    db_session: Session,
+) -> None:
+    admin_user = AuthenticatedUser(id=uuid.uuid4(), email="admin@example.com")
+    document_id = _create_document(client, admin_user, db_session)
+
+    app.dependency_overrides[get_current_user] = lambda: authenticated_user
+    response = client.post(
+        "/v1/notebook-entries",
+        json={"type": "text", "content": "Jotted while reading", "source_document_id": document_id},
+    )
+    app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == 200
+    assert response.json()["source_document_id"] == document_id
+
+
+def test_create_entry_without_source_document_leaves_it_null(authed_client: TestClient) -> None:
+    response = authed_client.post(
+        "/v1/notebook-entries", json={"type": "text", "content": "From the main notebook"}
+    )
+    assert response.status_code == 200
+    assert response.json()["source_document_id"] is None

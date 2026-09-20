@@ -150,16 +150,6 @@ export const subChapterCreateRequestSchema = z.object({
   title: z.string(),
 });
 
-export const noteResponseSchema = z.object({
-  document_id: z.string(),
-  content: z.string(),
-  updated_at: z.string(),
-});
-
-export const noteUpsertRequestSchema = z.object({
-  content: z.string(),
-});
-
 export const quizResponseSchema = z.object({
   id: z.string(),
   document_id: z.string(),
@@ -198,13 +188,6 @@ export const annotationCreateRequestSchema = z.object({
   color: z.string().nullable().optional(),
 });
 
-export const noteWithLessonResponseSchema = z.object({
-  document_id: z.string(),
-  document_title: z.string(),
-  content: z.string(),
-  updated_at: z.string(),
-});
-
 export const strokePointSchema = z.object({
   x: z.number(),
   y: z.number(),
@@ -224,6 +207,7 @@ export const notebookEntryResponseSchema = z.object({
   type: notebookEntryTypeSchema,
   content: z.string().nullable(),
   strokes: z.array(strokeSchema).nullable(),
+  source_document_id: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -232,6 +216,7 @@ export const notebookEntryCreateRequestSchema = z.object({
   type: notebookEntryTypeSchema,
   content: z.string().nullable().optional(),
   strokes: z.array(strokeSchema).nullable().optional(),
+  source_document_id: z.string().nullable().optional(),
 });
 
 export const notebookEntryUpdateRequestSchema = z.object({

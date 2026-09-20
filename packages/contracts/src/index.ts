@@ -16,9 +16,6 @@ import type {
   extractedContentSchema,
   flashcardResponseSchema,
   meResponseSchema,
-  noteResponseSchema,
-  noteUpsertRequestSchema,
-  noteWithLessonResponseSchema,
   notebookEntryCreateRequestSchema,
   notebookEntryResponseSchema,
   notebookEntryUpdateRequestSchema,
@@ -53,11 +50,8 @@ export type ChapterCreateRequest = z.infer<typeof chapterCreateRequestSchema>;
 export type RecentLesson = z.infer<typeof recentLessonResponseSchema>;
 export type SubChapter = z.infer<typeof subChapterResponseSchema>;
 export type SubChapterCreateRequest = z.infer<typeof subChapterCreateRequestSchema>;
-export type Note = z.infer<typeof noteResponseSchema>;
-export type NoteUpsertRequest = z.infer<typeof noteUpsertRequestSchema>;
 export type Quiz = z.infer<typeof quizResponseSchema>;
 export type Flashcard = z.infer<typeof flashcardResponseSchema>;
-export type NoteWithLesson = z.infer<typeof noteWithLessonResponseSchema>;
 export type Stroke = z.infer<typeof strokeSchema>;
 export type StrokePoint = z.infer<typeof strokePointSchema>;
 export type NotebookEntry = z.infer<typeof notebookEntryResponseSchema>;

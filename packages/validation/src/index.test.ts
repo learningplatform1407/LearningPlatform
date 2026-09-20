@@ -12,9 +12,6 @@ import {
   documentSummaryResponseSchema,
   flashcardResponseSchema,
   meResponseSchema,
-  noteResponseSchema,
-  noteUpsertRequestSchema,
-  noteWithLessonResponseSchema,
   notebookEntryCreateRequestSchema,
   notebookEntryResponseSchema,
   notebookEntryUpdateRequestSchema,
@@ -399,51 +396,6 @@ describe("subChapterCreateRequestSchema", () => {
   });
 });
 
-describe("noteResponseSchema", () => {
-  test("accepts a real backend-shaped payload", () => {
-    const payload = {
-      document_id: "2879a273-236d-429e-985b-db6c43672a1b",
-      content: "Remember the key formula.",
-      updated_at: "2026-09-08T22:10:05.372022Z",
-    };
-
-    expect(noteResponseSchema.safeParse(payload).success).toBe(true);
-  });
-});
-
-describe("noteUpsertRequestSchema", () => {
-  test("accepts a content-only request", () => {
-    expect(noteUpsertRequestSchema.safeParse({ content: "New note" }).success).toBe(true);
-  });
-
-  test("rejects a missing content field", () => {
-    expect(noteUpsertRequestSchema.safeParse({}).success).toBe(false);
-  });
-});
-
-describe("noteWithLessonResponseSchema", () => {
-  test("accepts a real backend-shaped payload", () => {
-    const payload = {
-      document_id: "2879a273-236d-429e-985b-db6c43672a1b",
-      document_title: "Intro to Systems",
-      content: "Remember the key formula.",
-      updated_at: "2026-09-08T22:10:05.372022Z",
-    };
-
-    expect(noteWithLessonResponseSchema.safeParse(payload).success).toBe(true);
-  });
-
-  test("rejects a missing document_title", () => {
-    const payload = {
-      document_id: "2879a273-236d-429e-985b-db6c43672a1b",
-      content: "Remember the key formula.",
-      updated_at: "2026-09-08T22:10:05.372022Z",
-    };
-
-    expect(noteWithLessonResponseSchema.safeParse(payload).success).toBe(false);
-  });
-});
-
 describe("notebookEntryResponseSchema", () => {
   test("accepts a text entry", () => {
     const payload = {
@@ -451,6 +403,7 @@ describe("notebookEntryResponseSchema", () => {
       type: "text",
       content: "Idea for the project",
       strokes: null,
+      source_document_id: null,
       created_at: "2026-09-08T22:10:05.372022Z",
       updated_at: "2026-09-08T22:10:05.372022Z",
     };
@@ -479,6 +432,21 @@ describe("notebookEntryResponseSchema", () => {
           points: [{ x: 0.5, y: 0.5, pressure: 1 }],
         },
       ],
+      source_document_id: null,
+      created_at: "2026-09-08T22:10:05.372022Z",
+      updated_at: "2026-09-08T22:10:05.372022Z",
+    };
+
+    expect(notebookEntryResponseSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("accepts a note created from the lesson reader, with source_document_id set", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      type: "text",
+      content: "Jotted while reading",
+      strokes: null,
+      source_document_id: "2879a273-236d-429e-985b-db6c43672a1b",
       created_at: "2026-09-08T22:10:05.372022Z",
       updated_at: "2026-09-08T22:10:05.372022Z",
     };
@@ -492,6 +460,7 @@ describe("notebookEntryResponseSchema", () => {
       type: "audio",
       content: null,
       strokes: null,
+      source_document_id: null,
       created_at: "2026-09-08T22:10:05.372022Z",
       updated_at: "2026-09-08T22:10:05.372022Z",
     };
@@ -511,6 +480,16 @@ describe("notebookEntryCreateRequestSchema", () => {
     const payload = {
       type: "drawing",
       strokes: [{ color: "#000", width: 0.01, points: [{ x: 0.1, y: 0.1 }] }],
+    };
+
+    expect(notebookEntryCreateRequestSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("accepts an optional source_document_id", () => {
+    const payload = {
+      type: "text",
+      content: "Jotted while reading",
+      source_document_id: "2879a273-236d-429e-985b-db6c43672a1b",
     };
 
     expect(notebookEntryCreateRequestSchema.safeParse(payload).success).toBe(true);

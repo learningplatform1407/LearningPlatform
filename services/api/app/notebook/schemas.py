@@ -24,6 +24,7 @@ class NotebookEntryResponse(BaseModel):
     type: Literal["text", "drawing"]
     content: str | None
     strokes: list[Stroke] | None
+    source_document_id: UUID | None
     created_at: datetime
     updated_at: datetime
 
@@ -32,6 +33,7 @@ class NotebookEntryCreateRequest(BaseModel):
     type: Literal["text", "drawing"]
     content: str | None = None
     strokes: list[Stroke] | None = None
+    source_document_id: UUID | None = None
 
 
 class NotebookEntryUpdateRequest(BaseModel):

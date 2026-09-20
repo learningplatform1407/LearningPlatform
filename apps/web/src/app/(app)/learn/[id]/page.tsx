@@ -7,10 +7,17 @@ import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 
 import type { Annotation, AnnotationCreateRequest } from "@lp/contracts";
 
-import { Button } from "@/components/button";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { createClient } from "@/lib/supabase/client";
 import { findBlockElement, getOffsetsWithinContainer, spliceAnnotations } from "@/lib/text-offset";
+
+import {
+  DrawingEntryEditor,
+  NewEntryButtons,
+  NotebookEntryList,
+  TextEntryEditor,
+  useNotebookEntries,
+} from "../notebook/notebook-entries";
 
 function ExtractedImage({ path }: { path: string }) {
   const { data: url, isPending, isError } = useQuery({
@@ -252,50 +259,6 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
   );
 }
 
-export function NotesTab({ documentId }: { documentId: string }) {
-  const queryClient = useQueryClient();
-  const { data: note, isPending } = useQuery({
-    queryKey: ["note", documentId],
-    queryFn: () => getBrowserApiClient().getNote(documentId),
-  });
-  const [draft, setDraft] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-
-  const value = draft ?? note?.content ?? "";
-
-  const saveMutation = useMutation({
-    mutationFn: (content: string) => getBrowserApiClient().upsertNote(documentId, content),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["note", documentId] });
-      setSaved(true);
-    },
-  });
-
-  if (isPending) {
-    return <p className="text-sm text-muted-foreground">Loading...</p>;
-  }
-
-  return (
-    <div className="flex flex-1 flex-col gap-sm">
-      <textarea
-        value={value}
-        onChange={(event) => {
-          setDraft(event.target.value);
-          setSaved(false);
-        }}
-        placeholder="Write your notes for this lesson..."
-        className="w-full flex-1 resize-none rounded-md border border-border p-sm text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-      />
-      <div className="flex items-center gap-sm">
-        <Button onClick={() => saveMutation.mutate(value)} disabled={saveMutation.isPending} className="self-start">
-          {saveMutation.isPending ? "Saving..." : "Save"}
-        </Button>
-        {saved && <span className="text-xs text-muted-foreground">Saved.</span>}
-      </div>
-    </div>
-  );
-}
-
 function TocPanel({
   scopeId,
   currentDocumentId,
@@ -349,10 +312,27 @@ function TocPanel({
   );
 }
 
+type NotesView =
+  | { kind: "list" }
+  | { kind: "entry"; entryId: string }
+  | { kind: "new-text" }
+  | { kind: "new-drawing" };
+
 function NotesPanel({ documentId }: { documentId: string }) {
   const [collapsed, setCollapsed] = useState(false);
   const [width, setWidth] = useState(NOTES_PANEL_DEFAULT_WIDTH);
+  const [view, setView] = useState<NotesView>({ kind: "list" });
   const draggingRef = useRef(false);
+  const entries = useNotebookEntries();
+  const selectedEntry =
+    view.kind === "entry" ? entries.data?.find((e) => e.id === view.entryId) : undefined;
+
+  // A 4:3 drawing canvas needs real width to be usable — temporarily widen
+  // the panel to its max while a drawing is open. Derived during render
+  // (not synced via an effect) so the user's actual preferred `width` is
+  // untouched and simply resumes once they leave the drawing.
+  const isDrawingView = view.kind === "new-drawing" || selectedEntry?.type === "drawing";
+  const effectiveWidth = isDrawingView ? NOTES_PANEL_MAX_WIDTH : width;
 
   function handleDragStart(event: ReactMouseEvent) {
     event.preventDefault();
@@ -396,7 +376,7 @@ function NotesPanel({ documentId }: { documentId: string }) {
 
   return (
     <div
-      style={{ width }}
+      style={{ width: effectiveWidth }}
       className="sticky top-0 relative flex h-screen shrink-0 flex-col border-l border-border"
     >
       <div
@@ -420,8 +400,66 @@ function NotesPanel({ documentId }: { documentId: string }) {
             »
           </button>
         </div>
-        <NotesTab documentId={documentId} />
+
+        {entries.isPending && <p className="text-sm text-muted-foreground">Loading...</p>}
+        {entries.isError && (
+          <p role="alert" className="text-sm text-danger">
+            Failed to load notes.
+          </p>
+        )}
+        {entries.data && (
+          <>
+            {view.kind !== "list" && (
+              <button
+                type="button"
+                onClick={() => setView({ kind: "list" })}
+                className="self-start text-sm text-muted-foreground hover:underline"
+              >
+                ← Notes
+              </button>
+            )}
+            {view.kind === "list" && (
+              <NotebookEntryList
+                entries={entries.data}
+                onSelect={(entryId) => setView({ kind: "entry", entryId })}
+              />
+            )}
+            {view.kind === "new-text" && (
+              <TextEntryEditor
+                sourceDocumentId={documentId}
+                onCreated={(id) => setView({ kind: "entry", entryId: id })}
+              />
+            )}
+            {view.kind === "new-drawing" && (
+              <DrawingEntryEditor
+                sourceDocumentId={documentId}
+                onCreated={(id) => setView({ kind: "entry", entryId: id })}
+              />
+            )}
+            {view.kind === "entry" && selectedEntry && selectedEntry.type === "text" && (
+              <TextEntryEditor
+                key={selectedEntry.id}
+                entry={selectedEntry}
+                onDeleted={() => setView({ kind: "list" })}
+              />
+            )}
+            {view.kind === "entry" && selectedEntry && selectedEntry.type === "drawing" && (
+              <DrawingEntryEditor
+                key={selectedEntry.id}
+                entry={selectedEntry}
+                onDeleted={() => setView({ kind: "list" })}
+              />
+            )}
+          </>
+        )}
       </div>
+
+      {view.kind === "list" && (
+        <NewEntryButtons
+          onNewText={() => setView({ kind: "new-text" })}
+          onNewDrawing={() => setView({ kind: "new-drawing" })}
+        />
+      )}
     </div>
   );
 }

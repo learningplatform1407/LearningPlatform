@@ -12,8 +12,10 @@ const createAnnotation = vi.fn();
 const deleteAnnotation = vi.fn();
 const listQuizzes = vi.fn();
 const listFlashcards = vi.fn();
-const getNote = vi.fn();
-const upsertNote = vi.fn();
+const listNotebookEntries = vi.fn();
+const createNotebookEntry = vi.fn();
+const updateNotebookEntry = vi.fn();
+const deleteNotebookEntry = vi.fn();
 const listDocuments = vi.fn();
 
 vi.mock("@/lib/api-client.browser", () => ({
@@ -24,8 +26,10 @@ vi.mock("@/lib/api-client.browser", () => ({
     deleteAnnotation,
     listQuizzes,
     listFlashcards,
-    getNote,
-    upsertNote,
+    listNotebookEntries,
+    createNotebookEntry,
+    updateNotebookEntry,
+    deleteNotebookEntry,
     listDocuments,
   }),
 }));
@@ -97,8 +101,10 @@ beforeEach(() => {
   deleteAnnotation.mockReset().mockResolvedValue(undefined);
   listQuizzes.mockReset().mockResolvedValue([]);
   listFlashcards.mockReset().mockResolvedValue([]);
-  getNote.mockReset().mockResolvedValue(null);
-  upsertNote.mockReset().mockResolvedValue({ document_id: "d1", content: "", updated_at: "2026-01-01" });
+  listNotebookEntries.mockReset().mockResolvedValue([]);
+  createNotebookEntry.mockReset();
+  updateNotebookEntry.mockReset();
+  deleteNotebookEntry.mockReset();
   listDocuments.mockReset().mockResolvedValue([]);
 });
 
@@ -687,44 +693,50 @@ describe("LecturePage", () => {
     expect(await screen.findByText("Hello world")).toBeInTheDocument();
   });
 
-  test("the notes panel loads the existing note and saves edits, alongside the lesson text", async () => {
+  test("the notes panel lists all notes and lets the user open one to edit, alongside the lesson text", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
-    getNote.mockResolvedValue({
-      document_id: "d1",
-      content: "Existing note",
-      updated_at: "2026-01-01",
-    });
-    upsertNote.mockResolvedValue({
-      document_id: "d1",
-      content: "Updated note",
-      updated_at: "2026-01-02",
-    });
+    listNotebookEntries.mockResolvedValue([
+      { id: "n1", type: "text", content: "Existing note", strokes: null },
+    ]);
+    updateNotebookEntry.mockResolvedValue({ id: "n1", type: "text", content: "Updated note", strokes: null });
 
     renderPage();
     await screen.findByText("Hello world");
     const user = userEvent.setup();
 
-    const textarea = await screen.findByPlaceholderText("Write your notes for this lesson...");
-    expect(textarea).toHaveValue("Existing note");
+    await user.click(await screen.findByText("Existing note"));
     // The notes panel is visible in parallel with the lesson text, not behind a tab.
     expect(screen.getByText("Hello world")).toBeInTheDocument();
 
+    const textarea = await screen.findByDisplayValue("Existing note");
     await user.clear(textarea);
     await user.type(textarea, "Updated note");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await screen.findByText("Saved.");
-    expect(upsertNote).toHaveBeenCalledWith("d1", "Updated note");
+    expect(updateNotebookEntry).toHaveBeenCalledWith("n1", { content: "Updated note" });
   });
 
-  test("the notes panel starts empty when the lesson has no note yet", async () => {
+  test("the notes panel shows an empty state and creates a new note tagged with the current lesson", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
-    getNote.mockResolvedValue(null);
+    createNotebookEntry.mockResolvedValue({ id: "n2", type: "text", content: "New note", strokes: null });
 
     renderPage();
+    await screen.findByText("Hello world");
+    expect(await screen.findByText("No notes yet.")).toBeInTheDocument();
 
-    const textarea = await screen.findByPlaceholderText("Write your notes for this lesson...");
-    expect(textarea).toHaveValue("");
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "+ Text" }));
+    await user.type(screen.getByPlaceholderText("Title"), "New note");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(createNotebookEntry).toHaveBeenCalledWith({
+        type: "text",
+        content: "New note",
+        source_document_id: "d1",
+      }),
+    );
   });
 
   test("the notes panel collapses and expands via its toggle button", async () => {
@@ -734,17 +746,13 @@ describe("LecturePage", () => {
     await screen.findByText("Hello world");
     const user = userEvent.setup();
 
-    expect(
-      await screen.findByPlaceholderText("Write your notes for this lesson..."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("No notes yet.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Collapse notes" }));
-    expect(screen.queryByPlaceholderText("Write your notes for this lesson...")).not.toBeInTheDocument();
+    expect(screen.queryByText("No notes yet.")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Expand notes" }));
-    expect(
-      await screen.findByPlaceholderText("Write your notes for this lesson..."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("No notes yet.")).toBeInTheDocument();
   });
 
   test("the table of contents lists the current sub-chapter's lessons and highlights the current one", async () => {

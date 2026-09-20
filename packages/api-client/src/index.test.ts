@@ -277,30 +277,6 @@ describe("createApiClient", () => {
     expect(JSON.parse(init.body as string)).toEqual({ title: "Sub A" });
   });
 
-  test("getNote hits GET /v1/documents/{id}/notes and can resolve null", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse(null));
-
-    const result = await client().getNote("d1");
-
-    expect(result).toBeNull();
-    const [url] = lastCall(fetchMock);
-    expect(url).toBe("http://api.test/v1/documents/d1/notes");
-  });
-
-  test("upsertNote PUTs the note content to /v1/documents/{id}/notes", async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({ document_id: "d1", content: "New note", updated_at: "2026-01-01" }),
-    );
-
-    const result = await client().upsertNote("d1", "New note");
-
-    expect(result).toEqual({ document_id: "d1", content: "New note", updated_at: "2026-01-01" });
-    const [url, init] = lastCall(fetchMock);
-    expect(url).toBe("http://api.test/v1/documents/d1/notes");
-    expect(init.method).toBe("PUT");
-    expect(JSON.parse(init.body as string)).toEqual({ content: "New note" });
-  });
-
   test("listQuizzes hits GET /v1/documents/{id}/quizzes", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse([]));
 
@@ -319,19 +295,6 @@ describe("createApiClient", () => {
     expect(result).toEqual([]);
     const [url] = lastCall(fetchMock);
     expect(url).toBe("http://api.test/v1/documents/d1/flashcards");
-  });
-
-  test("listMyNotes hits GET /v1/me/notes", async () => {
-    const notes = [
-      { document_id: "d1", document_title: "Lesson 1", content: "x", updated_at: "2026-01-01" },
-    ];
-    fetchMock.mockResolvedValueOnce(jsonResponse(notes));
-
-    const result = await client().listMyNotes();
-
-    expect(result).toEqual(notes);
-    const [url] = lastCall(fetchMock);
-    expect(url).toBe("http://api.test/v1/me/notes");
   });
 
   test("listNotebookEntries hits GET /v1/notebook-entries", async () => {

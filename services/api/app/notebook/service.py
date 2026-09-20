@@ -26,6 +26,7 @@ def create_notebook_entry(
         type=data.type,
         content=data.content,
         strokes=[s.model_dump() for s in data.strokes] if data.strokes is not None else None,
+        source_document_id=data.source_document_id,
     )
     db.add(entry)
     db.commit()

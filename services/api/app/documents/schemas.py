@@ -82,25 +82,6 @@ class RecentLessonResponse(BaseModel):
     last_viewed_at: datetime
 
 
-class NoteResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    document_id: UUID
-    content: str
-    updated_at: datetime
-
-
-class NoteUpsertRequest(BaseModel):
-    content: str
-
-
-class NoteWithLessonResponse(BaseModel):
-    document_id: UUID
-    document_title: str
-    content: str
-    updated_at: datetime
-
-
 class QuizResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

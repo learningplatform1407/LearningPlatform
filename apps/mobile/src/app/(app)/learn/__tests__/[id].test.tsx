@@ -11,8 +11,10 @@ const mockCreateAnnotation = jest.fn();
 const mockDeleteAnnotation = jest.fn();
 const mockListQuizzes = jest.fn();
 const mockListFlashcards = jest.fn();
-const mockGetNote = jest.fn();
-const mockUpsertNote = jest.fn();
+const mockListNotebookEntries = jest.fn();
+const mockCreateNotebookEntry = jest.fn();
+const mockUpdateNotebookEntry = jest.fn();
+const mockDeleteNotebookEntry = jest.fn();
 const mockListDocuments = jest.fn();
 
 jest.mock("@/lib/api-client", () => ({
@@ -23,8 +25,10 @@ jest.mock("@/lib/api-client", () => ({
     deleteAnnotation: mockDeleteAnnotation,
     listQuizzes: mockListQuizzes,
     listFlashcards: mockListFlashcards,
-    getNote: mockGetNote,
-    upsertNote: mockUpsertNote,
+    listNotebookEntries: mockListNotebookEntries,
+    createNotebookEntry: mockCreateNotebookEntry,
+    updateNotebookEntry: mockUpdateNotebookEntry,
+    deleteNotebookEntry: mockDeleteNotebookEntry,
     listDocuments: mockListDocuments,
   }),
 }));
@@ -93,10 +97,10 @@ beforeEach(() => {
   mockDeleteAnnotation.mockReset().mockResolvedValue(undefined);
   mockListQuizzes.mockReset().mockResolvedValue([]);
   mockListFlashcards.mockReset().mockResolvedValue([]);
-  mockGetNote.mockReset().mockResolvedValue(null);
-  mockUpsertNote
-    .mockReset()
-    .mockResolvedValue({ document_id: "d1", content: "", updated_at: "2026-01-01" });
+  mockListNotebookEntries.mockReset().mockResolvedValue([]);
+  mockCreateNotebookEntry.mockReset();
+  mockUpdateNotebookEntry.mockReset();
+  mockDeleteNotebookEntry.mockReset();
   mockListDocuments.mockReset().mockResolvedValue([]);
   (router.push as jest.Mock).mockReset();
 });
@@ -420,45 +424,49 @@ test("switching back to the Lesson tab restores the reader content", async () =>
   expect(await screen.findByText("Hello world")).toBeTruthy();
 });
 
-test("the Notes overlay loads the existing note and saves edits", async () => {
+test("the Notes overlay lists notes and lets the user open one to edit", async () => {
   mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
-  mockGetNote.mockResolvedValue({
-    document_id: "d1",
-    content: "Existing note",
-    updated_at: "2026-01-01",
-  });
-  mockUpsertNote.mockResolvedValue({
-    document_id: "d1",
-    content: "Updated note",
-    updated_at: "2026-01-02",
-  });
+  mockListNotebookEntries.mockResolvedValue([
+    { id: "n1", type: "text", content: "Existing note", strokes: null },
+  ]);
+  mockUpdateNotebookEntry.mockResolvedValue({ id: "n1", type: "text", content: "Updated note", strokes: null });
 
   renderScreen();
   await screen.findByText("Hello world");
 
   fireEvent.press(screen.getByText("Notes"));
 
-  const textarea = await screen.findByPlaceholderText("Write your notes for this lesson...");
-  expect(textarea.props.value).toBe("Existing note");
+  fireEvent.press(await screen.findByText("Existing note"));
+  const textarea = await screen.findByDisplayValue("Existing note");
 
   fireEvent.changeText(textarea, "Updated note");
   fireEvent.press(screen.getByText("Save"));
 
   await screen.findByText("Saved.");
-  expect(mockUpsertNote).toHaveBeenCalledWith("d1", "Updated note");
+  expect(mockUpdateNotebookEntry).toHaveBeenCalledWith("n1", { content: "Updated note" });
 });
 
-test("the Notes overlay starts empty when the lesson has no note yet", async () => {
+test("the Notes overlay shows an empty state and creates a new note tagged with the current lesson", async () => {
   mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
-  mockGetNote.mockResolvedValue(null);
+  mockCreateNotebookEntry.mockResolvedValue({ id: "n2", type: "text", content: "New note", strokes: null });
 
   renderScreen();
   await screen.findByText("Hello world");
 
   fireEvent.press(screen.getByText("Notes"));
+  expect(await screen.findByText("No notes yet.")).toBeTruthy();
 
-  const textarea = await screen.findByPlaceholderText("Write your notes for this lesson...");
-  expect(textarea.props.value).toBe("");
+  fireEvent.press(screen.getByText("+ Text"));
+  fireEvent.changeText(screen.getByPlaceholderText("Title"), "New note");
+  fireEvent.press(screen.getByText("Save"));
+
+  await waitFor(() =>
+    expect(mockCreateNotebookEntry).toHaveBeenCalledWith({
+      type: "text",
+      content: "New note",
+      source_document_id: "d1",
+    }),
+  );
 });
 
 test("the Notes overlay closes via its Close button", async () => {
@@ -468,13 +476,11 @@ test("the Notes overlay closes via its Close button", async () => {
   await screen.findByText("Hello world");
 
   fireEvent.press(screen.getByText("Notes"));
-  await screen.findByPlaceholderText("Write your notes for this lesson...");
+  await screen.findByText("No notes yet.");
 
   fireEvent.press(screen.getByText("Close"));
 
-  await waitFor(() =>
-    expect(screen.queryByPlaceholderText("Write your notes for this lesson...")).toBeNull(),
-  );
+  await waitFor(() => expect(screen.queryByText("No notes yet.")).toBeNull());
 });
 
 test("the Contents overlay lists the current sub-chapter's lessons and navigates on press", async () => {

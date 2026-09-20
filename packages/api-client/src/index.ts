@@ -11,11 +11,9 @@ import type {
   EntitlementResponse,
   Flashcard,
   MeResponse,
-  Note,
   NotebookEntry,
   NotebookEntryCreateRequest,
   NotebookEntryUpdateRequest,
-  NoteWithLesson,
   ProfileUpdateRequest,
   Quiz,
   RecentLesson,
@@ -114,16 +112,9 @@ export function createApiClient(config: ApiClientConfig) {
         method: "POST",
         body: JSON.stringify(data),
       }),
-    getNote: (documentId: string) => request<Note | null>(`/v1/documents/${documentId}/notes`),
-    upsertNote: (documentId: string, content: string) =>
-      request<Note>(`/v1/documents/${documentId}/notes`, {
-        method: "PUT",
-        body: JSON.stringify({ content }),
-      }),
     listQuizzes: (documentId: string) => request<Quiz[]>(`/v1/documents/${documentId}/quizzes`),
     listFlashcards: (documentId: string) =>
       request<Flashcard[]>(`/v1/documents/${documentId}/flashcards`),
-    listMyNotes: () => request<NoteWithLesson[]>("/v1/me/notes"),
     listNotebookEntries: () => request<NotebookEntry[]>("/v1/notebook-entries"),
     createNotebookEntry: (data: NotebookEntryCreateRequest) =>
       request<NotebookEntry>("/v1/notebook-entries", {

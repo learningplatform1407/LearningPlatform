@@ -13,7 +13,6 @@ from app.documents.models import (
     Document,
     DocumentVersion,
     Flashcard,
-    LessonNote,
     LessonView,
     Quiz,
 )
@@ -31,7 +30,6 @@ __all__ = [
     "DocumentAnnotation",
     "DocumentVersion",
     "Flashcard",
-    "LessonNote",
     "LessonView",
     "NotebookEntry",
     "Profile",

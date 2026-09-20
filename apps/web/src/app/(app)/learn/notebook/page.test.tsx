@@ -5,23 +5,17 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import NotebookPage from "./page";
 
-const listMyNotes = vi.fn();
 const listNotebookEntries = vi.fn();
 const createNotebookEntry = vi.fn();
 const updateNotebookEntry = vi.fn();
 const deleteNotebookEntry = vi.fn();
-const getNote = vi.fn();
-const upsertNote = vi.fn();
 
 vi.mock("@/lib/api-client.browser", () => ({
   getBrowserApiClient: () => ({
-    listMyNotes,
     listNotebookEntries,
     createNotebookEntry,
     updateNotebookEntry,
     deleteNotebookEntry,
-    getNote,
-    upsertNote,
   }),
 }));
 
@@ -35,57 +29,28 @@ function renderPage() {
 }
 
 beforeEach(() => {
-  listMyNotes.mockReset().mockResolvedValue([]);
   listNotebookEntries.mockReset().mockResolvedValue([]);
   createNotebookEntry.mockReset();
   updateNotebookEntry.mockReset();
   deleteNotebookEntry.mockReset();
-  getNote.mockReset();
-  upsertNote.mockReset();
 });
 
 describe("NotebookPage", () => {
-  test("shows lesson notes and my notes sections once loaded", async () => {
-    listMyNotes.mockResolvedValue([
-      {
-        document_id: "d1",
-        document_title: "Intro to Systems",
-        content: "Remember the key formula.",
-        updated_at: "2026-01-01",
-      },
-    ]);
+  test("shows my notes once loaded", async () => {
     listNotebookEntries.mockResolvedValue([
       { id: "n1", type: "text", content: "Idea for the project", strokes: null },
     ]);
 
     renderPage();
 
-    expect(await screen.findByText("Intro to Systems")).toBeInTheDocument();
-    expect(screen.getByText("Remember the key formula.")).toBeInTheDocument();
-    expect(screen.getByText("Idea for the project")).toBeInTheDocument();
+    expect(await screen.findByText("Idea for the project")).toBeInTheDocument();
   });
 
   test("shows empty states when there's nothing yet", async () => {
     renderPage();
 
-    expect(await screen.findByText("No lesson notes yet.")).toBeInTheDocument();
-    expect(screen.getByText("No notes yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No notes yet.")).toBeInTheDocument();
     expect(screen.getByText("Select a note on the left, or create a new one.")).toBeInTheDocument();
-  });
-
-  test("selecting a lesson note shows the shared NotesTab editor", async () => {
-    listMyNotes.mockResolvedValue([
-      { document_id: "d1", document_title: "Intro to Systems", content: "Draft", updated_at: "x" },
-    ]);
-    getNote.mockResolvedValue({ document_id: "d1", content: "Draft", updated_at: "x" });
-
-    renderPage();
-
-    const user = userEvent.setup();
-    await user.click(await screen.findByText("Intro to Systems"));
-
-    const textarea = await screen.findByPlaceholderText("Write your notes for this lesson...");
-    await waitFor(() => expect(textarea).toHaveValue("Draft"));
   });
 
   test("creating a new text note calls createNotebookEntry with the typed content", async () => {
@@ -96,11 +61,15 @@ describe("NotebookPage", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "+ Text" }));
-    await user.type(screen.getByPlaceholderText("Write a new note..."), "Fresh idea");
+    await user.type(screen.getByPlaceholderText("Title"), "Fresh idea");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
-      expect(createNotebookEntry).toHaveBeenCalledWith({ type: "text", content: "Fresh idea" }),
+      expect(createNotebookEntry).toHaveBeenCalledWith({
+        type: "text",
+        content: "Fresh idea",
+        source_document_id: undefined,
+      }),
     );
   });
 

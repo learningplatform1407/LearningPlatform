@@ -10,12 +10,10 @@ from app.chapters.models import Chapter
 from app.common.errors import ApiError
 from app.documents.constants import ALLOWED_MIME_TYPES, MAX_UPLOAD_BYTES
 from app.documents.extraction import ExtractedBlock, ExtractionError, extract_pdf
-from app.documents.models import Document, DocumentVersion, Flashcard, LessonNote, LessonView, Quiz
+from app.documents.models import Document, DocumentVersion, Flashcard, LessonView, Quiz
 from app.documents.schemas import (
     ChapterSummary,
     DocumentCreateRequest,
-    NoteResponse,
-    NoteWithLessonResponse,
     SubChapterSummary,
     UploadUrlRequest,
 )
@@ -183,50 +181,6 @@ def list_recent_lessons(
         .limit(limit)
     ).all()
     return [(document, last_viewed_at) for document, last_viewed_at in rows]
-
-
-def get_note(db: Session, user_id: uuid.UUID, document_id: uuid.UUID) -> LessonNote | None:
-    return db.scalar(
-        select(LessonNote).where(
-            LessonNote.user_id == user_id, LessonNote.document_id == document_id
-        )
-    )
-
-
-def upsert_note(
-    db: Session, user_id: uuid.UUID, document_id: uuid.UUID, content: str
-) -> NoteResponse:
-    now = datetime.now(UTC)
-    existing = get_note(db, user_id, document_id)
-    if existing is None:
-        note = LessonNote(user_id=user_id, document_id=document_id, content=content, updated_at=now)
-        db.add(note)
-    else:
-        db.execute(
-            update(LessonNote)
-            .where(LessonNote.id == existing.id)
-            .values(content=content, updated_at=now)
-        )
-    db.commit()
-    return NoteResponse(document_id=document_id, content=content, updated_at=now)
-
-
-def list_my_notes(db: Session, user_id: uuid.UUID) -> list[NoteWithLessonResponse]:
-    rows = db.execute(
-        select(Document.id, Document.title, LessonNote.content, LessonNote.updated_at)
-        .join(LessonNote, LessonNote.document_id == Document.id)
-        .where(LessonNote.user_id == user_id)
-        .order_by(LessonNote.updated_at.desc())
-    ).all()
-    return [
-        NoteWithLessonResponse(
-            document_id=document_id,
-            document_title=document_title,
-            content=content,
-            updated_at=updated_at,
-        )
-        for document_id, document_title, content, updated_at in rows
-    ]
 
 
 def list_quizzes(db: Session, document_id: uuid.UUID) -> list[Quiz]:

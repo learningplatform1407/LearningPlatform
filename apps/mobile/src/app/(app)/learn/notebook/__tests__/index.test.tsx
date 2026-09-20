@@ -4,12 +4,10 @@ import { router } from "expo-router";
 
 import NotebookScreen from "../index";
 
-const mockListMyNotes = jest.fn();
 const mockListNotebookEntries = jest.fn();
 
 jest.mock("@/lib/api-client", () => ({
   getApiClient: () => ({
-    listMyNotes: mockListMyNotes,
     listNotebookEntries: mockListNotebookEntries,
   }),
 }));
@@ -26,30 +24,14 @@ function renderScreen() {
 }
 
 beforeEach(() => {
-  mockListMyNotes.mockReset().mockResolvedValue([]);
   mockListNotebookEntries.mockReset().mockResolvedValue([]);
   (router.push as jest.Mock).mockReset();
 });
 
-test("shows empty states when there's nothing yet", async () => {
+test("shows empty state when there's nothing yet", async () => {
   renderScreen();
 
-  expect(await screen.findByText("No lesson notes yet.")).toBeTruthy();
-  expect(screen.getByText("No notes yet.")).toBeTruthy();
-});
-
-test("renders lesson notes and navigates to the lesson note screen on press", async () => {
-  mockListMyNotes.mockResolvedValue([
-    { document_id: "d1", document_title: "Intro to Systems", content: "Draft note", updated_at: "x" },
-  ]);
-
-  renderScreen();
-
-  expect(await screen.findByText("Intro to Systems")).toBeTruthy();
-  expect(screen.getByText("Draft note")).toBeTruthy();
-
-  fireEvent.press(screen.getByText("Intro to Systems"));
-  expect(router.push).toHaveBeenCalledWith("/learn/notebook/lesson/d1");
+  expect(await screen.findByText("No notes yet.")).toBeTruthy();
 });
 
 test("renders a text entry preview and navigates to the entry screen on press", async () => {

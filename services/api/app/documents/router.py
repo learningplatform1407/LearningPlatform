@@ -15,8 +15,6 @@ from app.documents.schemas import (
     DocumentSummaryResponse,
     DocumentVersionResponse,
     FlashcardResponse,
-    NoteResponse,
-    NoteUpsertRequest,
     QuizResponse,
     UploadUrlRequest,
     UploadUrlResponse,
@@ -24,14 +22,12 @@ from app.documents.schemas import (
 from app.documents.service import (
     create_upload_url,
     get_document,
-    get_note,
     get_sub_chapter_summary,
     list_documents,
     list_flashcards,
     list_quizzes,
     record_lesson_view,
     register_document,
-    upsert_note,
 )
 from app.users.service import get_or_create_profile
 
@@ -115,29 +111,6 @@ def read_document(
     get_or_create_profile(db, user)
     record_lesson_view(db, user.id, document_id)
     return _to_document_response(db, document)
-
-
-@router.get("/{document_id}/notes", response_model=NoteResponse | None)
-def read_note(
-    document_id: UUID,
-    user: AuthenticatedUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> NoteResponse | None:
-    note = get_note(db, user.id, document_id)
-    if note is None:
-        return None
-    return NoteResponse.model_validate(note)
-
-
-@router.put("/{document_id}/notes", response_model=NoteResponse)
-def put_note(
-    document_id: UUID,
-    data: NoteUpsertRequest,
-    user: AuthenticatedUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> NoteResponse:
-    get_or_create_profile(db, user)
-    return upsert_note(db, user.id, document_id, data.content)
 
 
 @router.get("/{document_id}/quizzes", response_model=list[QuizResponse])
