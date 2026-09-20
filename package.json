@@ -6,6 +6,7 @@
     "node": ">=22 <23"
   },
   "scripts": {
+    "prepare": "husky",
     "lint": "pnpm -r --if-present lint",
     "lint:fix": "pnpm -r --if-present lint:fix",
     "format": "prettier --check .",
@@ -19,6 +20,8 @@
   },
   "devDependencies": {
     "@lp/config": "workspace:*",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.5.1",
     "prettier": "^3.3.0",
     "typescript": "^5.6.0"
   }
