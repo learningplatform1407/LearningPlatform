@@ -93,9 +93,7 @@ def test_create_sub_chapter_requires_admin(authed_client: TestClient, chapter_id
 
 
 def test_create_sub_chapter_as_admin(admin_client: TestClient, chapter_id: str) -> None:
-    response = admin_client.post(
-        f"/v1/chapters/{chapter_id}/sub-chapters", json={"title": "Sub A"}
-    )
+    response = admin_client.post(f"/v1/chapters/{chapter_id}/sub-chapters", json={"title": "Sub A"})
     assert response.status_code == 200
     body = response.json()
     assert body["title"] == "Sub A"
@@ -113,9 +111,7 @@ def test_create_sub_chapter_for_missing_chapter_404s(admin_client: TestClient) -
 
 
 def test_list_sub_chapters_for_missing_chapter_404s(authed_client: TestClient) -> None:
-    response = authed_client.get(
-        "/v1/chapters/00000000-0000-0000-0000-000000000000/sub-chapters"
-    )
+    response = authed_client.get("/v1/chapters/00000000-0000-0000-0000-000000000000/sub-chapters")
     assert response.status_code == 404
 
 

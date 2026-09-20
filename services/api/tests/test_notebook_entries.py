@@ -103,9 +103,7 @@ def test_list_entries_is_scoped_to_the_calling_user(
     authenticated_user: AuthenticatedUser,
 ) -> None:
     app.dependency_overrides[get_current_user] = lambda: authenticated_user
-    create_response = client.post(
-        "/v1/notebook-entries", json={"type": "text", "content": "mine"}
-    )
+    create_response = client.post("/v1/notebook-entries", json={"type": "text", "content": "mine"})
     assert create_response.status_code == 200
     app.dependency_overrides.pop(get_current_user, None)
 
@@ -136,9 +134,7 @@ def test_update_own_text_entry(authed_client: TestClient) -> None:
 
 
 def test_update_missing_entry_404s(authed_client: TestClient) -> None:
-    response = authed_client.put(
-        f"/v1/notebook-entries/{uuid.uuid4()}", json={"content": "x"}
-    )
+    response = authed_client.put(f"/v1/notebook-entries/{uuid.uuid4()}", json={"content": "x"})
     assert response.status_code == 404
 
 
@@ -147,17 +143,13 @@ def test_cannot_update_another_users_entry(
     authenticated_user: AuthenticatedUser,
 ) -> None:
     app.dependency_overrides[get_current_user] = lambda: authenticated_user
-    create_response = client.post(
-        "/v1/notebook-entries", json={"type": "text", "content": "mine"}
-    )
+    create_response = client.post("/v1/notebook-entries", json={"type": "text", "content": "mine"})
     entry_id = create_response.json()["id"]
     app.dependency_overrides.pop(get_current_user, None)
 
     other_user = AuthenticatedUser(id=uuid.uuid4(), email="other@example.com")
     app.dependency_overrides[get_current_user] = lambda: other_user
-    update_response = client.put(
-        f"/v1/notebook-entries/{entry_id}", json={"content": "hijacked"}
-    )
+    update_response = client.put(f"/v1/notebook-entries/{entry_id}", json={"content": "hijacked"})
     assert update_response.status_code == 404
     app.dependency_overrides.pop(get_current_user, None)
 
@@ -180,9 +172,7 @@ def test_cannot_delete_another_users_entry(
     authenticated_user: AuthenticatedUser,
 ) -> None:
     app.dependency_overrides[get_current_user] = lambda: authenticated_user
-    create_response = client.post(
-        "/v1/notebook-entries", json={"type": "text", "content": "mine"}
-    )
+    create_response = client.post("/v1/notebook-entries", json={"type": "text", "content": "mine"})
     entry_id = create_response.json()["id"]
     app.dependency_overrides.pop(get_current_user, None)
 
