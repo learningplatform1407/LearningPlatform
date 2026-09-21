@@ -108,9 +108,7 @@ def downgrade() -> None:
     op.add_column(
         "documents", sa.Column("chapter_id", sa.Uuid(), autoincrement=False, nullable=True)
     )
-    op.drop_constraint(
-        "fk_documents_sub_chapter_id_sub_chapters", "documents", type_="foreignkey"
-    )
+    op.drop_constraint("fk_documents_sub_chapter_id_sub_chapters", "documents", type_="foreignkey")
     op.create_foreign_key(
         "fk_documents_chapter_id_chapters",
         "documents",

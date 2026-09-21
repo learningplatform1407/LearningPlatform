@@ -185,9 +185,7 @@ def list_recent_lessons(
 
 def list_quizzes(db: Session, document_id: uuid.UUID) -> list[Quiz]:
     return list(
-        db.scalars(
-            select(Quiz).where(Quiz.document_id == document_id).order_by(Quiz.created_at)
-        )
+        db.scalars(select(Quiz).where(Quiz.document_id == document_id).order_by(Quiz.created_at))
     )
 
 

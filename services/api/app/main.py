@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,12 +11,16 @@ from app.books.router import router as books_router
 from app.chapters.router import router as chapters_router
 from app.common.errors import ApiError, ErrorResponse, FieldError
 from app.core.config import settings
+from app.core.logging import configure_logging
 from app.db import models as _db_models  # noqa: F401 -- registers all tables on Base.metadata
 from app.documents.router import router as documents_router
 from app.notebook.router import router as notebook_router
 from app.plans.router import router as plans_router
 from app.sub_chapters.router import router as sub_chapters_router
 from app.users.router import router as users_router
+
+configure_logging()
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="LearningPlatform API", version="0.0.1")
 
@@ -61,6 +67,18 @@ async def validation_exception_handler(
         code="validation_error", message="Request validation failed", details=details
     )
     return JSONResponse(status_code=422, content=body.model_dump())
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    # Registering this for the base Exception class makes Starlette's
+    # ExceptionMiddleware handle every otherwise-uncaught error here instead
+    # of falling through to ServerErrorMiddleware's default behavior, which
+    # logs a full traceback and re-raises to uvicorn for a second, duplicate
+    # log of the same exception. One line here replaces both.
+    logger.error("Unhandled exception on %s %s: %s", request.method, request.url.path, exc)
+    body = ErrorResponse(code="internal_error", message="Internal server error")
+    return JSONResponse(status_code=500, content=body.model_dump())
 
 
 @app.get("/health")
