@@ -19,6 +19,7 @@ from app.documents.models import (
 )
 from app.notebook.models import NotebookEntry
 from app.plans.models import Subscription
+from app.questions.models import Question, QuestionTag, Tag
 from app.sub_chapters.models import SubChapter
 from app.users.models import AccountSettings, Consent, Profile
 
@@ -36,8 +37,11 @@ __all__ = [
     "LessonView",
     "NotebookEntry",
     "Profile",
+    "Question",
+    "QuestionTag",
     "Quiz",
     "SubChapter",
     "Subscription",
+    "Tag",
     "auth_users",
 ]
