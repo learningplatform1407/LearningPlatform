@@ -223,3 +223,86 @@ export const notebookEntryUpdateRequestSchema = z.object({
   content: z.string().nullable().optional(),
   strokes: z.array(strokeSchema).nullable().optional(),
 });
+
+export const questionOptionSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+});
+
+export const questionKindSchema = z.enum(["single", "multi"]);
+export const questionDifficultySchema = z.enum(["easy", "medium", "hard"]);
+export const questionStatusSchema = z.enum(["draft", "published", "archived"]);
+
+export const questionResponseSchema = z.object({
+  id: z.string(),
+  external_id: z.string().nullable(),
+  document_id: z.string().nullable(),
+  prompt: z.string(),
+  kind: questionKindSchema,
+  scoring_scheme: z.string(),
+  options: z.array(questionOptionSchema),
+  correct_option_ids: z.array(z.string()),
+  rationales: z.record(z.string(), z.string()),
+  explanation: z.string().nullable(),
+  difficulty: questionDifficultySchema,
+  status: questionStatusSchema,
+  created_by: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const questionCreateRequestSchema = z.object({
+  external_id: z.string().nullable().optional(),
+  document_id: z.string().nullable().optional(),
+  prompt: z.string(),
+  kind: questionKindSchema,
+  scoring_scheme: z.string(),
+  options: z.array(questionOptionSchema),
+  correct_option_ids: z.array(z.string()),
+  rationales: z.record(z.string(), z.string()).optional(),
+  explanation: z.string().nullable().optional(),
+  difficulty: questionDifficultySchema.optional(),
+  status: questionStatusSchema.optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+export const questionUpdateRequestSchema = z.object({
+  document_id: z.string().nullable().optional(),
+  prompt: z.string().optional(),
+  kind: questionKindSchema.optional(),
+  scoring_scheme: z.string().optional(),
+  options: z.array(questionOptionSchema).optional(),
+  correct_option_ids: z.array(z.string()).optional(),
+  rationales: z.record(z.string(), z.string()).optional(),
+  explanation: z.string().nullable().optional(),
+  difficulty: questionDifficultySchema.optional(),
+  status: questionStatusSchema.optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+export const tagResponseSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  label: z.string(),
+  question_count: z.number(),
+});
+
+export const questionImportItemSchema = questionCreateRequestSchema;
+
+export const questionImportRequestSchema = z.object({
+  allow_new_tags: z.boolean().optional(),
+  questions: z.array(questionImportItemSchema),
+});
+
+export const questionImportErrorSchema = z.object({
+  index: z.number(),
+  field: z.string(),
+  message: z.string(),
+});
+
+export const questionImportResultSchema = z.object({
+  created: z.number(),
+  updated: z.number(),
+  skipped: z.number(),
+  errors: z.array(questionImportErrorSchema),
+});

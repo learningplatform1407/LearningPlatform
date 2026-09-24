@@ -10,15 +10,21 @@ import type {
   DocumentSummaryResponse,
   EntitlementResponse,
   Flashcard,
+  QuestionImportRequest,
+  QuestionImportResult,
   MeResponse,
   NotebookEntry,
   NotebookEntryCreateRequest,
   NotebookEntryUpdateRequest,
   ProfileUpdateRequest,
+  Question,
+  QuestionCreateRequest,
+  QuestionUpdateRequest,
   Quiz,
   RecentLesson,
   SubChapter,
   SubChapterCreateRequest,
+  Tag,
   UploadUrlRequest,
   UploadUrlResponse,
 } from "@lp/contracts";
@@ -113,6 +119,34 @@ export function createApiClient(config: ApiClientConfig) {
         body: JSON.stringify(data),
       }),
     listQuizzes: (documentId: string) => request<Quiz[]>(`/v1/documents/${documentId}/quizzes`),
+    listQuestions: (params?: {
+      status?: string;
+      tagId?: string;
+      documentId?: string;
+      limit?: number;
+      offset?: number;
+    }) => {
+      const query = new URLSearchParams();
+      if (params?.status) query.set("status", params.status);
+      if (params?.tagId) query.set("tag_id", params.tagId);
+      if (params?.documentId) query.set("document_id", params.documentId);
+      if (params?.limit !== undefined) query.set("limit", String(params.limit));
+      if (params?.offset !== undefined) query.set("offset", String(params.offset));
+      const qs = query.toString();
+      return request<Question[]>(`/v1/questions${qs ? `?${qs}` : ""}`);
+    },
+    createQuestion: (data: QuestionCreateRequest) =>
+      request<Question>("/v1/questions", { method: "POST", body: JSON.stringify(data) }),
+    getQuestion: (id: string) => request<Question>(`/v1/questions/${id}`),
+    updateQuestion: (id: string, data: QuestionUpdateRequest) =>
+      request<Question>(`/v1/questions/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    archiveQuestion: (id: string) => request<Question>(`/v1/questions/${id}`, { method: "DELETE" }),
+    importQuestions: (data: QuestionImportRequest, dryRun = false) =>
+      request<QuestionImportResult>(`/v1/questions/import${dryRun ? "?dry_run=true" : ""}`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    listTags: () => request<Tag[]>("/v1/tags"),
     listFlashcards: (documentId: string) =>
       request<Flashcard[]>(`/v1/documents/${documentId}/flashcards`),
     listNotebookEntries: () => request<NotebookEntry[]>("/v1/notebook-entries"),

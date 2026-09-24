@@ -255,7 +255,9 @@ describe("createApiClient", () => {
   });
 
   test("listSubChapters hits GET /v1/chapters/{id}/sub-chapters", async () => {
-    const subChapters = [{ id: "sc1", chapter_id: "c1", title: "Sub A", order_index: 0, lesson_count: 1 }];
+    const subChapters = [
+      { id: "sc1", chapter_id: "c1", title: "Sub A", order_index: 0, lesson_count: 1 },
+    ];
     fetchMock.mockResolvedValueOnce(jsonResponse(subChapters));
 
     const result = await client().listSubChapters("c1");
@@ -352,5 +354,105 @@ describe("createApiClient", () => {
     const [url, init] = lastCall(fetchMock);
     expect(url).toBe("http://api.test/v1/notebook-entries/n1");
     expect(init.method).toBe("DELETE");
+  });
+
+  test("listQuestions hits GET /v1/questions with no query string by default", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    await client().listQuestions();
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/questions");
+    expect(init.method ?? "GET").toBe("GET");
+  });
+
+  test("listQuestions encodes filters as query params", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    await client().listQuestions({ status: "published", tagId: "t1", limit: 10, offset: 20 });
+
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/questions?status=published&tag_id=t1&limit=10&offset=20");
+  });
+
+  test("createQuestion POSTs to /v1/questions", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "q1" }));
+
+    await client().createQuestion({
+      prompt: "x",
+      kind: "single",
+      scoring_scheme: "single_4",
+      options: [{ id: "a", text: "x" }],
+      correct_option_ids: ["a"],
+    });
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/questions");
+    expect(init.method).toBe("POST");
+  });
+
+  test("getQuestion hits GET /v1/questions/{id}", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "q1" }));
+
+    await client().getQuestion("q1");
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/questions/q1");
+    expect(init.method ?? "GET").toBe("GET");
+  });
+
+  test("updateQuestion PATCHes to /v1/questions/{id}", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "q1" }));
+
+    await client().updateQuestion("q1", { explanation: "Because venodilation." });
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/questions/q1");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ explanation: "Because venodilation." });
+  });
+
+  test("archiveQuestion DELETEs to /v1/questions/{id}", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "q1", status: "archived" }));
+
+    const result = await client().archiveQuestion("q1");
+
+    expect(result).toEqual({ id: "q1", status: "archived" });
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/questions/q1");
+    expect(init.method).toBe("DELETE");
+  });
+
+  test("importQuestions POSTs to /v1/questions/import without dry_run by default", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ created: 1, updated: 0, skipped: 0, errors: [] }),
+    );
+
+    await client().importQuestions({ questions: [] });
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/questions/import");
+    expect(init.method).toBe("POST");
+  });
+
+  test("importQuestions appends ?dry_run=true when requested", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ created: 1, updated: 0, skipped: 0, errors: [] }),
+    );
+
+    await client().importQuestions({ questions: [] }, true);
+
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/questions/import?dry_run=true");
+  });
+
+  test("listTags hits GET /v1/tags", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    await client().listTags();
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/tags");
+    expect(init.method ?? "GET").toBe("GET");
   });
 });

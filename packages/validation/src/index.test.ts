@@ -11,14 +11,20 @@ import {
   documentResponseSchema,
   documentSummaryResponseSchema,
   flashcardResponseSchema,
+  questionImportRequestSchema,
+  questionImportResultSchema,
   meResponseSchema,
   notebookEntryCreateRequestSchema,
   notebookEntryResponseSchema,
   notebookEntryUpdateRequestSchema,
+  questionCreateRequestSchema,
+  questionResponseSchema,
+  questionUpdateRequestSchema,
   quizResponseSchema,
   recentLessonResponseSchema,
   subChapterCreateRequestSchema,
   subChapterResponseSchema,
+  tagResponseSchema,
   uploadUrlResponseSchema,
 } from "./index";
 
@@ -204,14 +210,15 @@ describe("documentSummaryResponseSchema", () => {
 
 describe("uploadUrlResponseSchema", () => {
   test("accepts a real backend-shaped payload", () => {
-    const payload = { storage_path: "509e04ac-28b2-41ac-85bd-3989d3d656a8.pdf", token: "eyJraWQi..." };
+    const payload = {
+      storage_path: "509e04ac-28b2-41ac-85bd-3989d3d656a8.pdf",
+      token: "eyJraWQi...",
+    };
     expect(uploadUrlResponseSchema.safeParse(payload).success).toBe(true);
   });
 
   test("rejects a missing token", () => {
-    expect(
-      uploadUrlResponseSchema.safeParse({ storage_path: "x.pdf" }).success,
-    ).toBe(false);
+    expect(uploadUrlResponseSchema.safeParse({ storage_path: "x.pdf" }).success).toBe(false);
   });
 });
 
@@ -534,5 +541,146 @@ describe("flashcardResponseSchema", () => {
     };
 
     expect(flashcardResponseSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("questionResponseSchema", () => {
+  test("accepts a real backend-shaped multi-select question", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      external_id: "cardio-001",
+      document_id: null,
+      prompt: "Which of the following reduce cardiac preload?",
+      kind: "multi",
+      scoring_scheme: "multi_5_per_option",
+      options: [
+        { id: "a", text: "Nitroglycerin" },
+        { id: "b", text: "Furosemide" },
+      ],
+      correct_option_ids: ["a", "b"],
+      rationales: { a: "Venodilation reduces venous return." },
+      explanation: null,
+      difficulty: "medium",
+      status: "published",
+      created_by: "20501741-6a13-4701-9ee5-b70d713f5a85",
+      created_at: "2026-09-23T14:05:11Z",
+      updated_at: "2026-09-23T14:05:11Z",
+    };
+
+    expect(questionResponseSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("rejects an unknown kind", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      external_id: null,
+      document_id: null,
+      prompt: "x",
+      kind: "true_false",
+      scoring_scheme: "single_4",
+      options: [],
+      correct_option_ids: [],
+      rationales: {},
+      explanation: null,
+      difficulty: "medium",
+      status: "draft",
+      created_by: "20501741-6a13-4701-9ee5-b70d713f5a85",
+      created_at: "2026-09-23T14:05:11Z",
+      updated_at: "2026-09-23T14:05:11Z",
+    };
+
+    expect(questionResponseSchema.safeParse(payload).success).toBe(false);
+  });
+});
+
+describe("questionCreateRequestSchema", () => {
+  test("accepts the minimal required fields, defaults omitted", () => {
+    const payload = {
+      prompt: "Which drug class lowers preload?",
+      kind: "single",
+      scoring_scheme: "single_4",
+      options: [
+        { id: "a", text: "Nitrates" },
+        { id: "b", text: "Vasopressors" },
+      ],
+      correct_option_ids: ["a"],
+    };
+
+    expect(questionCreateRequestSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("rejects missing correct_option_ids", () => {
+    const payload = {
+      prompt: "x",
+      kind: "single",
+      scoring_scheme: "single_4",
+      options: [{ id: "a", text: "x" }],
+    };
+
+    expect(questionCreateRequestSchema.safeParse(payload).success).toBe(false);
+  });
+});
+
+describe("questionUpdateRequestSchema", () => {
+  test("accepts an empty update (no-op)", () => {
+    expect(questionUpdateRequestSchema.safeParse({}).success).toBe(true);
+  });
+
+  test("accepts a partial update touching only explanation", () => {
+    expect(
+      questionUpdateRequestSchema.safeParse({ explanation: "Because venodilation." }).success,
+    ).toBe(true);
+  });
+});
+
+describe("tagResponseSchema", () => {
+  test("accepts a real backend-shaped payload", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      slug: "cardiology",
+      label: "Cardiology",
+      question_count: 42,
+    };
+
+    expect(tagResponseSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("questionImportRequestSchema", () => {
+  test("accepts a realistic bulk import payload", () => {
+    const payload = {
+      allow_new_tags: false,
+      questions: [
+        {
+          external_id: "cardio-001",
+          prompt: "Which of the following reduce cardiac preload?",
+          kind: "multi",
+          scoring_scheme: "multi_5_per_option",
+          options: [
+            { id: "a", text: "Nitroglycerin" },
+            { id: "b", text: "Furosemide" },
+          ],
+          correct_option_ids: ["a", "b"],
+          tags: ["cardiology", "pharmacology"],
+        },
+      ],
+    };
+
+    expect(questionImportRequestSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("questionImportResultSchema", () => {
+  test("accepts a real backend-shaped payload with per-item errors", () => {
+    const payload = {
+      created: 1,
+      updated: 0,
+      skipped: 1,
+      errors: [
+        { index: 1, field: "correct_option_ids", message: "correct_option_ids must not be empty" },
+      ],
+    };
+
+    expect(questionImportResultSchema.safeParse(payload).success).toBe(true);
   });
 });

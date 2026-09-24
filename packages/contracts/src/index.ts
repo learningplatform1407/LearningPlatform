@@ -15,17 +15,25 @@ import type {
   entitlementResponseSchema,
   extractedContentSchema,
   flashcardResponseSchema,
+  questionImportErrorSchema,
+  questionImportRequestSchema,
+  questionImportResultSchema,
   meResponseSchema,
   notebookEntryCreateRequestSchema,
   notebookEntryResponseSchema,
   notebookEntryUpdateRequestSchema,
   profileUpdateRequestSchema,
+  questionCreateRequestSchema,
+  questionOptionSchema,
+  questionResponseSchema,
+  questionUpdateRequestSchema,
   quizResponseSchema,
   recentLessonResponseSchema,
   strokePointSchema,
   strokeSchema,
   subChapterCreateRequestSchema,
   subChapterResponseSchema,
+  tagResponseSchema,
   uploadUrlRequestSchema,
   uploadUrlResponseSchema,
 } from "@lp/validation";
@@ -57,3 +65,11 @@ export type StrokePoint = z.infer<typeof strokePointSchema>;
 export type NotebookEntry = z.infer<typeof notebookEntryResponseSchema>;
 export type NotebookEntryCreateRequest = z.infer<typeof notebookEntryCreateRequestSchema>;
 export type NotebookEntryUpdateRequest = z.infer<typeof notebookEntryUpdateRequestSchema>;
+export type QuestionOption = z.infer<typeof questionOptionSchema>;
+export type Question = z.infer<typeof questionResponseSchema>;
+export type QuestionCreateRequest = z.infer<typeof questionCreateRequestSchema>;
+export type QuestionUpdateRequest = z.infer<typeof questionUpdateRequestSchema>;
+export type Tag = z.infer<typeof tagResponseSchema>;
+export type QuestionImportRequest = z.infer<typeof questionImportRequestSchema>;
+export type QuestionImportResult = z.infer<typeof questionImportResultSchema>;
+export type QuestionImportError = z.infer<typeof questionImportErrorSchema>;
