@@ -177,11 +177,6 @@ classDiagram
         +UUID document_id
         +datetime last_viewed_at
     }
-    class LessonNote {
-        +UUID user_id
-        +UUID document_id
-        +string content
-    }
     class Quiz {
         +UUID id
         +UUID document_id
@@ -197,6 +192,30 @@ classDiagram
         +UUID user_id
         +string type
         +json strokes
+        +UUID source_document_id
+    }
+
+    class Question {
+        +UUID id
+        +string external_id
+        +UUID document_id
+        +string prompt
+        +string kind
+        +string scoring_scheme
+        +json options
+        +json correct_option_ids
+        +json rationales
+        +string difficulty
+        +string status
+    }
+    class Tag {
+        +UUID id
+        +string slug
+        +string label
+    }
+    class QuestionTag {
+        +UUID question_id
+        +UUID tag_id
     }
 
     Profile "1" -- "1" AccountSettings
@@ -212,11 +231,15 @@ classDiagram
     Document "1" -- "1" DocumentVersion : current_version
     DocumentVersion "1" -- "*" DocumentAnnotation
     Document "1" -- "*" LessonView
-    Document "1" -- "*" LessonNote
     Document "1" -- "*" Quiz
     Document "1" -- "*" Flashcard
+    Document "0..1" -- "*" NotebookEntry : source_document_id
 
     Profile "1" -- "*" LessonView
-    Profile "1" -- "*" LessonNote
     Profile "1" -- "*" DocumentAnnotation
+
+    Document "0..1" -- "*" Question : provenance
+    Profile "1" -- "*" Question : created_by
+    Question "1" -- "*" QuestionTag
+    Tag "1" -- "*" QuestionTag
 ```
