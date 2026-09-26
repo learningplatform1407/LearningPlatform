@@ -1,0 +1,7 @@
+{
+  "*.{js,jsx,ts,tsx,mjs,cjs,json,md,yml,yaml,css}": ["prettier --write"],
+  "services/api/**/*.py": [
+    "uv run --project services/api ruff check --fix",
+    "uv run --project services/api ruff format"
+  ]
+}

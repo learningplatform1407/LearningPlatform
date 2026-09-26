@@ -20,9 +20,7 @@ def owner_user() -> AuthenticatedUser:
 def ready_document_id(db_session: Session, owner_user: AuthenticatedUser) -> uuid.UUID:
     """A document with a ready current_version — annotation endpoints don't
     care about extraction, they just need a valid document to anchor to."""
-    db_session.add(
-        Profile(id=owner_user.id, settings=AccountSettings(user_id=owner_user.id))
-    )
+    db_session.add(Profile(id=owner_user.id, settings=AccountSettings(user_id=owner_user.id)))
     db_session.flush()
 
     document = Document(title="Test Lecture", created_by=owner_user.id)

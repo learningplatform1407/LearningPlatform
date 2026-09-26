@@ -25,9 +25,7 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.add_column(
-        "notebook_entries", sa.Column("source_document_id", sa.Uuid(), nullable=True)
-    )
+    op.add_column("notebook_entries", sa.Column("source_document_id", sa.Uuid(), nullable=True))
     op.create_foreign_key(
         "notebook_entries_source_document_id_fkey",
         "notebook_entries",
