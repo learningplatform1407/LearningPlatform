@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
+from app.cloze.schemas import ReviewSummaryResponse
+from app.cloze.service import get_review_summary
 from app.db.session import get_db
 from app.documents.schemas import RecentLessonResponse
 from app.documents.service import list_recent_lessons
@@ -64,3 +66,11 @@ def read_recent_lessons(
         )
         for document, last_viewed_at in rows
     ]
+
+
+@router.get("/me/review-summary", response_model=ReviewSummaryResponse)
+def read_review_summary(
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ReviewSummaryResponse:
+    return get_review_summary(db, user.id)

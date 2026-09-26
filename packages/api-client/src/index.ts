@@ -5,6 +5,9 @@ import type {
   BookCreateRequest,
   Chapter,
   ChapterCreateRequest,
+  ClozeCard,
+  ClozeRating,
+  ClozeReviewState,
   DocumentCreateRequest,
   DocumentResponse,
   DocumentSummaryResponse,
@@ -17,6 +20,7 @@ import type {
   ProfileUpdateRequest,
   Quiz,
   RecentLesson,
+  ReviewSummaryResponse,
   SubChapter,
   SubChapterCreateRequest,
   UploadUrlRequest,
@@ -105,6 +109,7 @@ export function createApiClient(config: ApiClientConfig) {
       }),
     listRecentLessons: (limit?: number) =>
       request<RecentLesson[]>(`/v1/me/recent-lessons${limit ? `?limit=${limit}` : ""}`),
+    getReviewSummary: () => request<ReviewSummaryResponse>("/v1/me/review-summary"),
     listSubChapters: (chapterId: string) =>
       request<SubChapter[]>(`/v1/chapters/${chapterId}/sub-chapters`),
     createSubChapter: (chapterId: string, data: SubChapterCreateRequest) =>
@@ -115,6 +120,15 @@ export function createApiClient(config: ApiClientConfig) {
     listQuizzes: (documentId: string) => request<Quiz[]>(`/v1/documents/${documentId}/quizzes`),
     listFlashcards: (documentId: string) =>
       request<Flashcard[]>(`/v1/documents/${documentId}/flashcards`),
+    listClozeCards: (documentId: string) =>
+      request<ClozeCard[]>(`/v1/documents/${documentId}/cloze-cards`),
+    listDueClozeCards: (documentId: string) =>
+      request<ClozeCard[]>(`/v1/documents/${documentId}/cloze-cards/due`),
+    submitClozeReview: (documentId: string, clozeCardId: string, rating: ClozeRating) =>
+      request<ClozeReviewState>(`/v1/documents/${documentId}/cloze-cards/${clozeCardId}/review`, {
+        method: "POST",
+        body: JSON.stringify({ rating }),
+      }),
     listNotebookEntries: () => request<NotebookEntry[]>("/v1/notebook-entries"),
     createNotebookEntry: (data: NotebookEntryCreateRequest) =>
       request<NotebookEntry>("/v1/notebook-entries", {

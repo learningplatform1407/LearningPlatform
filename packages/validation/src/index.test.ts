@@ -8,6 +8,10 @@ import {
   chapterCreateRequestSchema,
   chapterResponseSchema,
   documentCreateRequestSchema,
+  clozeCardResponseSchema,
+  clozeRatingRequestSchema,
+  clozeReviewStateResponseSchema,
+  reviewSummaryResponseSchema,
   documentResponseSchema,
   documentSummaryResponseSchema,
   flashcardResponseSchema,
@@ -534,5 +538,101 @@ describe("flashcardResponseSchema", () => {
     };
 
     expect(flashcardResponseSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("clozeCardResponseSchema", () => {
+  test("accepts a real backend-shaped payload, with no answer_text field", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      document_id: "2879a273-236d-429e-985b-db6c43672a1b",
+      block_index: 2,
+      start_offset: 10,
+      end_offset: 18,
+      created_at: "2026-09-08T22:10:05.372022Z",
+    };
+
+    expect(clozeCardResponseSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("clozeRatingRequestSchema", () => {
+  test("accepts each of the four Anki-style ratings", () => {
+    for (const rating of ["again", "hard", "good", "easy"]) {
+      expect(clozeRatingRequestSchema.safeParse({ rating }).success).toBe(true);
+    }
+  });
+
+  test("rejects an unknown rating", () => {
+    expect(clozeRatingRequestSchema.safeParse({ rating: "medium" }).success).toBe(false);
+  });
+});
+
+describe("clozeReviewStateResponseSchema", () => {
+  test("accepts a real backend-shaped payload", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      cloze_card_id: "2879a273-236d-429e-985b-db6c43672a1b",
+      ease_factor: 2.5,
+      interval_days: 6,
+      repetitions: 2,
+      due_at: "2026-09-14T22:10:05.372022Z",
+      last_reviewed_at: "2026-09-08T22:10:05.372022Z",
+    };
+
+    expect(clozeReviewStateResponseSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("accepts a never-reviewed state with last_reviewed_at null", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      cloze_card_id: "2879a273-236d-429e-985b-db6c43672a1b",
+      ease_factor: 2.5,
+      interval_days: 0,
+      repetitions: 0,
+      due_at: "2026-09-08T22:10:05.372022Z",
+      last_reviewed_at: null,
+    };
+
+    expect(clozeReviewStateResponseSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("reviewSummaryResponseSchema", () => {
+  test("accepts a full nested tree with zero-due nodes included", () => {
+    const payload = {
+      books: [
+        {
+          id: "b1",
+          title: "Book A",
+          due_count: 2,
+          chapters: [
+            {
+              id: "c1",
+              title: "Chapter 1",
+              due_count: 2,
+              sub_chapters: [
+                {
+                  id: "sc1",
+                  title: "Sub 1.1",
+                  due_count: 2,
+                  lessons: [{ id: "d1", title: "Lesson A", due_count: 2 }],
+                },
+              ],
+            },
+            { id: "c2", title: "Chapter 2 (empty)", due_count: 0, sub_chapters: [] },
+          ],
+        },
+      ],
+      uncategorized_lessons: [{ id: "d2", title: "Loose lesson", due_count: 0 }],
+    };
+
+    expect(reviewSummaryResponseSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("accepts an empty tree", () => {
+    expect(
+      reviewSummaryResponseSchema.safeParse({ books: [], uncategorized_lessons: [] }).success,
+    ).toBe(true);
   });
 });

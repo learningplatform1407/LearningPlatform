@@ -254,6 +254,16 @@ describe("createApiClient", () => {
     expect(url).toBe("http://api.test/v1/me/recent-lessons?limit=3");
   });
 
+  test("getReviewSummary hits GET /v1/me/review-summary", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ books: [], uncategorized_lessons: [] }));
+
+    const result = await client().getReviewSummary();
+
+    expect(result).toEqual({ books: [], uncategorized_lessons: [] });
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/me/review-summary");
+  });
+
   test("listSubChapters hits GET /v1/chapters/{id}/sub-chapters", async () => {
     const subChapters = [{ id: "sc1", chapter_id: "c1", title: "Sub A", order_index: 0, lesson_count: 1 }];
     fetchMock.mockResolvedValueOnce(jsonResponse(subChapters));
@@ -295,6 +305,39 @@ describe("createApiClient", () => {
     expect(result).toEqual([]);
     const [url] = lastCall(fetchMock);
     expect(url).toBe("http://api.test/v1/documents/d1/flashcards");
+  });
+
+  test("listClozeCards hits GET /v1/documents/{id}/cloze-cards", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    const result = await client().listClozeCards("d1");
+
+    expect(result).toEqual([]);
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/documents/d1/cloze-cards");
+  });
+
+  test("listDueClozeCards hits GET /v1/documents/{id}/cloze-cards/due", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    const result = await client().listDueClozeCards("d1");
+
+    expect(result).toEqual([]);
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/documents/d1/cloze-cards/due");
+  });
+
+  test("submitClozeReview POSTs the rating to /v1/documents/{id}/cloze-cards/{cardId}/review", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ id: "s1", cloze_card_id: "c1", ease_factor: 2.5, interval_days: 1 }),
+    );
+
+    await client().submitClozeReview("d1", "c1", "good");
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/documents/d1/cloze-cards/c1/review");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ rating: "good" });
   });
 
   test("listNotebookEntries hits GET /v1/notebook-entries", async () => {

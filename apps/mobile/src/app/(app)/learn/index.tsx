@@ -83,6 +83,16 @@ export default function LearnScreen() {
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.navCard, pressed && styles.cardPressed]}
+          onPress={() => router.push("/learn/review")}
+          accessibilityRole="button"
+        >
+          <Text style={styles.navCardTitle}>Review</Text>
+          <Text style={styles.navCardSubtitle}>
+            See how many words are due today, across every lesson.
+          </Text>
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [styles.navCard, pressed && styles.cardPressed]}
           onPress={() => router.push("/learn/quizzes")}
           accessibilityRole="button"
         >

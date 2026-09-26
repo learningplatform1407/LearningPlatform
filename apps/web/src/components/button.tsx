@@ -4,6 +4,10 @@ const VARIANT_CLASSES = {
   primary: "bg-primary text-primary-foreground hover:bg-primary/90",
   secondary: "border border-border text-foreground hover:bg-muted",
   danger: "border border-border text-danger hover:bg-muted",
+  // No -foreground token exists for these two (only --color-danger has one),
+  // so they follow danger's border+text treatment rather than a solid fill.
+  warning: "border border-border text-warning hover:bg-muted",
+  success: "border border-border text-success hover:bg-muted",
 } as const;
 
 export type ButtonVariant = keyof typeof VARIANT_CLASSES;

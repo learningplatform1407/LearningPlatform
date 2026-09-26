@@ -92,3 +92,57 @@ export function spliceAnnotations(text: string, annotations: Annotation[]): Anno
   }
   return segments;
 }
+
+export interface ClozeSegment {
+  text: string;
+  hidden: boolean;
+  /** The covering span's id, or null for a plain-text segment — lets a
+   * caller pick out e.g. "the one word currently being graded" from among
+   * several revealed segments without redoing offset arithmetic. */
+  id: string | null;
+}
+
+/**
+ * Splits `text` into plain/hidden runs around zero or more cloze spans
+ * within it — a paragraph can contain more than one due word (seen live:
+ * two due cards in the same sentence), so this is the multi-span
+ * generalization the whole-lesson Review view needs. Simpler than
+ * spliceAnnotations' overlap-boundary walk since cloze spans never overlap
+ * each other (each hides a distinct word) — no "most recent wins"
+ * resolution needed, just "which single span (if any) covers this
+ * sub-range."
+ *
+ * Each span carries its own `hidden` flag (the caller decides per-card
+ * whether it's still queued, currently revealed, or already graded this
+ * session). For a `hidden: true` segment, `text` comes back empty rather
+ * than the real answer — callers render a fixed "[...]" placeholder for
+ * `hidden: true` segments instead of this text, so even a caller bug that
+ * renders `segment.text` directly can't leak the answer early.
+ */
+export function spliceClozeSpans(
+  text: string,
+  spans: { id: string; start_offset: number; end_offset: number; hidden: boolean }[],
+): ClozeSegment[] {
+  if (spans.length === 0) {
+    return [{ text, hidden: false, id: null }];
+  }
+
+  const boundaries = new Set<number>([0, text.length]);
+  for (const span of spans) {
+    boundaries.add(Math.max(0, Math.min(span.start_offset, text.length)));
+    boundaries.add(Math.max(0, Math.min(span.end_offset, text.length)));
+  }
+  const points = [...boundaries].sort((a, b) => a - b);
+
+  const segments: ClozeSegment[] = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const start = points[i]!;
+    const end = points[i + 1]!;
+    if (start === end) continue;
+
+    const covering = spans.find((span) => span.start_offset <= start && span.end_offset >= end);
+    const hidden = covering?.hidden ?? false;
+    segments.push({ text: hidden ? "" : text.slice(start, end), hidden, id: covering?.id ?? null });
+  }
+  return segments;
+}

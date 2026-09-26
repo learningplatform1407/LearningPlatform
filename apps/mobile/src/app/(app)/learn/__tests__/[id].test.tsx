@@ -11,6 +11,8 @@ const mockCreateAnnotation = jest.fn();
 const mockDeleteAnnotation = jest.fn();
 const mockListQuizzes = jest.fn();
 const mockListFlashcards = jest.fn();
+const mockListDueClozeCards = jest.fn();
+const mockSubmitClozeReview = jest.fn();
 const mockListNotebookEntries = jest.fn();
 const mockCreateNotebookEntry = jest.fn();
 const mockUpdateNotebookEntry = jest.fn();
@@ -25,6 +27,8 @@ jest.mock("@/lib/api-client", () => ({
     deleteAnnotation: mockDeleteAnnotation,
     listQuizzes: mockListQuizzes,
     listFlashcards: mockListFlashcards,
+    listDueClozeCards: mockListDueClozeCards,
+    submitClozeReview: mockSubmitClozeReview,
     listNotebookEntries: mockListNotebookEntries,
     createNotebookEntry: mockCreateNotebookEntry,
     updateNotebookEntry: mockUpdateNotebookEntry,
@@ -37,9 +41,11 @@ jest.mock("@/lib/supabase", () => ({
   supabase: { storage: { from: () => ({ createSignedUrl: mockCreateSignedUrl }) } },
 }));
 
+let mockTabParam: string | undefined;
+
 jest.mock("expo-router", () => ({
   router: { push: jest.fn() },
-  useLocalSearchParams: () => ({ id: "d1" }),
+  useLocalSearchParams: () => ({ id: "d1", tab: mockTabParam }),
 }));
 
 function renderScreen() {
@@ -90,6 +96,7 @@ function readyDocumentWithParagraph(text: string) {
 }
 
 beforeEach(() => {
+  mockTabParam = undefined;
   mockGetDocument.mockReset();
   mockCreateSignedUrl.mockReset();
   mockListAnnotations.mockReset().mockResolvedValue([]);
@@ -97,6 +104,8 @@ beforeEach(() => {
   mockDeleteAnnotation.mockReset().mockResolvedValue(undefined);
   mockListQuizzes.mockReset().mockResolvedValue([]);
   mockListFlashcards.mockReset().mockResolvedValue([]);
+  mockListDueClozeCards.mockReset().mockResolvedValue([]);
+  mockSubmitClozeReview.mockReset();
   mockListNotebookEntries.mockReset().mockResolvedValue([]);
   mockCreateNotebookEntry.mockReset();
   mockUpdateNotebookEntry.mockReset();
@@ -409,6 +418,129 @@ test("switching to the Flashcards tab shows a Coming soon placeholder", async ()
 
   expect(await screen.findByText("Coming soon.")).toBeTruthy();
   expect(mockListFlashcards).toHaveBeenCalledWith("d1");
+});
+
+test("the Review tab shows the whole lesson with the due word blanked, then reveals it on demand", async () => {
+  mockGetDocument.mockResolvedValue({
+    id: "d1",
+    title: "Intro to Systems",
+    current_version: {
+      id: "v1",
+      status: "ready",
+      error_message: null,
+      extracted_content: {
+        blocks: [
+          { type: "heading", text: "Cell Biology", page: 1 },
+          { type: "paragraph", text: "The mitochondria produces energy.", page: 1 },
+        ],
+      },
+      created_at: "2026-01-01",
+    },
+  });
+  mockListDueClozeCards.mockResolvedValue([
+    { id: "c1", document_id: "d1", block_index: 1, start_offset: 4, end_offset: 16 },
+  ]);
+
+  renderScreen();
+  await screen.findByText(/The mitochondria produces energy\./);
+
+  fireEvent.press(screen.getByText("Review"));
+
+  // The whole lesson (heading included) stays visible during review, not
+  // just the paragraph containing the due word.
+  expect(await screen.findByText("Cell Biology")).toBeTruthy();
+  expect(await screen.findByText("[...]")).toBeTruthy();
+  expect(screen.queryByText("mitochondria")).toBeNull();
+  expect(await screen.findByText("1 word left to review")).toBeTruthy();
+
+  fireEvent.press(screen.getByText("Show"));
+
+  expect(screen.getByText("mitochondria")).toBeTruthy();
+  expect(screen.queryByText("[...]")).toBeNull();
+  for (const label of ["Again", "Hard", "Good", "Easy"]) {
+    expect(screen.getByText(label)).toBeTruthy();
+  }
+});
+
+test("two due words in the same paragraph are revealed one at a time, in order", async () => {
+  mockGetDocument.mockResolvedValue(
+    readyDocumentWithParagraph("The database index accelerates lookups."),
+  );
+  mockListDueClozeCards.mockResolvedValue([
+    { id: "c1", document_id: "d1", block_index: 0, start_offset: 4, end_offset: 12 }, // "database"
+    { id: "c2", document_id: "d1", block_index: 0, start_offset: 13, end_offset: 18 }, // "index"
+  ]);
+
+  renderScreen();
+  await screen.findByText(/The database index accelerates lookups\./);
+  fireEvent.press(screen.getByText("Review"));
+
+  expect(await screen.findAllByText("[...]")).toHaveLength(2);
+  expect(screen.getByText("2 words left to review")).toBeTruthy();
+
+  fireEvent.press(screen.getByText("Show"));
+  expect(screen.getByText("database")).toBeTruthy();
+  expect(screen.getAllByText("[...]")).toHaveLength(1); // "index" still queued
+
+  fireEvent.press(screen.getByText("Good"));
+  await waitFor(() => expect(screen.getByText("1 word left to review")).toBeTruthy());
+  expect(screen.getByText(/database/)).toBeTruthy(); // stays revealed (merged into plain text)
+  expect(screen.getByText("[...]")).toBeTruthy(); // "index" still hidden, Show not pressed yet
+
+  fireEvent.press(screen.getByText("Show"));
+  expect(screen.getByText("index")).toBeTruthy();
+  expect(screen.queryByText("[...]")).toBeNull();
+});
+
+test("grading a Review word submits the rating and shows the next-interval feedback", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("The mitochondria produces energy."));
+  mockListDueClozeCards.mockResolvedValue([
+    { id: "c1", document_id: "d1", block_index: 0, start_offset: 4, end_offset: 16 },
+  ]);
+  mockSubmitClozeReview.mockResolvedValue({
+    id: "s1",
+    cloze_card_id: "c1",
+    ease_factor: 2.5,
+    interval_days: 6,
+    repetitions: 2,
+    due_at: "2026-01-07",
+    last_reviewed_at: "2026-01-01",
+  });
+
+  renderScreen();
+  await screen.findByText(/The mitochondria produces energy\./);
+  fireEvent.press(screen.getByText("Review"));
+  fireEvent.press(await screen.findByText("Show"));
+  fireEvent.press(screen.getByText("Good"));
+
+  await waitFor(() => expect(mockSubmitClozeReview).toHaveBeenCalledWith("d1", "c1", "good"));
+  expect(await screen.findByText("Next review in 6 days.")).toBeTruthy();
+});
+
+test("the Review tab shows an empty state, with the lesson still fully readable, when nothing is due", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("The mitochondria produces energy."));
+  mockListDueClozeCards.mockResolvedValue([]);
+
+  renderScreen();
+  await screen.findByText(/The mitochondria produces energy\./);
+  fireEvent.press(screen.getByText("Review"));
+
+  expect(
+    await screen.findByText("You're all caught up — nothing to review right now."),
+  ).toBeTruthy();
+  expect(screen.getByText(/The mitochondria produces energy\./)).toBeTruthy();
+});
+
+test("a ?tab=review deep link (e.g. from the review dashboard) opens straight to the Review tab", async () => {
+  mockTabParam = "review";
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("The mitochondria produces energy."));
+  mockListDueClozeCards.mockResolvedValue([]);
+
+  renderScreen();
+
+  expect(
+    await screen.findByText("You're all caught up — nothing to review right now."),
+  ).toBeTruthy();
 });
 
 test("switching back to the Lesson tab restores the reader content", async () => {

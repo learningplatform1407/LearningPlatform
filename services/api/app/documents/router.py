@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
+from app.cloze.service import ensure_cloze_cards
 from app.common.errors import ApiError
 from app.db.session import get_db
 from app.documents.dependencies import require_admin
@@ -73,6 +74,11 @@ def create_document(
     db: Session = Depends(get_db),
 ) -> DocumentResponse:
     document = register_document(db, admin.id, data)
+    # Cross-domain orchestration lives at the router layer, not inside
+    # documents/service.py, to avoid a documents.service <-> cloze.service
+    # import cycle (cloze.service also needs documents.service, for the
+    # review-summary aggregation).
+    ensure_cloze_cards(db, document)
     return _to_document_response(db, document)
 
 

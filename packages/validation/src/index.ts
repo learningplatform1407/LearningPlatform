@@ -165,6 +165,63 @@ export const flashcardResponseSchema = z.object({
   order_index: z.number(),
 });
 
+export const clozeRatingSchema = z.enum(["again", "hard", "good", "easy"]);
+
+export const clozeCardResponseSchema = z.object({
+  id: z.string(),
+  document_id: z.string(),
+  block_index: z.number(),
+  start_offset: z.number(),
+  end_offset: z.number(),
+  created_at: z.string(),
+});
+
+export const clozeRatingRequestSchema = z.object({
+  rating: clozeRatingSchema,
+});
+
+export const clozeReviewStateResponseSchema = z.object({
+  id: z.string(),
+  cloze_card_id: z.string(),
+  ease_factor: z.number(),
+  interval_days: z.number(),
+  repetitions: z.number(),
+  due_at: z.string(),
+  last_reviewed_at: z.string().nullable(),
+});
+
+export const reviewSummaryLessonSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  due_count: z.number(),
+});
+
+export const reviewSummarySubChapterSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  due_count: z.number(),
+  lessons: z.array(reviewSummaryLessonSchema),
+});
+
+export const reviewSummaryChapterSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  due_count: z.number(),
+  sub_chapters: z.array(reviewSummarySubChapterSchema),
+});
+
+export const reviewSummaryBookSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  due_count: z.number(),
+  chapters: z.array(reviewSummaryChapterSchema),
+});
+
+export const reviewSummaryResponseSchema = z.object({
+  books: z.array(reviewSummaryBookSchema),
+  uncategorized_lessons: z.array(reviewSummaryLessonSchema),
+});
+
 export const annotationTypeSchema = z.enum(["highlight", "margin_note"]);
 
 export const annotationResponseSchema = z.object({

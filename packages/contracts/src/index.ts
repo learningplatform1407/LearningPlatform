@@ -8,6 +8,10 @@ import type {
   bookResponseSchema,
   chapterCreateRequestSchema,
   chapterResponseSchema,
+  clozeCardResponseSchema,
+  clozeRatingRequestSchema,
+  clozeRatingSchema,
+  clozeReviewStateResponseSchema,
   documentCreateRequestSchema,
   documentResponseSchema,
   documentSummaryResponseSchema,
@@ -22,6 +26,11 @@ import type {
   profileUpdateRequestSchema,
   quizResponseSchema,
   recentLessonResponseSchema,
+  reviewSummaryBookSchema,
+  reviewSummaryChapterSchema,
+  reviewSummaryLessonSchema,
+  reviewSummaryResponseSchema,
+  reviewSummarySubChapterSchema,
   strokePointSchema,
   strokeSchema,
   subChapterCreateRequestSchema,
@@ -52,6 +61,15 @@ export type SubChapter = z.infer<typeof subChapterResponseSchema>;
 export type SubChapterCreateRequest = z.infer<typeof subChapterCreateRequestSchema>;
 export type Quiz = z.infer<typeof quizResponseSchema>;
 export type Flashcard = z.infer<typeof flashcardResponseSchema>;
+export type ClozeRating = z.infer<typeof clozeRatingSchema>;
+export type ClozeCard = z.infer<typeof clozeCardResponseSchema>;
+export type ClozeRatingRequest = z.infer<typeof clozeRatingRequestSchema>;
+export type ClozeReviewState = z.infer<typeof clozeReviewStateResponseSchema>;
+export type ReviewSummaryLesson = z.infer<typeof reviewSummaryLessonSchema>;
+export type ReviewSummarySubChapter = z.infer<typeof reviewSummarySubChapterSchema>;
+export type ReviewSummaryChapter = z.infer<typeof reviewSummaryChapterSchema>;
+export type ReviewSummaryBook = z.infer<typeof reviewSummaryBookSchema>;
+export type ReviewSummaryResponse = z.infer<typeof reviewSummaryResponseSchema>;
 export type Stroke = z.infer<typeof strokeSchema>;
 export type StrokePoint = z.infer<typeof strokePointSchema>;
 export type NotebookEntry = z.infer<typeof notebookEntryResponseSchema>;

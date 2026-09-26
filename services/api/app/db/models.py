@@ -8,6 +8,7 @@ Base.metadata being complete.
 from app.annotations.models import DocumentAnnotation
 from app.books.models import Book
 from app.chapters.models import Chapter
+from app.cloze.models import ClozeCard, ClozeReviewState
 from app.db.external import auth_users
 from app.documents.models import (
     Document,
@@ -25,6 +26,8 @@ __all__ = [
     "AccountSettings",
     "Book",
     "Chapter",
+    "ClozeCard",
+    "ClozeReviewState",
     "Consent",
     "Document",
     "DocumentAnnotation",

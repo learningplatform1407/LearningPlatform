@@ -1,4 +1,4 @@
-import type { Annotation, AnnotationCreateRequest } from "@lp/contracts";
+import type { Annotation, AnnotationCreateRequest, ClozeRating, DocumentResponse } from "@lp/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useRef, useState } from "react";
@@ -18,7 +18,7 @@ import { getApiClient } from "@/lib/api-client";
 import { NewEntryButtons, NotebookEntryEditor, NotebookEntryList } from "@/lib/notebook-entry-editor";
 import { supabase } from "@/lib/supabase";
 import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
-import { spliceAnnotations } from "@/lib/text-offset";
+import { spliceAnnotations, spliceClozeSpans } from "@/lib/text-offset";
 
 function ExtractedImage({ path }: { path: string }) {
   const { data: url, isPending, isError } = useQuery({
@@ -113,6 +113,7 @@ function AnnotatedParagraph({
 
 const TABS = [
   { key: "lesson", label: "Lesson" },
+  { key: "review", label: "Review" },
   { key: "quizzes", label: "Quizzes" },
   { key: "flashcards", label: "Flashcards" },
 ] as const;
@@ -254,6 +255,221 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
           <Text style={styles.rowTitle}>{flashcard.front_text}</Text>
         </View>
       ))}
+    </View>
+  );
+}
+
+type ClozeSpanState = { id: string; start_offset: number; end_offset: number; hidden: boolean };
+
+/**
+ * Owns all Review-tab state/data (the due queue, which card is currently
+ * revealed, grading) independently of where it's rendered. Split out from
+ * the review UI itself because the review bar has to live *outside* the
+ * screen's ScrollView to stay pinned to the bottom of the viewport while
+ * the lesson content scrolls underneath it -- see ReviewArticle/ReviewBar
+ * below and their call sites in LectureScreen.
+ */
+function useClozeReview(documentId: string, enabled: boolean) {
+  const queryClient = useQueryClient();
+  const dueQuery = useQuery({
+    queryKey: ["cloze-cards", "due", documentId],
+    queryFn: () => getApiClient().listDueClozeCards(documentId),
+    enabled,
+  });
+
+  // Cards graded this session are tracked locally rather than relying on
+  // the due-list query's own (invalidated, refetched) data to shrink --
+  // that keeps the reading position stable even if a background refetch
+  // reshapes dueQuery.data mid-session. At most one card is "revealed but
+  // not yet graded" at a time; everything queued behind it stays hidden.
+  const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
+  const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const reviewMutation = useMutation({
+    mutationFn: ({ cardId, rating }: { cardId: string; rating: ClozeRating }) =>
+      getApiClient().submitClozeReview(documentId, cardId, rating),
+    onSuccess: (state, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["cloze-cards", "due", documentId] });
+      setGradedIds((prev) => new Set(prev).add(variables.cardId));
+      setRevealedCardId(null);
+      setFeedback(
+        `Next review in ${state.interval_days} ${state.interval_days === 1 ? "day" : "days"}.`,
+      );
+    },
+  });
+
+  const dueCards = dueQuery.data ?? [];
+  const queue = dueCards.filter((card) => !gradedIds.has(card.id));
+  const currentCard = queue[0];
+
+  // Every due card not yet graded renders hidden, except the one queue head
+  // currently revealed (awaiting a grade) -- grouped by block so a
+  // paragraph with more than one due word renders each independently.
+  const spansByBlock = new Map<number, ClozeSpanState[]>();
+  for (const card of dueCards) {
+    if (gradedIds.has(card.id)) continue;
+    const existing = spansByBlock.get(card.block_index) ?? [];
+    existing.push({
+      id: card.id,
+      start_offset: card.start_offset,
+      end_offset: card.end_offset,
+      hidden: card.id !== revealedCardId,
+    });
+    spansByBlock.set(card.block_index, existing);
+  }
+
+  return {
+    isPending: dueQuery.isPending,
+    isError: dueQuery.isError,
+    spansByBlock,
+    currentCardId: currentCard?.id,
+    isRevealed: currentCard !== undefined && revealedCardId === currentCard.id,
+    queueLength: queue.length,
+    feedback,
+    isGrading: reviewMutation.isPending,
+    reveal: () => {
+      if (!currentCard) return;
+      setRevealedCardId(currentCard.id);
+      setFeedback(null);
+    },
+    grade: (rating: ClozeRating) => {
+      if (!currentCard) return;
+      reviewMutation.mutate({ cardId: currentCard.id, rating });
+    },
+  };
+}
+
+function ReviewArticle({
+  version,
+  spansByBlock,
+  currentCardId,
+}: {
+  version: DocumentResponse["current_version"] | undefined;
+  spansByBlock: Map<number, ClozeSpanState[]>;
+  currentCardId: string | undefined;
+}) {
+  if (!version) return <Text style={styles.hint}>Not processed yet.</Text>;
+  if (version.status === "processing") return <Text style={styles.hint}>Processing...</Text>;
+  if (version.status === "failed") {
+    return (
+      <Text style={styles.error}>
+        Processing failed: {version.error_message ?? "Unknown error"}
+      </Text>
+    );
+  }
+  if (version.status !== "ready" || !version.extracted_content) return null;
+
+  return (
+    <>
+      {version.extracted_content.blocks.map((block, index) => {
+        if (block.type === "heading") {
+          return (
+            <Text key={index} style={styles.heading}>
+              {block.text}
+            </Text>
+          );
+        }
+        if (block.type === "image") {
+          return block.image_path ? <ExtractedImage key={index} path={block.image_path} /> : null;
+        }
+        const segments = spliceClozeSpans(block.text ?? "", spansByBlock.get(index) ?? []);
+        return (
+          <Text key={index} style={styles.paragraph}>
+            {segments.map((segment, i) =>
+              segment.hidden ? (
+                <Text key={i} style={styles.clozeHidden}>
+                  [...]
+                </Text>
+              ) : segment.id === currentCardId ? (
+                <Text key={i} style={styles.clozeRevealed}>
+                  {segment.text}
+                </Text>
+              ) : (
+                <Text key={i}>{segment.text}</Text>
+              ),
+            )}
+          </Text>
+        );
+      })}
+    </>
+  );
+}
+
+function ReviewBar({ review }: { review: ReturnType<typeof useClozeReview> }) {
+  if (review.isPending) {
+    return (
+      <View style={styles.reviewBar}>
+        <Text style={styles.hint}>Loading...</Text>
+      </View>
+    );
+  }
+  if (review.isError) {
+    return (
+      <View style={styles.reviewBar}>
+        <Text style={styles.error}>Failed to load review cards.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.reviewBar}>
+      {!review.currentCardId && (
+        <>
+          <Text style={styles.hint}>You&apos;re all caught up — nothing to review right now.</Text>
+          {review.feedback && <Text style={styles.hint}>{review.feedback}</Text>}
+        </>
+      )}
+      {review.currentCardId && !review.isRevealed && (
+        <View style={styles.reviewBarRow}>
+          <Text style={styles.hint}>
+            {review.queueLength} {review.queueLength === 1 ? "word" : "words"} left to review
+          </Text>
+          <Pressable
+            style={[styles.modalButton, styles.modalButtonPrimary]}
+            onPress={review.reveal}
+            accessibilityRole="button"
+          >
+            <Text style={styles.modalButtonPrimaryText}>Show</Text>
+          </Pressable>
+        </View>
+      )}
+      {review.currentCardId && review.isRevealed && (
+        <View style={styles.reviewGradeRow}>
+          <Pressable
+            style={styles.modalButton}
+            disabled={review.isGrading}
+            onPress={() => review.grade("again")}
+            accessibilityRole="button"
+          >
+            <Text style={styles.deleteText}>Again</Text>
+          </Pressable>
+          <Pressable
+            style={styles.modalButton}
+            disabled={review.isGrading}
+            onPress={() => review.grade("hard")}
+            accessibilityRole="button"
+          >
+            <Text style={styles.reviewWarningText}>Hard</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.modalButton, styles.modalButtonPrimary]}
+            disabled={review.isGrading}
+            onPress={() => review.grade("good")}
+            accessibilityRole="button"
+          >
+            <Text style={styles.modalButtonPrimaryText}>Good</Text>
+          </Pressable>
+          <Pressable
+            style={styles.modalButton}
+            disabled={review.isGrading}
+            onPress={() => review.grade("easy")}
+            accessibilityRole="button"
+          >
+            <Text style={styles.reviewSuccessText}>Easy</Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -403,12 +619,18 @@ function NotesModal({
 }
 
 export default function LectureScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, tab: tabParam } = useLocalSearchParams<{ id: string; tab?: string }>();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<TabKey>("lesson");
+  // Deep link support: navigating here with ?tab=review (e.g. from the
+  // review dashboard) opens straight to that tab instead of always
+  // starting on Lesson.
+  const [activeTab, setActiveTab] = useState<TabKey>(() =>
+    TABS.some((t) => t.key === tabParam) ? (tabParam as TabKey) : "lesson",
+  );
   const [tocOpen, setTocOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [activeTool, setActiveTool] = useState<ActiveTool>(null);
+  const review = useClozeReview(id, activeTab === "review");
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["documents", id],
@@ -526,8 +748,11 @@ export default function LectureScreen() {
   }
 
   return (
-    <>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <View style={styles.screenRoot}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[styles.content, activeTab === "review" && styles.contentWithReviewBar]}
+      >
         <Pressable onPress={() => router.push("/learn")} accessibilityRole="button">
           <Text style={styles.backLink}>← Learn</Text>
         </Pressable>
@@ -581,6 +806,13 @@ export default function LectureScreen() {
           ))}
         </View>
 
+        {activeTab === "review" && (
+          <ReviewArticle
+            version={version}
+            spansByBlock={review.spansByBlock}
+            currentCardId={review.currentCardId}
+          />
+        )}
         {activeTab === "quizzes" && <QuizzesTab documentId={id} />}
         {activeTab === "flashcards" && <FlashcardsTab documentId={id} />}
 
@@ -634,6 +866,8 @@ export default function LectureScreen() {
           </>
         )}
       </ScrollView>
+
+      {activeTab === "review" && <ReviewBar review={review} />}
 
       <Modal
         visible={actionMenuBlockIndex !== null}
@@ -778,11 +1012,14 @@ export default function LectureScreen() {
         currentDocumentId={id}
       />
       <NotesModal visible={notesOpen} onClose={() => setNotesOpen(false)} documentId={id} />
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screenRoot: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -790,6 +1027,11 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.xl,
     gap: spacing.md,
+  },
+  contentWithReviewBar: {
+    // Keeps the last line of lesson text from sitting under the fixed
+    // review bar at the bottom of the screen.
+    paddingBottom: spacing.xl * 3,
   },
   backLink: {
     fontSize: fontSizes.sm,
@@ -1064,6 +1306,47 @@ const styles = StyleSheet.create({
   },
   deleteText: {
     color: colors.danger,
+    fontWeight: fontWeights.medium,
+    fontSize: fontSizes.sm,
+  },
+  clozeHidden: {
+    fontWeight: fontWeights.semibold,
+    color: colors.mutedForeground,
+  },
+  clozeRevealed: {
+    fontWeight: fontWeights.semibold,
+    color: colors.primary,
+  },
+  reviewBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  reviewBarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+  },
+  reviewGradeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: spacing.sm,
+  },
+  reviewWarningText: {
+    color: colors.warning,
+    fontWeight: fontWeights.medium,
+    fontSize: fontSizes.sm,
+  },
+  reviewSuccessText: {
+    color: colors.success,
     fontWeight: fontWeights.medium,
     fontSize: fontSizes.sm,
   },

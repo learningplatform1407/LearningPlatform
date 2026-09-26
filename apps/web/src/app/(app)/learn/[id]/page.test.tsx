@@ -12,6 +12,8 @@ const createAnnotation = vi.fn();
 const deleteAnnotation = vi.fn();
 const listQuizzes = vi.fn();
 const listFlashcards = vi.fn();
+const listDueClozeCards = vi.fn();
+const submitClozeReview = vi.fn();
 const listNotebookEntries = vi.fn();
 const createNotebookEntry = vi.fn();
 const updateNotebookEntry = vi.fn();
@@ -26,6 +28,8 @@ vi.mock("@/lib/api-client.browser", () => ({
     deleteAnnotation,
     listQuizzes,
     listFlashcards,
+    listDueClozeCards,
+    submitClozeReview,
     listNotebookEntries,
     createNotebookEntry,
     updateNotebookEntry,
@@ -42,6 +46,7 @@ vi.mock("@/lib/supabase/client", () => ({
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "d1" }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 function readyDocumentWithParagraph(text: string) {
@@ -101,6 +106,8 @@ beforeEach(() => {
   deleteAnnotation.mockReset().mockResolvedValue(undefined);
   listQuizzes.mockReset().mockResolvedValue([]);
   listFlashcards.mockReset().mockResolvedValue([]);
+  listDueClozeCards.mockReset().mockResolvedValue([]);
+  submitClozeReview.mockReset();
   listNotebookEntries.mockReset().mockResolvedValue([]);
   createNotebookEntry.mockReset();
   updateNotebookEntry.mockReset();
@@ -677,6 +684,124 @@ describe("LecturePage", () => {
 
     expect(await screen.findByText("Coming soon.")).toBeInTheDocument();
     expect(listFlashcards).toHaveBeenCalledWith("d1");
+  });
+
+  test("the Review tab shows the whole lesson with the due word blanked, then reveals it on demand", async () => {
+    getDocument.mockResolvedValue({
+      id: "d1",
+      title: "Intro to Systems",
+      current_version: {
+        id: "v1",
+        status: "ready",
+        error_message: null,
+        extracted_content: {
+          blocks: [
+            { type: "heading", text: "Cell Biology", page: 1 },
+            { type: "paragraph", text: "The mitochondria produces energy.", page: 1 },
+          ],
+        },
+        created_at: "2026-01-01",
+      },
+    });
+    listDueClozeCards.mockResolvedValue([
+      { id: "c1", document_id: "d1", block_index: 1, start_offset: 4, end_offset: 16 },
+    ]);
+
+    renderPage();
+    await screen.findByText(/The mitochondria produces energy\./);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Review" }));
+
+    // The whole lesson (heading included) stays visible during review, not
+    // just the paragraph containing the due word.
+    expect(await screen.findByText("Cell Biology")).toBeInTheDocument();
+    expect(screen.getByText("[...]")).toBeInTheDocument();
+    expect(screen.queryByText("mitochondria")).not.toBeInTheDocument();
+    expect(screen.getByText("1 word left to review")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show" }));
+
+    expect(screen.getByText("mitochondria")).toBeInTheDocument();
+    expect(screen.queryByText("[...]")).not.toBeInTheDocument();
+    for (const label of ["Again", "Hard", "Good", "Easy"]) {
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    }
+  });
+
+  test("two due words in the same paragraph are revealed one at a time, in order", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("The database index accelerates lookups."));
+    listDueClozeCards.mockResolvedValue([
+      { id: "c1", document_id: "d1", block_index: 0, start_offset: 4, end_offset: 12 }, // "database"
+      { id: "c2", document_id: "d1", block_index: 0, start_offset: 13, end_offset: 18 }, // "index"
+    ]);
+
+    renderPage();
+    await screen.findByText(/The database index accelerates lookups\./);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Review" }));
+
+    // Both due words start hidden, each as its own "[...]" segment.
+    expect(await screen.findAllByText("[...]")).toHaveLength(2);
+    expect(screen.getByText("2 words left to review")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show" }));
+    expect(screen.getByText("database")).toBeInTheDocument();
+    expect(screen.getAllByText("[...]")).toHaveLength(1); // "index" still queued
+
+    await user.click(screen.getByRole("button", { name: "Good" }));
+    await waitFor(() => expect(screen.getByText("1 word left to review")).toBeInTheDocument());
+    // "database" is no longer its own cloze span once graded -- it merges
+    // back into the surrounding plain-text run, so it's matched by
+    // substring here rather than as an isolated node.
+    expect(screen.getByText(/database/)).toBeInTheDocument();
+    expect(screen.getByText("[...]")).toBeInTheDocument(); // "index" still hidden, Show not pressed yet
+
+    await user.click(screen.getByRole("button", { name: "Show" }));
+    expect(screen.getByText("index")).toBeInTheDocument();
+    expect(screen.queryByText("[...]")).not.toBeInTheDocument();
+  });
+
+  test("grading a Review word submits the rating and shows the next-interval feedback", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("The mitochondria produces energy."));
+    listDueClozeCards.mockResolvedValue([
+      { id: "c1", document_id: "d1", block_index: 0, start_offset: 4, end_offset: 16 },
+    ]);
+    submitClozeReview.mockResolvedValue({
+      id: "s1",
+      cloze_card_id: "c1",
+      ease_factor: 2.5,
+      interval_days: 6,
+      repetitions: 2,
+      due_at: "2026-01-07",
+      last_reviewed_at: "2026-01-01",
+    });
+
+    renderPage();
+    await screen.findByText(/The mitochondria produces energy\./);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Review" }));
+    await user.click(await screen.findByRole("button", { name: "Show" }));
+    await user.click(screen.getByRole("button", { name: "Good" }));
+
+    await waitFor(() => expect(submitClozeReview).toHaveBeenCalledWith("d1", "c1", "good"));
+    expect(await screen.findByText("Next review in 6 days.")).toBeInTheDocument();
+  });
+
+  test("the Review tab shows an empty state, with the lesson still fully readable, when nothing is due", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("The mitochondria produces energy."));
+    listDueClozeCards.mockResolvedValue([]);
+
+    renderPage();
+    await screen.findByText(/The mitochondria produces energy\./);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Review" }));
+
+    expect(
+      await screen.findByText("You're all caught up — nothing to review right now."),
+    ).toBeInTheDocument();
+    // Unlike the old single-card view, the lesson text isn't replaced by
+    // the empty-state message -- it's still there to read.
+    expect(screen.getByText(/The mitochondria produces energy\./)).toBeInTheDocument();
   });
 
   test("switching back to the Lesson tab restores the reader content", async () => {
