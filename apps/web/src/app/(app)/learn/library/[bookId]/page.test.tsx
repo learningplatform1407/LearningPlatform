@@ -123,9 +123,7 @@ describe("BookPage (real book)", () => {
     await user.type(screen.getByLabelText("Title"), "New Chapter");
     fireEvent.submit(screen.getByLabelText("Title").closest("form")!);
 
-    await waitFor(() =>
-      expect(createChapter).toHaveBeenCalledWith("b1", { title: "New Chapter" }),
-    );
+    await waitFor(() => expect(createChapter).toHaveBeenCalledWith("b1", { title: "New Chapter" }));
   });
 });
 

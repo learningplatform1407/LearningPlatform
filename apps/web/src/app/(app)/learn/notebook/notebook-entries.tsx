@@ -191,7 +191,11 @@ export function TextEntryEditor({
           {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save"}
         </Button>
         {entry && (
-          <Button variant="danger" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
+          <Button
+            variant="danger"
+            onClick={() => deleteMutation.mutate()}
+            disabled={deleteMutation.isPending}
+          >
             Delete
           </Button>
         )}
@@ -264,7 +268,11 @@ export function DrawingEntryEditor({
           {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save"}
         </Button>
         {entry && (
-          <Button variant="danger" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
+          <Button
+            variant="danger"
+            onClick={() => deleteMutation.mutate()}
+            disabled={deleteMutation.isPending}
+          >
             Delete
           </Button>
         )}

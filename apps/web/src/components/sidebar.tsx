@@ -35,12 +35,21 @@ export function Sidebar() {
 
       <ul className="flex flex-col gap-xs px-sm">
         {NAV_ITEMS.map((item) => (
-          <NavLink key={item.href} item={item} collapsed={collapsed} active={pathname.startsWith(item.href)} />
+          <NavLink
+            key={item.href}
+            item={item}
+            collapsed={collapsed}
+            active={pathname.startsWith(item.href)}
+          />
         ))}
       </ul>
 
       <div className="mt-auto flex flex-col gap-xs border-t border-border px-sm pt-md">
-        <NavLink item={PROFILE_ITEM} collapsed={collapsed} active={pathname.startsWith(PROFILE_ITEM.href)} />
+        <NavLink
+          item={PROFILE_ITEM}
+          collapsed={collapsed}
+          active={pathname.startsWith(PROFILE_ITEM.href)}
+        />
       </div>
     </nav>
   );

@@ -153,7 +153,9 @@ describe("ChapterLessonsScreen (real chapter)", () => {
     mockGetMe.mockResolvedValue(ADMIN_ME);
     (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
       canceled: false,
-      assets: [{ uri: "file:///lesson.pdf", name: "lesson.pdf", size: 1234, mimeType: "application/pdf" }],
+      assets: [
+        { uri: "file:///lesson.pdf", name: "lesson.pdf", size: 1234, mimeType: "application/pdf" },
+      ],
     });
     mockRequestDocumentUploadUrl.mockResolvedValue({ storage_path: "abc.pdf", token: "tok" });
     mockUploadToSignedUrl.mockResolvedValue({ data: {}, error: null });

@@ -42,7 +42,12 @@ beforeEach(() => {
 
 test("new-text sentinel shows an empty text editor with Save disabled until typed", async () => {
   (useLocalSearchParams as jest.Mock).mockReturnValue({ entryId: "new-text" });
-  mockCreateNotebookEntry.mockResolvedValue({ id: "n1", type: "text", content: "Fresh idea", strokes: null });
+  mockCreateNotebookEntry.mockResolvedValue({
+    id: "n1",
+    type: "text",
+    content: "Fresh idea",
+    strokes: null,
+  });
 
   renderScreen();
 
@@ -64,7 +69,12 @@ test("editing an existing text entry calls updateNotebookEntry and stays on the 
   mockListNotebookEntries.mockResolvedValue([
     { id: "n1", type: "text", content: "Original", strokes: null },
   ]);
-  mockUpdateNotebookEntry.mockResolvedValue({ id: "n1", type: "text", content: "Edited", strokes: null });
+  mockUpdateNotebookEntry.mockResolvedValue({
+    id: "n1",
+    type: "text",
+    content: "Edited",
+    strokes: null,
+  });
 
   renderScreen();
 

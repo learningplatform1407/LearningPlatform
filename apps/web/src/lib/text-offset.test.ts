@@ -46,9 +46,11 @@ describe("getOffsetsWithinContainer", () => {
   });
 
   test("returns null when the range lies outside the given container", () => {
-    document.body.innerHTML =
-      '<p data-block-index="0">Hello</p><p data-block-index="1">World</p>';
-    const [p0, p1] = [...document.querySelectorAll("p")] as [HTMLParagraphElement, HTMLParagraphElement];
+    document.body.innerHTML = '<p data-block-index="0">Hello</p><p data-block-index="1">World</p>';
+    const [p0, p1] = [...document.querySelectorAll("p")] as [
+      HTMLParagraphElement,
+      HTMLParagraphElement,
+    ];
     const range = document.createRange();
     range.setStart(p1.firstChild!, 0);
     range.setEnd(p1.firstChild!, 5);
@@ -122,8 +124,18 @@ describe("spliceAnnotations", () => {
 
   test("the most recently created annotation wins the visual in an overlapping region", () => {
     const segments = spliceAnnotations("abcdefghij", [
-      highlight({ id: "older", start_offset: 0, end_offset: 6, created_at: "2026-01-01T00:00:00Z" }),
-      highlight({ id: "newer", start_offset: 3, end_offset: 9, created_at: "2026-01-02T00:00:00Z" }),
+      highlight({
+        id: "older",
+        start_offset: 0,
+        end_offset: 6,
+        created_at: "2026-01-01T00:00:00Z",
+      }),
+      highlight({
+        id: "newer",
+        start_offset: 3,
+        end_offset: 9,
+        created_at: "2026-01-02T00:00:00Z",
+      }),
     ]);
 
     const overlap = segments.find((s) => s.text === "def");

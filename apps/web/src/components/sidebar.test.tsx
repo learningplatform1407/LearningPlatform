@@ -15,7 +15,11 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "Learn" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "AI Assistant" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Profile" })).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Main" })).toHaveClass("sticky", "top-0", "h-screen");
+    expect(screen.getByRole("navigation", { name: "Main" })).toHaveClass(
+      "sticky",
+      "top-0",
+      "h-screen",
+    );
   });
 
   test("collapsing shows a pictogram per item, still reachable by its accessible name", async () => {

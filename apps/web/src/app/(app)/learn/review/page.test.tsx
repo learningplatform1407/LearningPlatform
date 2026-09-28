@@ -56,7 +56,10 @@ describe("ReviewSummaryPage", () => {
 
     expect(await screen.findByText("Book A")).toBeInTheDocument();
     expect(screen.getByText("3 words due today across your course.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Book A/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /Book A/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
     expect(screen.queryByText("Chapter 1")).not.toBeInTheDocument();
     expect(screen.queryByText("Lesson A")).not.toBeInTheDocument();
   });

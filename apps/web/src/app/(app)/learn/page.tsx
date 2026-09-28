@@ -13,7 +13,11 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default function LearnPage() {
-  const { data: recentLessons, isPending, isError } = useQuery({
+  const {
+    data: recentLessons,
+    isPending,
+    isError,
+  } = useQuery({
     queryKey: ["recent-lessons"],
     queryFn: () => getBrowserApiClient().listRecentLessons(),
   });
@@ -79,7 +83,9 @@ export default function LearnPage() {
       <div className="mt-2xl grid max-w-[80rem] grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <Card as={Link} href="/learn/library" interactive className="block p-lg">
           <p className="text-lg font-semibold text-foreground">Library</p>
-          <p className="mt-xs text-sm text-muted-foreground">Browse books, chapters, and lessons.</p>
+          <p className="mt-xs text-sm text-muted-foreground">
+            Browse books, chapters, and lessons.
+          </p>
         </Card>
         <Card as={Link} href="/learn/review" interactive className="block p-lg">
           <p className="text-lg font-semibold text-foreground">Review</p>

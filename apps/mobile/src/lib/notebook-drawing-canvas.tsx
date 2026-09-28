@@ -158,7 +158,11 @@ export function DrawingCanvas({ strokes, onChange, readOnly = false }: DrawingCa
             ))}
             {drawingStroke && drawingStroke.length > 0 && (
               <Path
-                d={strokePath({ color, width: STROKE_WIDTH, points: drawingStroke }, size.width, size.height)}
+                d={strokePath(
+                  { color, width: STROKE_WIDTH, points: drawingStroke },
+                  size.width,
+                  size.height,
+                )}
                 stroke={color}
                 strokeWidth={Math.max(1, STROKE_WIDTH * size.width)}
                 strokeLinecap="round"
@@ -175,7 +179,11 @@ export function DrawingCanvas({ strokes, onChange, readOnly = false }: DrawingCa
 
 export function DrawingThumbnail({ strokes }: { strokes: Stroke[] }) {
   return (
-    <View style={styles.thumbnailBox} accessibilityRole="image" accessibilityLabel="Drawing preview">
+    <View
+      style={styles.thumbnailBox}
+      accessibilityRole="image"
+      accessibilityLabel="Drawing preview"
+    >
       <Svg viewBox="0 0 1 1" preserveAspectRatio="none" width="100%" height="100%">
         {strokes.map((stroke, index) => (
           <Polyline

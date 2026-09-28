@@ -12,7 +12,11 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default function LearnScreen() {
-  const { data: recentLessons, isPending, isError } = useQuery({
+  const {
+    data: recentLessons,
+    isPending,
+    isError,
+  } = useQuery({
     queryKey: ["recent-lessons"],
     queryFn: () => getApiClient().listRecentLessons(),
   });

@@ -1,4 +1,9 @@
-import type { Annotation, AnnotationCreateRequest, ClozeRating, DocumentResponse } from "@lp/contracts";
+import type {
+  Annotation,
+  AnnotationCreateRequest,
+  ClozeRating,
+  DocumentResponse,
+} from "@lp/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useRef, useState } from "react";
@@ -15,13 +20,21 @@ import {
 } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { NewEntryButtons, NotebookEntryEditor, NotebookEntryList } from "@/lib/notebook-entry-editor";
+import {
+  NewEntryButtons,
+  NotebookEntryEditor,
+  NotebookEntryList,
+} from "@/lib/notebook-entry-editor";
 import { supabase } from "@/lib/supabase";
 import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
 import { spliceAnnotations, spliceClozeSpans } from "@/lib/text-offset";
 
 function ExtractedImage({ path }: { path: string }) {
-  const { data: url, isPending, isError } = useQuery({
+  const {
+    data: url,
+    isPending,
+    isError,
+  } = useQuery({
     queryKey: ["document-image", path],
     queryFn: async () => {
       const { data, error } = await supabase.storage.from("documents").createSignedUrl(path, 3600);
@@ -152,9 +165,7 @@ function AnnotationToolbar({
         return (
           <Pressable
             key={color.name}
-            onPress={() =>
-              onToolChange(isActive ? null : { type: "highlight", color: color.name })
-            }
+            onPress={() => onToolChange(isActive ? null : { type: "highlight", color: color.name })}
             accessibilityRole="button"
             accessibilityLabel={`Highlight — ${color.name}`}
             accessibilityState={{ selected: isActive }}
@@ -522,10 +533,7 @@ function TocModal({
               accessibilityRole="button"
             >
               <Text
-                style={[
-                  styles.rowTitle,
-                  doc.id === currentDocumentId && styles.tocRowActiveText,
-                ]}
+                style={[styles.rowTitle, doc.id === currentDocumentId && styles.tocRowActiveText]}
               >
                 {doc.title}
               </Text>
@@ -751,7 +759,10 @@ export default function LectureScreen() {
     <View style={styles.screenRoot}>
       <ScrollView
         style={styles.container}
-        contentContainerStyle={[styles.content, activeTab === "review" && styles.contentWithReviewBar]}
+        contentContainerStyle={[
+          styles.content,
+          activeTab === "review" && styles.contentWithReviewBar,
+        ]}
       >
         <Pressable onPress={() => router.push("/learn")} accessibilityRole="button">
           <Text style={styles.backLink}>← Learn</Text>
@@ -963,7 +974,9 @@ export default function LectureScreen() {
                 <Text style={styles.modalButtonText}>Cancel</Text>
               </Pressable>
               <Pressable
-                onPress={() => composingBlockIndex !== null && createNoteMutation.mutate(composingBlockIndex)}
+                onPress={() =>
+                  composingBlockIndex !== null && createNoteMutation.mutate(composingBlockIndex)
+                }
                 style={[styles.modalButton, styles.modalButtonPrimary]}
                 disabled={!noteDraft.trim() || createNoteMutation.isPending}
                 accessibilityRole="button"
@@ -990,7 +1003,11 @@ export default function LectureScreen() {
             <Text style={styles.modalTitle}>Note</Text>
             <Text style={styles.noteText}>{viewingNote?.note_text}</Text>
             <View style={styles.modalActions}>
-              <Pressable onPress={() => setViewingNote(null)} style={styles.modalButton} accessibilityRole="button">
+              <Pressable
+                onPress={() => setViewingNote(null)}
+                style={styles.modalButton}
+                accessibilityRole="button"
+              >
                 <Text style={styles.modalButtonText}>Close</Text>
               </Pressable>
               <Pressable
