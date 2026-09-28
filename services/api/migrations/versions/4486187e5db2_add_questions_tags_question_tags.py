@@ -1,7 +1,7 @@
 """add questions, tags, question_tags
 
 Revision ID: 4486187e5db2
-Revises: 105a91c866a4
+Revises: f16f6afe8b13
 Create Date: 2026-09-24 00:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "4486187e5db2"
-down_revision: str | Sequence[str] | None = "105a91c866a4"
+down_revision: str | Sequence[str] | None = "f16f6afe8b13"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

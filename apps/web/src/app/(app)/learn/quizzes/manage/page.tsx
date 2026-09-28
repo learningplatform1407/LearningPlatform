@@ -157,10 +157,15 @@ function ImportForm() {
     previewedText !== null && previewedText === jsonText && !commitMutation.isSuccess;
 
   return (
-    <div className="mt-lg flex max-w-2xl flex-col gap-md">
+    <div className="mt-lg flex w-full max-w-4xl flex-col gap-md">
       <label className="flex flex-col gap-xs text-sm text-foreground">
         Upload a JSON file
-        <input type="file" accept="application/json" onChange={handleFileChange} />
+        <input
+          type="file"
+          accept="application/json"
+          onChange={handleFileChange}
+          className="w-full rounded-md border border-border px-sm py-sm text-sm file:mr-sm file:rounded-md file:border-0 file:bg-secondary file:px-sm file:py-xs file:text-sm file:font-medium file:text-foreground"
+        />
       </label>
 
       <label className="flex flex-col gap-xs text-sm text-foreground">
@@ -168,9 +173,9 @@ function ImportForm() {
         <textarea
           value={jsonText}
           onChange={(event) => handleTextChange(event.target.value)}
-          rows={16}
+          rows={24}
           placeholder={'{"allow_new_tags": false, "questions": [...]}'}
-          className="rounded-md border border-border px-sm py-xs font-mono text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="w-full resize-y rounded-md border border-border px-sm py-xs font-mono text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
       </label>
 

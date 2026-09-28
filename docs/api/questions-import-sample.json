@@ -1,0 +1,68 @@
+{
+  "allow_new_tags": true,
+  "questions": [
+    {
+      "external_id": "cardio-001",
+      "prompt": "Which of the following best reduces cardiac preload?",
+      "kind": "single",
+      "scoring_scheme": "single_4",
+      "options": [
+        { "id": "a", "text": "Nitroglycerin" },
+        { "id": "b", "text": "Norepinephrine" },
+        { "id": "c", "text": "Phenylephrine" },
+        { "id": "d", "text": "Dobutamine" }
+      ],
+      "correct_option_ids": ["a"],
+      "rationales": {
+        "a": "Venodilation reduces venous return, lowering preload."
+      },
+      "explanation": "Nitrates primarily venodilate, dropping preload rather than afterload.",
+      "difficulty": "medium",
+      "status": "published",
+      "tags": ["cardiology", "pharmacology"]
+    },
+    {
+      "external_id": "cardio-002",
+      "prompt": "Which of the following drugs reduce cardiac afterload? (select all that apply)",
+      "kind": "multi",
+      "scoring_scheme": "multi_5_per_option",
+      "options": [
+        { "id": "a", "text": "Hydralazine" },
+        { "id": "b", "text": "Amlodipine" },
+        { "id": "c", "text": "Furosemide" },
+        { "id": "d", "text": "Losartan" },
+        { "id": "e", "text": "Digoxin" }
+      ],
+      "correct_option_ids": ["a", "b", "d"],
+      "rationales": {
+        "a": "Direct arteriolar vasodilator.",
+        "c": "Furosemide is a diuretic, reduces preload not afterload.",
+        "e": "Digoxin is inotropic, does not vasodilate."
+      },
+      "explanation": "Arteriolar dilators and ARBs cut systemic vascular resistance, lowering afterload.",
+      "difficulty": "hard",
+      "status": "published",
+      "tags": ["cardiology", "pharmacology"]
+    },
+    {
+      "external_id": "neuro-001",
+      "prompt": "A lesion in Broca's area most directly impairs which function?",
+      "kind": "single",
+      "scoring_scheme": "single_4",
+      "options": [
+        { "id": "a", "text": "Speech comprehension" },
+        { "id": "b", "text": "Speech production" },
+        { "id": "c", "text": "Long-term memory" },
+        { "id": "d", "text": "Visual processing" }
+      ],
+      "correct_option_ids": ["b"],
+      "rationales": {
+        "b": "Broca's area governs expressive/motor speech production."
+      },
+      "explanation": null,
+      "difficulty": "easy",
+      "status": "draft",
+      "tags": ["neurology"]
+    }
+  ]
+}
