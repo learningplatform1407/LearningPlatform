@@ -259,10 +259,7 @@ export default function ChapterLessonsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Pressable
-        onPress={() => router.push(`/learn/library/${bookId}`)}
-        accessibilityRole="button"
-      >
+      <Pressable onPress={() => router.push(`/learn/library/${bookId}`)} accessibilityRole="button">
         <Text style={styles.backLink}>← Chapters</Text>
       </Pressable>
       <Text style={styles.title}>{chapterTitle ?? "Chapter"}</Text>

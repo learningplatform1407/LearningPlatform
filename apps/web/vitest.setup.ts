@@ -27,7 +27,10 @@ if (typeof globalThis.ResizeObserver === "undefined") {
 // fall back to a plain Event with no clientX/clientY/pressure — DrawingCanvas
 // reads all three to build stroke points. A minimal MouseEvent-based subclass
 // is enough for tests to simulate a real pointer drag.
-if (typeof globalThis.PointerEvent === "undefined" && typeof globalThis.MouseEvent !== "undefined") {
+if (
+  typeof globalThis.PointerEvent === "undefined" &&
+  typeof globalThis.MouseEvent !== "undefined"
+) {
   class PointerEventPolyfill extends MouseEvent {
     pointerId: number;
     pressure: number;

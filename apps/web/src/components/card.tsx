@@ -29,7 +29,9 @@ export function Card<T extends ElementType = "div">({
       // couldn't reliably override e.g. a baked-in bg-background with their
       // own bg-muted) — callers supply padding/background via className.
       className={`rounded-md border border-border shadow-sm ${
-        interactive ? "transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md" : ""
+        interactive
+          ? "transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
+          : ""
       } ${className}`}
       {...(props as Record<string, unknown>)}
     />

@@ -12,9 +12,7 @@ import {
 } from "./notebook-entries";
 
 type Selection =
-  | { kind: "entry"; entryId: string }
-  | { kind: "new-text" }
-  | { kind: "new-drawing" };
+  { kind: "entry"; entryId: string } | { kind: "new-text" } | { kind: "new-drawing" };
 
 export default function NotebookPage() {
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -40,7 +38,9 @@ export default function NotebookPage() {
 
   const notebookEntries = entries.data;
   const selectedEntry =
-    selection?.kind === "entry" ? notebookEntries.find((e) => e.id === selection.entryId) : undefined;
+    selection?.kind === "entry"
+      ? notebookEntries.find((e) => e.id === selection.entryId)
+      : undefined;
 
   return (
     <main className="flex w-full">

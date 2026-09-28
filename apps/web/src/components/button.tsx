@@ -20,7 +20,12 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 // existing getByRole("button", { name }) queries keep working unchanged.
 // Centralizes the focus ring fix and hover treatment so both apply
 // consistently everywhere instead of being copy-pasted per call site.
-export function Button({ variant = "primary", className = "", type = "button", ...props }: ButtonProps) {
+export function Button({
+  variant = "primary",
+  className = "",
+  type = "button",
+  ...props
+}: ButtonProps) {
   return (
     <button
       type={type}

@@ -54,7 +54,12 @@ describe("NotebookPage", () => {
   });
 
   test("creating a new text note calls createNotebookEntry with the typed content", async () => {
-    createNotebookEntry.mockResolvedValue({ id: "n2", type: "text", content: "Fresh idea", strokes: null });
+    createNotebookEntry.mockResolvedValue({
+      id: "n2",
+      type: "text",
+      content: "Fresh idea",
+      strokes: null,
+    });
 
     renderPage();
     await screen.findByText("No notes yet.");
@@ -77,7 +82,12 @@ describe("NotebookPage", () => {
     listNotebookEntries.mockResolvedValue([
       { id: "n1", type: "text", content: "Original", strokes: null },
     ]);
-    updateNotebookEntry.mockResolvedValue({ id: "n1", type: "text", content: "Edited", strokes: null });
+    updateNotebookEntry.mockResolvedValue({
+      id: "n1",
+      type: "text",
+      content: "Edited",
+      strokes: null,
+    });
 
     renderPage();
 
@@ -115,7 +125,12 @@ describe("NotebookPage", () => {
   });
 
   test("creating a new drawing note calls createNotebookEntry with stroke data", async () => {
-    createNotebookEntry.mockResolvedValue({ id: "n3", type: "drawing", content: null, strokes: [] });
+    createNotebookEntry.mockResolvedValue({
+      id: "n3",
+      type: "drawing",
+      content: null,
+      strokes: [],
+    });
 
     renderPage();
     await screen.findByText("No notes yet.");

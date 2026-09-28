@@ -302,7 +302,11 @@ export default function ChapterLessonsPage() {
               {createError}
             </p>
           )}
-          <Button type="submit" disabled={createSubChapterMutation.isPending} className="self-start">
+          <Button
+            type="submit"
+            disabled={createSubChapterMutation.isPending}
+            className="self-start"
+          >
             {createSubChapterMutation.isPending ? "Creating..." : "Create sub-chapter"}
           </Button>
         </form>

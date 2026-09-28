@@ -73,7 +73,12 @@ export function DrawingCanvas({ strokes, onChange, readOnly = false }: DrawingCa
       drawStroke(ctx, stroke, size.width, size.height);
     }
     if (drawingStroke && drawingStroke.length > 0) {
-      drawStroke(ctx, { color, width: STROKE_WIDTH, points: drawingStroke }, size.width, size.height);
+      drawStroke(
+        ctx,
+        { color, width: STROKE_WIDTH, points: drawingStroke },
+        size.width,
+        size.height,
+      );
     }
   }, [strokes, drawingStroke, size, color]);
 

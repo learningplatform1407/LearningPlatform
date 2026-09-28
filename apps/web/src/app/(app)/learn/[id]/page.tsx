@@ -26,7 +26,11 @@ import {
 } from "../notebook/notebook-entries";
 
 function ExtractedImage({ path }: { path: string }) {
-  const { data: url, isPending, isError } = useQuery({
+  const {
+    data: url,
+    isPending,
+    isError,
+  } = useQuery({
     queryKey: ["document-image", path],
     queryFn: async () => {
       const supabase = createClient();
@@ -37,7 +41,11 @@ function ExtractedImage({ path }: { path: string }) {
   });
 
   if (isPending) {
-    return <div className="rounded-md border border-border p-md text-sm text-muted-foreground">Loading image...</div>;
+    return (
+      <div className="rounded-md border border-border p-md text-sm text-muted-foreground">
+        Loading image...
+      </div>
+    );
   }
   if (isError || !url) {
     return (
@@ -109,10 +117,7 @@ function AnnotatedParagraph({
       {segments.map((segment, index) => {
         if (segment.annotation?.type === "highlight") {
           return (
-            <mark
-              key={index}
-              className={highlightMarkClass(segment.annotation.color)}
-            >
+            <mark key={index} className={highlightMarkClass(segment.annotation.color)}>
               {segment.text}
             </mark>
           );
@@ -190,9 +195,7 @@ function AnnotationToolbar({
             type="button"
             aria-label={`Highlight — ${color.name}`}
             aria-pressed={isActive}
-            onClick={() =>
-              onToolChange(isActive ? null : { type: "highlight", color: color.name })
-            }
+            onClick={() => onToolChange(isActive ? null : { type: "highlight", color: color.name })}
             className={`h-6 w-6 rounded-full border border-border ${color.swatchClass} ${
               isActive ? "ring-2 ring-primary ring-offset-1" : ""
             }`}
@@ -356,7 +359,9 @@ function ReviewTab({ documentId }: { documentId: string }) {
               );
             }
             if (block.type === "image") {
-              return block.image_path ? <ExtractedImage key={index} path={block.image_path} /> : null;
+              return block.image_path ? (
+                <ExtractedImage key={index} path={block.image_path} />
+              ) : null;
             }
             const segments = spliceClozeSpans(block.text ?? "", spansByBlock.get(index) ?? []);
             return (
@@ -672,12 +677,14 @@ export default function LecturePage() {
   });
 
   const createAnnotationMutation = useMutation({
-    mutationFn: (body: AnnotationCreateRequest) => getBrowserApiClient().createAnnotation(params.id, body),
+    mutationFn: (body: AnnotationCreateRequest) =>
+      getBrowserApiClient().createAnnotation(params.id, body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["annotations", params.id] }),
   });
 
   const deleteAnnotationMutation = useMutation({
-    mutationFn: (annotationId: string) => getBrowserApiClient().deleteAnnotation(params.id, annotationId),
+    mutationFn: (annotationId: string) =>
+      getBrowserApiClient().deleteAnnotation(params.id, annotationId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["annotations", params.id] }),
   });
 
@@ -737,12 +744,10 @@ export default function LecturePage() {
       // for whatever's left before/after the erased range (there's no update
       // endpoint, so this is delete + recreate rather than a resize).
       for (const a of overlapping) {
-        const before = a.start_offset! < offsets.start
-          ? { start: a.start_offset!, end: offsets.start }
-          : null;
-        const after = a.end_offset! > offsets.end
-          ? { start: offsets.end, end: a.end_offset! }
-          : null;
+        const before =
+          a.start_offset! < offsets.start ? { start: a.start_offset!, end: offsets.start } : null;
+        const after =
+          a.end_offset! > offsets.end ? { start: offsets.end, end: a.end_offset! } : null;
 
         deleteAnnotationMutation.mutate(a.id);
         if (before) {
@@ -951,14 +956,19 @@ export default function LecturePage() {
                   placeholder="Note..."
                   className="rounded-sm border border-border px-sm py-xs text-sm"
                 />
-                <button type="submit" className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted">
+                <button
+                  type="submit"
+                  className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
+                >
                   Save
                 </button>
               </form>
             )}
             {showExplainComingSoon && (
               <div className="flex items-center gap-sm px-sm py-xs">
-                <span className="text-sm text-muted-foreground">AI explanations are coming soon.</span>
+                <span className="text-sm text-muted-foreground">
+                  AI explanations are coming soon.
+                </span>
                 <button
                   type="button"
                   className="text-xs font-medium text-primary hover:underline"

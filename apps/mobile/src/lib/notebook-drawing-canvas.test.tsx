@@ -15,9 +15,13 @@ test("a touch drag produces a stroke with normalized points", () => {
   const canvas = screen.getByLabelText("Drawing canvas");
   fireEvent(canvas, "layout", layoutEvent(400, 300));
 
-  fireEvent(canvas, "responderGrant", { nativeEvent: { locationX: 40, locationY: 30, force: 0.5 } });
+  fireEvent(canvas, "responderGrant", {
+    nativeEvent: { locationX: 40, locationY: 30, force: 0.5 },
+  });
   fireEvent(canvas, "responderMove", { nativeEvent: { locationX: 80, locationY: 60, force: 0.6 } });
-  fireEvent(canvas, "responderMove", { nativeEvent: { locationX: 120, locationY: 90, force: 0.7 } });
+  fireEvent(canvas, "responderMove", {
+    nativeEvent: { locationX: 120, locationY: 90, force: 0.7 },
+  });
   fireEvent(canvas, "responderRelease", { nativeEvent: { locationX: 120, locationY: 90 } });
 
   expect(onChange).toHaveBeenCalledTimes(1);
@@ -46,8 +50,22 @@ test("does not emit a stroke for a single tap with no drag", () => {
 test("Undo last stroke removes only the most recent stroke", () => {
   const onChange = jest.fn();
   const strokes: Stroke[] = [
-    { color: "#000", width: 0.01, points: [{ x: 0, y: 0 }, { x: 0.1, y: 0.1 }] },
-    { color: "#fff", width: 0.01, points: [{ x: 0.2, y: 0.2 }, { x: 0.3, y: 0.3 }] },
+    {
+      color: "#000",
+      width: 0.01,
+      points: [
+        { x: 0, y: 0 },
+        { x: 0.1, y: 0.1 },
+      ],
+    },
+    {
+      color: "#fff",
+      width: 0.01,
+      points: [
+        { x: 0.2, y: 0.2 },
+        { x: 0.3, y: 0.3 },
+      ],
+    },
   ];
   render(<DrawingCanvas strokes={strokes} onChange={onChange} />);
 
@@ -59,7 +77,14 @@ test("Undo last stroke removes only the most recent stroke", () => {
 test("Clear removes all strokes", () => {
   const onChange = jest.fn();
   const strokes: Stroke[] = [
-    { color: "#000", width: 0.01, points: [{ x: 0, y: 0 }, { x: 0.1, y: 0.1 }] },
+    {
+      color: "#000",
+      width: 0.01,
+      points: [
+        { x: 0, y: 0 },
+        { x: 0.1, y: 0.1 },
+      ],
+    },
   ];
   render(<DrawingCanvas strokes={strokes} onChange={onChange} />);
 
@@ -79,7 +104,14 @@ test("readOnly hides the toolbar and doesn't attach a touch handler", () => {
 
 test("DrawingThumbnail renders without crashing for multiple strokes", () => {
   const strokes: Stroke[] = [
-    { color: "#000", width: 0.01, points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.5 }] },
+    {
+      color: "#000",
+      width: 0.01,
+      points: [
+        { x: 0, y: 0 },
+        { x: 0.5, y: 0.5 },
+      ],
+    },
     { color: "#f00", width: 0.02, points: [{ x: 0.2, y: 0.1 }] },
   ];
   render(<DrawingThumbnail strokes={strokes} />);

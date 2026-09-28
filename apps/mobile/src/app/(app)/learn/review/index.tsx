@@ -15,9 +15,7 @@ import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme
 function DueBadge({ count }: { count: number }) {
   return (
     <View style={[styles.dueBadge, count > 0 && styles.dueBadgeActive]}>
-      <Text style={[styles.dueBadgeText, count > 0 && styles.dueBadgeTextActive]}>
-        {count} due
-      </Text>
+      <Text style={[styles.dueBadgeText, count > 0 && styles.dueBadgeTextActive]}>{count} due</Text>
     </View>
   );
 }

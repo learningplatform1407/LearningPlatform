@@ -93,7 +93,12 @@ export default function LibraryPage() {
             const coverColor = coverColorForTitle(book.title);
             return (
               <li key={book.id}>
-                <Card as={Link} href={`/learn/library/${book.id}`} interactive className="block overflow-hidden p-0">
+                <Card
+                  as={Link}
+                  href={`/learn/library/${book.id}`}
+                  interactive
+                  className="block overflow-hidden p-0"
+                >
                   <div
                     className="relative flex aspect-[2/3] flex-col justify-between p-md text-white"
                     style={{ backgroundColor: coverColor }}

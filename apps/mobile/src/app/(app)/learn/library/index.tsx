@@ -1,7 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
@@ -50,7 +58,9 @@ export default function LibraryScreen() {
   if (books.isError) {
     return (
       <View style={styles.container}>
-        <Text style={styles.error}>Failed to load the library: {(books.error as Error).message}</Text>
+        <Text style={styles.error}>
+          Failed to load the library: {(books.error as Error).message}
+        </Text>
       </View>
     );
   }

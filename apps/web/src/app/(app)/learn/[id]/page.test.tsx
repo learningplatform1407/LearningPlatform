@@ -730,7 +730,9 @@ describe("LecturePage", () => {
   });
 
   test("two due words in the same paragraph are revealed one at a time, in order", async () => {
-    getDocument.mockResolvedValue(readyDocumentWithParagraph("The database index accelerates lookups."));
+    getDocument.mockResolvedValue(
+      readyDocumentWithParagraph("The database index accelerates lookups."),
+    );
     listDueClozeCards.mockResolvedValue([
       { id: "c1", document_id: "d1", block_index: 0, start_offset: 4, end_offset: 12 }, // "database"
       { id: "c2", document_id: "d1", block_index: 0, start_offset: 13, end_offset: 18 }, // "index"
@@ -823,7 +825,12 @@ describe("LecturePage", () => {
     listNotebookEntries.mockResolvedValue([
       { id: "n1", type: "text", content: "Existing note", strokes: null },
     ]);
-    updateNotebookEntry.mockResolvedValue({ id: "n1", type: "text", content: "Updated note", strokes: null });
+    updateNotebookEntry.mockResolvedValue({
+      id: "n1",
+      type: "text",
+      content: "Updated note",
+      strokes: null,
+    });
 
     renderPage();
     await screen.findByText("Hello world");
@@ -844,7 +851,12 @@ describe("LecturePage", () => {
 
   test("the notes panel shows an empty state and creates a new note tagged with the current lesson", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
-    createNotebookEntry.mockResolvedValue({ id: "n2", type: "text", content: "New note", strokes: null });
+    createNotebookEntry.mockResolvedValue({
+      id: "n2",
+      type: "text",
+      content: "New note",
+      strokes: null,
+    });
 
     renderPage();
     await screen.findByText("Hello world");

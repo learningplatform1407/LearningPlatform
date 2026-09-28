@@ -343,9 +343,7 @@ test("long-pressing a paragraph and choosing Explain shows a coming-soon message
 
   fireEvent.press(screen.getByText("Got it"));
 
-  await waitFor(() =>
-    expect(screen.queryByText("AI explanations are coming soon.")).toBeNull(),
-  );
+  await waitFor(() => expect(screen.queryByText("AI explanations are coming soon.")).toBeNull());
 });
 
 test("deleting a note from its modal calls the delete endpoint", async () => {
@@ -493,7 +491,9 @@ test("two due words in the same paragraph are revealed one at a time, in order",
 });
 
 test("grading a Review word submits the rating and shows the next-interval feedback", async () => {
-  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("The mitochondria produces energy."));
+  mockGetDocument.mockResolvedValue(
+    readyDocumentWithParagraph("The mitochondria produces energy."),
+  );
   mockListDueClozeCards.mockResolvedValue([
     { id: "c1", document_id: "d1", block_index: 0, start_offset: 4, end_offset: 16 },
   ]);
@@ -518,7 +518,9 @@ test("grading a Review word submits the rating and shows the next-interval feedb
 });
 
 test("the Review tab shows an empty state, with the lesson still fully readable, when nothing is due", async () => {
-  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("The mitochondria produces energy."));
+  mockGetDocument.mockResolvedValue(
+    readyDocumentWithParagraph("The mitochondria produces energy."),
+  );
   mockListDueClozeCards.mockResolvedValue([]);
 
   renderScreen();
@@ -533,7 +535,9 @@ test("the Review tab shows an empty state, with the lesson still fully readable,
 
 test("a ?tab=review deep link (e.g. from the review dashboard) opens straight to the Review tab", async () => {
   mockTabParam = "review";
-  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("The mitochondria produces energy."));
+  mockGetDocument.mockResolvedValue(
+    readyDocumentWithParagraph("The mitochondria produces energy."),
+  );
   mockListDueClozeCards.mockResolvedValue([]);
 
   renderScreen();
@@ -561,7 +565,12 @@ test("the Notes overlay lists notes and lets the user open one to edit", async (
   mockListNotebookEntries.mockResolvedValue([
     { id: "n1", type: "text", content: "Existing note", strokes: null },
   ]);
-  mockUpdateNotebookEntry.mockResolvedValue({ id: "n1", type: "text", content: "Updated note", strokes: null });
+  mockUpdateNotebookEntry.mockResolvedValue({
+    id: "n1",
+    type: "text",
+    content: "Updated note",
+    strokes: null,
+  });
 
   renderScreen();
   await screen.findByText("Hello world");
@@ -580,7 +589,12 @@ test("the Notes overlay lists notes and lets the user open one to edit", async (
 
 test("the Notes overlay shows an empty state and creates a new note tagged with the current lesson", async () => {
   mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
-  mockCreateNotebookEntry.mockResolvedValue({ id: "n2", type: "text", content: "New note", strokes: null });
+  mockCreateNotebookEntry.mockResolvedValue({
+    id: "n2",
+    type: "text",
+    content: "New note",
+    strokes: null,
+  });
 
   renderScreen();
   await screen.findByText("Hello world");
@@ -618,7 +632,11 @@ test("the Notes overlay closes via its Close button", async () => {
 test("the Contents overlay lists the current sub-chapter's lessons and navigates on press", async () => {
   mockGetDocument.mockResolvedValue({
     ...readyDocumentWithParagraph("Hello world"),
-    sub_chapter: { id: "sc1", title: "Sub A", chapter: { id: "c1", book_id: "b1", title: "Chapter One" } },
+    sub_chapter: {
+      id: "sc1",
+      title: "Sub A",
+      chapter: { id: "c1", book_id: "b1", title: "Chapter One" },
+    },
   });
   mockListDocuments.mockResolvedValue([
     { id: "d1", title: "Intro to Systems", created_at: "2026-01-01", status: "ready" },

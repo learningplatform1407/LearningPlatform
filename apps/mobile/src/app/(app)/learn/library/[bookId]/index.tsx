@@ -2,7 +2,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as DocumentPicker from "expo-document-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { sha256Hex } from "@/lib/checksum";
@@ -200,7 +208,9 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
   if (chapters.isError) {
     return (
       <View style={styles.container}>
-        <Text style={styles.error}>Failed to load chapters: {(chapters.error as Error).message}</Text>
+        <Text style={styles.error}>
+          Failed to load chapters: {(chapters.error as Error).message}
+        </Text>
       </View>
     );
   }

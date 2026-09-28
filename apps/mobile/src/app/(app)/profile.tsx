@@ -3,7 +3,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
@@ -184,7 +192,9 @@ export default function ProfileScreen() {
           <TextInput style={styles.input} value={university} onChangeText={setUniversity} />
 
           {saveMutation.isError && (
-            <Text style={styles.error}>Failed to save: {(saveMutation.error as Error).message}</Text>
+            <Text style={styles.error}>
+              Failed to save: {(saveMutation.error as Error).message}
+            </Text>
           )}
           <View style={styles.editActions}>
             <Pressable
@@ -193,7 +203,9 @@ export default function ProfileScreen() {
               disabled={saveMutation.isPending}
               accessibilityRole="button"
             >
-              <Text style={styles.saveButtonText}>{saveMutation.isPending ? "Saving..." : "Save"}</Text>
+              <Text style={styles.saveButtonText}>
+                {saveMutation.isPending ? "Saving..." : "Save"}
+              </Text>
             </Pressable>
             <Pressable
               style={styles.button}

@@ -59,8 +59,22 @@ describe("DrawingCanvas", () => {
   test("Undo last stroke removes only the most recent stroke", () => {
     const onChange = vi.fn();
     const strokes: Stroke[] = [
-      { color: "#000", width: 0.01, points: [{ x: 0, y: 0 }, { x: 0.1, y: 0.1 }] },
-      { color: "#fff", width: 0.01, points: [{ x: 0.2, y: 0.2 }, { x: 0.3, y: 0.3 }] },
+      {
+        color: "#000",
+        width: 0.01,
+        points: [
+          { x: 0, y: 0 },
+          { x: 0.1, y: 0.1 },
+        ],
+      },
+      {
+        color: "#fff",
+        width: 0.01,
+        points: [
+          { x: 0.2, y: 0.2 },
+          { x: 0.3, y: 0.3 },
+        ],
+      },
     ];
     render(<DrawingCanvas strokes={strokes} onChange={onChange} />);
 
@@ -72,7 +86,14 @@ describe("DrawingCanvas", () => {
   test("Clear removes all strokes", () => {
     const onChange = vi.fn();
     const strokes: Stroke[] = [
-      { color: "#000", width: 0.01, points: [{ x: 0, y: 0 }, { x: 0.1, y: 0.1 }] },
+      {
+        color: "#000",
+        width: 0.01,
+        points: [
+          { x: 0, y: 0 },
+          { x: 0.1, y: 0.1 },
+        ],
+      },
     ];
     render(<DrawingCanvas strokes={strokes} onChange={onChange} />);
 
@@ -100,7 +121,14 @@ describe("DrawingCanvas", () => {
 describe("DrawingThumbnail", () => {
   test("renders one polyline per stroke", () => {
     const strokes: Stroke[] = [
-      { color: "#000", width: 0.01, points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.5 }] },
+      {
+        color: "#000",
+        width: 0.01,
+        points: [
+          { x: 0, y: 0 },
+          { x: 0.5, y: 0.5 },
+        ],
+      },
       { color: "#f00", width: 0.02, points: [{ x: 0.2, y: 0.1 }] },
     ];
     const { container } = render(<DrawingThumbnail strokes={strokes} />);

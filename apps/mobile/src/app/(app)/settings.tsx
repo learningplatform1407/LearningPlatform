@@ -74,7 +74,9 @@ export default function SettingsScreen() {
           </Pressable>
         ))}
       </View>
-      <Text style={styles.hint}>Dark mode isn&apos;t implemented yet — this just saves your preference for later.</Text>
+      <Text style={styles.hint}>
+        Dark mode isn&apos;t implemented yet — this just saves your preference for later.
+      </Text>
 
       <View style={styles.row}>
         <Text style={styles.rowLabel}>Enable notifications</Text>
@@ -90,7 +92,9 @@ export default function SettingsScreen() {
             onPress={() => setLanguage(option.value)}
             accessibilityRole="button"
           >
-            <Text style={[styles.segmentText, language === option.value && styles.segmentTextActive]}>
+            <Text
+              style={[styles.segmentText, language === option.value && styles.segmentTextActive]}
+            >
               {option.label}
             </Text>
           </Pressable>

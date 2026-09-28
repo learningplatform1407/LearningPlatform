@@ -445,9 +445,7 @@ def test_review_summary_includes_zero_due_nodes(
     in the tree at due_count 0 -- this is a full course-structure view, not
     a filtered due-only list."""
     db_session.add(
-        Profile(
-            id=authenticated_user.id, settings=AccountSettings(user_id=authenticated_user.id)
-        )
+        Profile(id=authenticated_user.id, settings=AccountSettings(user_id=authenticated_user.id))
     )
     db_session.flush()
 
