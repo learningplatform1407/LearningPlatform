@@ -339,51 +339,56 @@ function ReviewTab({ documentId }: { documentId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-md">
-      {version?.status === "processing" && (
-        <p className="text-sm text-muted-foreground">Processing...</p>
-      )}
-      {version?.status === "failed" && (
-        <p role="alert" className="text-sm text-danger">
-          Processing failed: {version.error_message ?? "Unknown error"}
-        </p>
-      )}
-      {version?.status === "ready" && (
-        <article className="flex flex-col gap-md">
-          {blocks.map((block, index) => {
-            if (block.type === "heading") {
+    <div className="flex min-h-screen flex-col gap-md">
+      {/* flex-1 so the bar below always ends up pinned at the bottom of the
+          screen (via the sticky rule) even for a short lesson, instead of
+          floating right after a couple of lines of text. */}
+      <div className="flex-1">
+        {version?.status === "processing" && (
+          <p className="text-sm text-muted-foreground">Processing...</p>
+        )}
+        {version?.status === "failed" && (
+          <p role="alert" className="text-sm text-danger">
+            Processing failed: {version.error_message ?? "Unknown error"}
+          </p>
+        )}
+        {version?.status === "ready" && (
+          <article className="flex flex-col gap-md">
+            {blocks.map((block, index) => {
+              if (block.type === "heading") {
+                return (
+                  <h2 key={index} className="text-xl font-semibold text-foreground">
+                    {block.text}
+                  </h2>
+                );
+              }
+              if (block.type === "image") {
+                return block.image_path ? (
+                  <ExtractedImage key={index} path={block.image_path} />
+                ) : null;
+              }
+              const segments = spliceClozeSpans(block.text ?? "", spansByBlock.get(index) ?? []);
               return (
-                <h2 key={index} className="text-xl font-semibold text-foreground">
-                  {block.text}
-                </h2>
+                <p key={index} className="text-base leading-relaxed text-foreground">
+                  {segments.map((segment, i) =>
+                    segment.hidden ? (
+                      <span key={i} className="font-semibold text-muted-foreground">
+                        [...]
+                      </span>
+                    ) : segment.id === currentCard?.id ? (
+                      <span key={i} className="font-semibold text-primary">
+                        {segment.text}
+                      </span>
+                    ) : (
+                      <span key={i}>{segment.text}</span>
+                    ),
+                  )}
+                </p>
               );
-            }
-            if (block.type === "image") {
-              return block.image_path ? (
-                <ExtractedImage key={index} path={block.image_path} />
-              ) : null;
-            }
-            const segments = spliceClozeSpans(block.text ?? "", spansByBlock.get(index) ?? []);
-            return (
-              <p key={index} className="text-base leading-relaxed text-foreground">
-                {segments.map((segment, i) =>
-                  segment.hidden ? (
-                    <span key={i} className="font-semibold text-muted-foreground">
-                      [...]
-                    </span>
-                  ) : segment.id === currentCard?.id ? (
-                    <span key={i} className="font-semibold text-primary">
-                      {segment.text}
-                    </span>
-                  ) : (
-                    <span key={i}>{segment.text}</span>
-                  ),
-                )}
-              </p>
-            );
-          })}
-        </article>
-      )}
+            })}
+          </article>
+        )}
+      </div>
 
       {/* sticky (not fixed) so this only ever spans the lesson column's own
           width, same as the rest of this tab's content — a fixed bar would
@@ -828,7 +833,11 @@ export default function LecturePage() {
         onToolChange={setActiveTool}
       />
 
-      <div className="min-w-0 flex-1 p-xl">
+      {/* pb-0 for the Review tab: its sticky bottom bar supplies its own
+          padding and must sit flush with the true end of the page — a
+          trailing p-xl bottom padding here would let the page scroll a
+          bit past the bar's stuck position, dragging it up off the edge. */}
+      <div className={`min-w-0 flex-1 p-xl ${activeTab === "review" ? "pb-0" : ""}`}>
         <Link href="/learn" className="text-sm text-muted-foreground hover:underline">
           ← Learn
         </Link>

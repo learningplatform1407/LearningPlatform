@@ -167,11 +167,298 @@ function UncategorizedLessonsScreen() {
   );
 }
 
-interface ChapterRow {
-  id: string;
-  title: string;
-  count: number;
-  countLabel: string;
+function LessonList({
+  subChapterId,
+  isAdmin,
+  onUploaded,
+}: {
+  subChapterId: string;
+  isAdmin: boolean;
+  onUploaded?: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const documents = useQuery({
+    queryKey: ["documents", subChapterId],
+    queryFn: () => getApiClient().listDocuments(subChapterId),
+  });
+
+  const [title, setTitle] = useState("");
+  const [pickedFile, setPickedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const uploadMutation = useMutation({
+    mutationFn: async () => {
+      if (!pickedFile) throw new Error("Choose a PDF file first.");
+      if (pickedFile.mimeType !== "application/pdf") {
+        throw new Error("Only PDF files are supported.");
+      }
+      if (pickedFile.size && pickedFile.size > MAX_UPLOAD_BYTES) {
+        throw new Error("File must be under 50MB.");
+      }
+
+      const client = getApiClient();
+      const { storage_path, token } = await client.requestDocumentUploadUrl({
+        filename: pickedFile.name,
+        mime_type: "application/pdf",
+        size_bytes: pickedFile.size ?? 0,
+      });
+
+      const blob = await (await fetch(pickedFile.uri)).blob();
+      const { error: uploadStorageError } = await supabase.storage
+        .from("documents")
+        .uploadToSignedUrl(storage_path, token, blob, { contentType: "application/pdf" });
+      if (uploadStorageError) throw uploadStorageError;
+
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      const checksum = await sha256Hex(bytes);
+
+      return client.createDocument({
+        title,
+        storage_path,
+        mime_type: "application/pdf",
+        size_bytes: pickedFile.size ?? bytes.byteLength,
+        checksum,
+        sub_chapter_id: subChapterId === "none" ? undefined : subChapterId,
+      });
+    },
+    onSuccess: () => {
+      setTitle("");
+      setPickedFile(null);
+      queryClient.invalidateQueries({ queryKey: ["documents", subChapterId] });
+      onUploaded?.();
+    },
+    onError: (err) => {
+      setUploadError(err instanceof Error ? err.message : "Failed to upload document.");
+    },
+  });
+
+  async function handlePickFile() {
+    setUploadError(null);
+    const result = await DocumentPicker.getDocumentAsync({ type: "application/pdf" });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    if (!asset) return;
+    setPickedFile(asset);
+  }
+
+  if (documents.isPending) {
+    return <Text style={styles.loading}>Loading...</Text>;
+  }
+
+  if (documents.isError) {
+    return (
+      <Text style={styles.error}>Failed to load lessons: {(documents.error as Error).message}</Text>
+    );
+  }
+
+  return (
+    <View style={styles.lessonListContent}>
+      {documents.data.length === 0 ? (
+        <Text style={styles.empty}>No lessons yet.</Text>
+      ) : (
+        documents.data.map((item) => (
+          <Pressable
+            key={item.id}
+            style={styles.row}
+            onPress={() => router.push(`/learn/${item.id}`)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.rowTitle}>{item.title}</Text>
+            <Text style={styles.rowStatus}>
+              {item.status ? (STATUS_LABEL[item.status] ?? item.status) : ""}
+            </Text>
+          </Pressable>
+        ))
+      )}
+
+      {isAdmin && (
+        <View style={styles.uploadForm}>
+          <Text style={styles.uploadHeading}>Upload a lesson</Text>
+          <Text style={styles.label}>Title</Text>
+          <TextInput
+            testID="lesson-title-input"
+            style={styles.input}
+            value={title}
+            onChangeText={setTitle}
+          />
+
+          <Pressable style={styles.button} onPress={handlePickFile} accessibilityRole="button">
+            <Text style={styles.buttonText}>
+              {pickedFile ? pickedFile.name : "Choose PDF file"}
+            </Text>
+          </Pressable>
+
+          {uploadError && <Text style={styles.error}>{uploadError}</Text>}
+
+          <Pressable
+            style={[styles.button, styles.uploadButton]}
+            onPress={() => uploadMutation.mutate()}
+            disabled={uploadMutation.isPending || !title || !pickedFile}
+            accessibilityRole="button"
+          >
+            {uploadMutation.isPending ? (
+              <ActivityIndicator color={colors.primaryForeground} />
+            ) : (
+              <Text style={styles.uploadButtonText}>Upload</Text>
+            )}
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function SubChapterRow({
+  subChapter,
+  isAdmin,
+  isExpanded,
+  onToggle,
+  onUploaded,
+}: {
+  subChapter: { id: string; title: string; lesson_count: number };
+  isAdmin: boolean;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onUploaded: () => void;
+}) {
+  return (
+    <View style={styles.subChapterCard}>
+      <Pressable
+        style={styles.subChapterHeader}
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: isExpanded }}
+      >
+        <Text style={styles.rowTitle}>{subChapter.title}</Text>
+        <Text style={styles.rowStatus}>
+          {subChapter.lesson_count} {subChapter.lesson_count === 1 ? "lesson" : "lessons"}{" "}
+          {isExpanded ? "▲" : "▼"}
+        </Text>
+      </Pressable>
+      {isExpanded && (
+        <View style={styles.subChapterBody}>
+          <LessonList subChapterId={subChapter.id} isAdmin={isAdmin} onUploaded={onUploaded} />
+        </View>
+      )}
+    </View>
+  );
+}
+
+function ChapterRow({
+  chapter,
+  bookId,
+  isAdmin,
+  isExpanded,
+  onToggle,
+}: {
+  chapter: { id: string; title: string; sub_chapter_count: number };
+  bookId: string;
+  isAdmin: boolean;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const subChapters = useQuery({
+    queryKey: ["sub-chapters", chapter.id],
+    queryFn: () => getApiClient().listSubChapters(chapter.id),
+    enabled: isExpanded,
+  });
+
+  const [expandedSubChapterId, setExpandedSubChapterId] = useState<string | null>(null);
+  const [newSubChapterTitle, setNewSubChapterTitle] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const createSubChapterMutation = useMutation({
+    mutationFn: () => getApiClient().createSubChapter(chapter.id, { title: newSubChapterTitle }),
+    onSuccess: () => {
+      setNewSubChapterTitle("");
+      queryClient.invalidateQueries({ queryKey: ["sub-chapters", chapter.id] });
+      queryClient.invalidateQueries({ queryKey: ["chapters", bookId] });
+    },
+    onError: (err) => {
+      setCreateError(err instanceof Error ? err.message : "Failed to create sub-chapter.");
+    },
+  });
+
+  function invalidateSubChapters() {
+    queryClient.invalidateQueries({ queryKey: ["sub-chapters", chapter.id] });
+  }
+
+  return (
+    <View style={styles.chapterCard}>
+      <Pressable
+        style={styles.chapterHeader}
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: isExpanded }}
+      >
+        <Text style={styles.rowTitle}>{chapter.title}</Text>
+        <Text style={styles.rowStatus}>
+          {chapter.sub_chapter_count}{" "}
+          {chapter.sub_chapter_count === 1 ? "sub-chapter" : "sub-chapters"}{" "}
+          {isExpanded ? "▲" : "▼"}
+        </Text>
+      </Pressable>
+      {isExpanded && (
+        <View style={styles.chapterBody}>
+          {subChapters.isPending ? (
+            <Text style={styles.loading}>Loading...</Text>
+          ) : subChapters.isError ? (
+            <Text style={styles.error}>
+              Failed to load sub-chapters: {(subChapters.error as Error).message}
+            </Text>
+          ) : subChapters.data.length === 0 ? (
+            <Text style={styles.empty}>No sub-chapters yet.</Text>
+          ) : (
+            <View style={styles.subChapterList}>
+              {subChapters.data.map((subChapter) => (
+                <SubChapterRow
+                  key={subChapter.id}
+                  subChapter={subChapter}
+                  isAdmin={isAdmin}
+                  isExpanded={expandedSubChapterId === subChapter.id}
+                  onToggle={() =>
+                    setExpandedSubChapterId((current) =>
+                      current === subChapter.id ? null : subChapter.id,
+                    )
+                  }
+                  onUploaded={invalidateSubChapters}
+                />
+              ))}
+            </View>
+          )}
+
+          {isAdmin && (
+            <View style={styles.uploadForm}>
+              <Text style={styles.uploadHeading}>New sub-chapter</Text>
+              <Text style={styles.label}>Title</Text>
+              <TextInput
+                testID="sub-chapter-title-input"
+                style={styles.input}
+                value={newSubChapterTitle}
+                onChangeText={setNewSubChapterTitle}
+              />
+
+              {createError && <Text style={styles.error}>{createError}</Text>}
+
+              <Pressable
+                style={[styles.button, styles.uploadButton]}
+                onPress={() => createSubChapterMutation.mutate()}
+                disabled={createSubChapterMutation.isPending || !newSubChapterTitle}
+                accessibilityRole="button"
+              >
+                {createSubChapterMutation.isPending ? (
+                  <ActivityIndicator color={colors.primaryForeground} />
+                ) : (
+                  <Text style={styles.uploadButtonText}>Create sub-chapter</Text>
+                )}
+              </Pressable>
+            </View>
+          )}
+        </View>
+      )}
+    </View>
+  );
 }
 
 function BookChaptersScreen({ bookId }: { bookId: string }) {
@@ -182,6 +469,7 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
     queryFn: () => getApiClient().listChapters(bookId),
   });
 
+  const [expandedChapterId, setExpandedChapterId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -216,18 +504,12 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
   }
 
   const isAdmin = me.data?.role === "admin";
-  const rows: ChapterRow[] = chapters.data.map((chapter) => ({
-    id: chapter.id,
-    title: chapter.title,
-    count: chapter.sub_chapter_count,
-    countLabel: chapter.sub_chapter_count === 1 ? "sub-chapter" : "sub-chapters",
-  }));
 
   return (
     <FlatList
       style={styles.container}
       contentContainerStyle={styles.listContent}
-      data={rows}
+      data={chapters.data}
       keyExtractor={(chapter) => chapter.id}
       ListHeaderComponent={
         <>
@@ -239,16 +521,13 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
       }
       ListEmptyComponent={<Text style={styles.empty}>No chapters yet.</Text>}
       renderItem={({ item }) => (
-        <Pressable
-          style={styles.row}
-          onPress={() => router.push(`/learn/library/${bookId}/${item.id}`)}
-          accessibilityRole="button"
-        >
-          <Text style={styles.rowTitle}>{item.title}</Text>
-          <Text style={styles.rowStatus}>
-            {item.count} {item.countLabel}
-          </Text>
-        </Pressable>
+        <ChapterRow
+          chapter={item}
+          bookId={bookId}
+          isAdmin={isAdmin}
+          isExpanded={expandedChapterId === item.id}
+          onToggle={() => setExpandedChapterId((current) => (current === item.id ? null : item.id))}
+        />
       )}
       ListFooterComponent={
         isAdmin ? (
@@ -295,6 +574,9 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     gap: spacing.xs,
   },
+  lessonListContent: {
+    gap: spacing.xs,
+  },
   backLink: {
     fontSize: fontSizes.sm,
     color: colors.mutedForeground,
@@ -310,6 +592,43 @@ const styles = StyleSheet.create({
   empty: {
     fontSize: fontSizes.sm,
     color: colors.mutedForeground,
+  },
+  chapterCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+  },
+  chapterHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  chapterBody: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    padding: spacing.md,
+  },
+  subChapterList: {
+    gap: spacing.xs,
+  },
+  subChapterCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+  },
+  subChapterHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  subChapterBody: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    padding: spacing.md,
   },
   row: {
     flexDirection: "row",
@@ -331,7 +650,7 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
   },
   uploadForm: {
-    marginTop: spacing.xl,
+    marginTop: spacing.lg,
     paddingTop: spacing.lg,
     borderTopWidth: 1,
     borderTopColor: colors.border,

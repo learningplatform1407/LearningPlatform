@@ -61,11 +61,11 @@ export default function SettingsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-[32rem] p-xl">
+    <main className="p-xl">
       <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
 
       <form
-        className="mt-lg flex flex-col gap-lg"
+        className="mt-lg flex max-w-[32rem] flex-col gap-lg"
         onSubmit={(event) => {
           event.preventDefault();
           saveMutation.mutate();

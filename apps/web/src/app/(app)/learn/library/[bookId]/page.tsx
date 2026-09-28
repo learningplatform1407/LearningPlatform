@@ -149,6 +149,305 @@ function UncategorizedLessonsPage() {
   );
 }
 
+function LessonList({
+  subChapterId,
+  isAdmin,
+  invalidateKeys = [],
+}: {
+  subChapterId: string;
+  isAdmin: boolean;
+  invalidateKeys?: unknown[][];
+}) {
+  const queryClient = useQueryClient();
+  const documents = useQuery({
+    queryKey: ["documents", subChapterId],
+    queryFn: () => getBrowserApiClient().listDocuments(subChapterId),
+  });
+
+  const [title, setTitle] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const uploadMutation = useMutation({
+    mutationFn: async () => {
+      if (!file) throw new Error("Choose a PDF file first.");
+      if (file.type !== "application/pdf") throw new Error("Only PDF files are supported.");
+      if (file.size > MAX_UPLOAD_BYTES) throw new Error("File must be under 50MB.");
+
+      const client = getBrowserApiClient();
+      const { storage_path, token } = await client.requestDocumentUploadUrl({
+        filename: file.name,
+        mime_type: "application/pdf",
+        size_bytes: file.size,
+      });
+
+      const supabase = createClient();
+      const { error: uploadStorageError } = await supabase.storage
+        .from("documents")
+        .uploadToSignedUrl(storage_path, token, file, { contentType: "application/pdf" });
+      if (uploadStorageError) throw uploadStorageError;
+
+      const checksum = await sha256Hex(file);
+      return client.createDocument({
+        title,
+        storage_path,
+        mime_type: "application/pdf",
+        size_bytes: file.size,
+        checksum,
+        sub_chapter_id: subChapterId === "none" ? undefined : subChapterId,
+      });
+    },
+    onSuccess: () => {
+      setTitle("");
+      setFile(null);
+      queryClient.invalidateQueries({ queryKey: ["documents", subChapterId] });
+      for (const key of invalidateKeys) {
+        queryClient.invalidateQueries({ queryKey: key });
+      }
+    },
+    onError: (err) => {
+      setUploadError(err instanceof Error ? err.message : "Failed to upload document.");
+    },
+  });
+
+  if (documents.isPending) {
+    return <p className="text-sm text-muted-foreground">Loading...</p>;
+  }
+
+  if (documents.isError) {
+    return (
+      <p role="alert" className="text-sm text-danger">
+        Failed to load lessons: {(documents.error as Error).message}
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      {documents.data.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No lessons yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-xs">
+          {documents.data.map((doc) => (
+            <li key={doc.id}>
+              <Link
+                href={`/learn/${doc.id}`}
+                className="flex items-center justify-between rounded-md border border-border px-md py-sm hover:bg-muted"
+              >
+                <span className="text-sm font-medium text-foreground">{doc.title}</span>
+                <span className="text-xs text-muted-foreground">
+                  {doc.status ? (STATUS_LABEL[doc.status] ?? doc.status) : ""}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {isAdmin && (
+        <form
+          className="mt-lg flex max-w-[24rem] flex-col gap-md border-t border-border pt-lg"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setUploadError(null);
+            uploadMutation.mutate();
+          }}
+        >
+          <h3 className="text-sm font-semibold text-foreground">Upload a lesson</h3>
+          <label className="flex flex-col gap-xs text-sm text-foreground">
+            Title
+            <input
+              type="text"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              required
+              className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </label>
+          <label className="flex flex-col gap-xs text-sm text-foreground">
+            PDF file
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              required
+            />
+          </label>
+          {uploadError && (
+            <p role="alert" className="text-sm text-danger">
+              {uploadError}
+            </p>
+          )}
+          <Button type="submit" disabled={uploadMutation.isPending} className="self-start">
+            {uploadMutation.isPending ? "Uploading..." : "Upload"}
+          </Button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function SubChapterRow({
+  subChapter,
+  chapterId,
+  isAdmin,
+  isExpanded,
+  onToggle,
+}: {
+  subChapter: { id: string; title: string; lesson_count: number };
+  chapterId: string;
+  isAdmin: boolean;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <li className="rounded-md border border-border">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={isExpanded}
+        className="flex w-full items-center justify-between px-md py-sm text-left hover:bg-muted"
+      >
+        <span className="text-sm font-medium text-foreground">{subChapter.title}</span>
+        <span className="text-xs text-muted-foreground">
+          {subChapter.lesson_count} {subChapter.lesson_count === 1 ? "lesson" : "lessons"}{" "}
+          {isExpanded ? "▲" : "▼"}
+        </span>
+      </button>
+      {isExpanded && (
+        <div className="border-t border-border px-md py-md">
+          <LessonList
+            subChapterId={subChapter.id}
+            isAdmin={isAdmin}
+            invalidateKeys={[["sub-chapters", chapterId]]}
+          />
+        </div>
+      )}
+    </li>
+  );
+}
+
+function ChapterRow({
+  chapter,
+  bookId,
+  isAdmin,
+  isExpanded,
+  onToggle,
+}: {
+  chapter: { id: string; title: string; sub_chapter_count: number };
+  bookId: string;
+  isAdmin: boolean;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const subChapters = useQuery({
+    queryKey: ["sub-chapters", chapter.id],
+    queryFn: () => getBrowserApiClient().listSubChapters(chapter.id),
+    enabled: isExpanded,
+  });
+
+  const [expandedSubChapterId, setExpandedSubChapterId] = useState<string | null>(null);
+  const [newSubChapterTitle, setNewSubChapterTitle] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const createSubChapterMutation = useMutation({
+    mutationFn: () =>
+      getBrowserApiClient().createSubChapter(chapter.id, { title: newSubChapterTitle }),
+    onSuccess: () => {
+      setNewSubChapterTitle("");
+      queryClient.invalidateQueries({ queryKey: ["sub-chapters", chapter.id] });
+      queryClient.invalidateQueries({ queryKey: ["chapters", bookId] });
+    },
+    onError: (err) => {
+      setCreateError(err instanceof Error ? err.message : "Failed to create sub-chapter.");
+    },
+  });
+
+  return (
+    <li className="rounded-md border border-border">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={isExpanded}
+        className="flex w-full items-center justify-between px-md py-sm text-left hover:bg-muted"
+      >
+        <span className="text-sm font-medium text-foreground">{chapter.title}</span>
+        <span className="text-xs text-muted-foreground">
+          {chapter.sub_chapter_count}{" "}
+          {chapter.sub_chapter_count === 1 ? "sub-chapter" : "sub-chapters"}{" "}
+          {isExpanded ? "▲" : "▼"}
+        </span>
+      </button>
+      {isExpanded && (
+        <div className="border-t border-border px-md py-md">
+          {subChapters.isPending ? (
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          ) : subChapters.isError ? (
+            <p role="alert" className="text-sm text-danger">
+              Failed to load sub-chapters: {(subChapters.error as Error).message}
+            </p>
+          ) : subChapters.data.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No sub-chapters yet.</p>
+          ) : (
+            <ul className="flex flex-col gap-xs">
+              {subChapters.data.map((subChapter) => (
+                <SubChapterRow
+                  key={subChapter.id}
+                  subChapter={subChapter}
+                  chapterId={chapter.id}
+                  isAdmin={isAdmin}
+                  isExpanded={expandedSubChapterId === subChapter.id}
+                  onToggle={() =>
+                    setExpandedSubChapterId((current) =>
+                      current === subChapter.id ? null : subChapter.id,
+                    )
+                  }
+                />
+              ))}
+            </ul>
+          )}
+
+          {isAdmin && (
+            <form
+              className="mt-lg flex max-w-[24rem] flex-col gap-md border-t border-border pt-lg"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setCreateError(null);
+                createSubChapterMutation.mutate();
+              }}
+            >
+              <h3 className="text-sm font-semibold text-foreground">New sub-chapter</h3>
+              <label className="flex flex-col gap-xs text-sm text-foreground">
+                Title
+                <input
+                  type="text"
+                  value={newSubChapterTitle}
+                  onChange={(event) => setNewSubChapterTitle(event.target.value)}
+                  required
+                  className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </label>
+              {createError && (
+                <p role="alert" className="text-sm text-danger">
+                  {createError}
+                </p>
+              )}
+              <Button
+                type="submit"
+                disabled={createSubChapterMutation.isPending}
+                className="self-start"
+              >
+                {createSubChapterMutation.isPending ? "Creating..." : "Create sub-chapter"}
+              </Button>
+            </form>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
 function BookChaptersPage({ bookId }: { bookId: string }) {
   const queryClient = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => getBrowserApiClient().getMe() });
@@ -157,6 +456,7 @@ function BookChaptersPage({ bookId }: { bookId: string }) {
     queryFn: () => getBrowserApiClient().listChapters(bookId),
   });
 
+  const [expandedChapterId, setExpandedChapterId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -204,18 +504,16 @@ function BookChaptersPage({ bookId }: { bookId: string }) {
       ) : (
         <ul className="mt-lg flex flex-col gap-xs">
           {chapters.data.map((chapter) => (
-            <li key={chapter.id}>
-              <Link
-                href={`/learn/library/${bookId}/${chapter.id}`}
-                className="flex items-center justify-between rounded-md border border-border px-md py-sm hover:bg-muted"
-              >
-                <span className="text-sm font-medium text-foreground">{chapter.title}</span>
-                <span className="text-xs text-muted-foreground">
-                  {chapter.sub_chapter_count}{" "}
-                  {chapter.sub_chapter_count === 1 ? "sub-chapter" : "sub-chapters"}
-                </span>
-              </Link>
-            </li>
+            <ChapterRow
+              key={chapter.id}
+              chapter={chapter}
+              bookId={bookId}
+              isAdmin={isAdmin}
+              isExpanded={expandedChapterId === chapter.id}
+              onToggle={() =>
+                setExpandedChapterId((current) => (current === chapter.id ? null : chapter.id))
+              }
+            />
           ))}
         </ul>
       )}

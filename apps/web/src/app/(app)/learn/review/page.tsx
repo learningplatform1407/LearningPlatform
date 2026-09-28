@@ -39,8 +39,8 @@ function LessonRow({ lesson }: { lesson: ReviewSummaryLesson }) {
   );
 }
 
-// Same accordion interaction as the Library page's chapter view
-// (SubChapterRow in learn/library/[bookId]/[chapterId]/page.tsx) — a
+// Same accordion interaction as the Library page's chapter/sub-chapter rows
+// (ChapterRow/SubChapterRow in learn/library/[bookId]/page.tsx) — a
 // button row with aria-expanded and a ▲/▼ indicator — but the whole tree
 // is already in memory here (one eager fetch, due-counts require walking
 // every lesson anyway), so expanding never triggers another request.

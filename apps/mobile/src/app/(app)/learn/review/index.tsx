@@ -33,8 +33,8 @@ function LessonRow({ lesson }: { lesson: ReviewSummaryLesson }) {
   );
 }
 
-// Same accordion interaction as the Library chapter screen's SubChapterRow
-// (learn/library/[bookId]/[chapterId].tsx), but each row owns its own
+// Same accordion interaction as the Library screen's ChapterRow/SubChapterRow
+// (learn/library/[bookId]/index.tsx), but each row owns its own
 // expanded state rather than sharing one "which row is open" slot -- the
 // whole tree is already in memory here (one eager fetch), so there's no
 // cost to letting several nodes stay open at once while comparing counts.
