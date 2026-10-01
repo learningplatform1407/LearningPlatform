@@ -31,8 +31,8 @@ describe("LearnPage", () => {
 
     const libraryLink = await screen.findByRole("link", { name: /Library/ });
     expect(libraryLink).toHaveAttribute("href", "/learn/library");
-    const quizzesLink = screen.getByRole("link", { name: /Quizzes/ });
-    expect(quizzesLink).toHaveAttribute("href", "/learn/quizzes");
+    const quizzesLink = screen.getByRole("link", { name: /Question Bank/ });
+    expect(quizzesLink).toHaveAttribute("href", "/question-bank");
     const flashcardsLink = screen.getByRole("link", { name: /Flashcards/ });
     expect(flashcardsLink).toHaveAttribute("href", "/learn/flashcards");
     const notebookLink = screen.getByRole("link", { name: /Notebook/ });

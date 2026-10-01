@@ -49,7 +49,7 @@ test("navigates to Library, Quizzes, Flashcards, and Notebook", async () => {
   expect(router.push).toHaveBeenCalledWith("/learn/library");
 
   fireEvent.press(screen.getByText("Quizzes"));
-  expect(router.push).toHaveBeenCalledWith("/learn/quizzes");
+  expect(router.push).toHaveBeenCalledWith("/question-bank");
 
   fireEvent.press(screen.getByText("Flashcards"));
   expect(router.push).toHaveBeenCalledWith("/learn/flashcards");

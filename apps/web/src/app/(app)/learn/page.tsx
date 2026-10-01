@@ -93,8 +93,8 @@ export default function LearnPage() {
             See how many words are due today, across every lesson.
           </p>
         </Card>
-        <Card as={Link} href="/learn/quizzes" interactive className="block p-lg">
-          <p className="text-lg font-semibold text-foreground">Quizzes</p>
+        <Card as={Link} href="/question-bank" interactive className="block p-lg">
+          <p className="text-lg font-semibold text-foreground">Question Bank</p>
           <p className="mt-xs text-sm text-muted-foreground">Coming soon.</p>
         </Card>
         <Card as={Link} href="/learn/flashcards" interactive className="block p-lg">

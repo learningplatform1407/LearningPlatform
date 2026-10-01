@@ -73,6 +73,8 @@ export default function AppLayout() {
         }}
       >
         <Drawer.Screen name="learn" options={{ drawerLabel: "Learn" }} />
+        <Drawer.Screen name="question-bank" options={{ drawerLabel: "Question Bank" }} />
+        <Drawer.Screen name="exams" options={{ drawerLabel: "Exams" }} />
         <Drawer.Screen name="assistant" options={{ drawerLabel: "AI Assistant" }} />
         <Drawer.Screen name="roadmap" options={{ drawerLabel: "Roadmap" }} />
         <Drawer.Screen name="feed" options={{ drawerLabel: "Feed" }} />
@@ -93,6 +95,8 @@ export default function AppLayout() {
       }}
     >
       <Tabs.Screen name="learn" options={{ title: "Learn" }} />
+      <Tabs.Screen name="question-bank" options={{ title: "Bank" }} />
+      <Tabs.Screen name="exams" options={{ title: "Exams" }} />
       <Tabs.Screen name="assistant" options={{ title: "AI Assistant" }} />
       <Tabs.Screen name="roadmap" options={{ title: "Roadmap" }} />
       <Tabs.Screen name="feed" options={{ title: "Feed" }} />
