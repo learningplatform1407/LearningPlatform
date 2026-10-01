@@ -10,7 +10,7 @@ Read in order. §1–4 are context, §5–7 are the contract, §8–10 are the r
 
 ## 1. Why this document exists
 
-`TASKS_SPLIT.md` deferred quizzes three separate times, always for the same reason: the question shape and grading model were never decided. The artefacts of that deferral are still in the tree — `services/api/app/documents/models.py` defines a `Quiz` shell table whose docstring reads _"Shell record only — no question sub-schema yet, that's still a product-undecided future pass"_, `GET /v1/documents/{id}/quizzes` always returns `[]`, and `/learn/quizzes` renders "Coming soon." on both web and mobile.
+`TASKS_SPLIT.md` deferred quizzes three separate times, always for the same reason: the question shape and grading model were never decided. The artefacts of that deferral are still in the tree — `services/api/app/documents/models.py` defines a `Quiz` shell table whose docstring reads _"Shell record only — no question sub-schema yet, that's still a product-undecided future pass"_, `GET /v1/documents/{id}/quizzes` always returns `[]`, and `/learn/quizzes` rendered "Coming soon." on both web and mobile until this work replaced it.
 
 This document records the decision and the design that follows from it.
 
@@ -276,6 +276,16 @@ Three rules govern what gets written:
 - Lesson quizzes and custom quizzes both write progress. A student who answers 50 cardiology questions in a custom quiz sees their topic view move.
 
 An index on `(user_id, question_id)` is the PK; add `Index("ix_question_progress_user_outcome", "user_id", "outcome")` for the dashboard's group-by.
+
+**Browsing reads this table too.** Every item from `GET /v1/question-bank` carries a `progress` object — `outcome`, `points_awarded`, `points_possible`, `attempt_count`, `last_answered_at` — or `null` when the caller has never attempted it. Both browse surfaces (the Question Bank tree and the lesson reader's Quizzes tab) render the same `QuestionBankList`, so one field marks both.
+
+Three things make this safe and honest:
+
+- **`null` is not a zero row.** "Never attempted" and "attempted and scored 0" are different states and must render differently, so the absence of a row stays absent rather than being flattened into a zero-scored one.
+- **A score is not the answer key.** `3/5` says how many options were classified correctly, not which ones, and it only ever describes the caller's own past attempt — so §7.1's rule that the key never leaves `/results` is untouched. Unlike the revision endpoint at §7.3, the progress join here is _not_ an authorisation check: the pool is already filtered to published questions, and the join only decorates it.
+- **One query per page, not per question.** `get_progress_for_questions` takes the whole page of ids at once, so marking a 50-item browse costs a single extra round trip.
+
+The marker is outcome-coloured rather than a bare tick, reusing the three-state palette from §9: a question seen and failed is the most useful thing on a revision screen, and a plain tick would hide it.
 
 ---
 
@@ -776,6 +786,31 @@ Postgres plans `IN (subquery)` as a **semi-join** — it stops at the first matc
 
 **Call `get_or_create_profile(db, user)` before the first insert.** `quiz_sessions.user_id` FKs to `profiles.id` and a user can reach this endpoint before ever calling `GET /v1/me`. Three existing code comments and a dedicated regression test cover this exact trap.
 
+### 8.6 Topic and tag axes (supersedes the original tag rule)
+
+The topic axis accepts chapters, sub-chapters and lessons together; the server
+expands them to a lesson set (`resolve_topic_documents`) and they **OR**. The
+tag axis **ANDs**: a question must carry every selected tag, so
+`{treatment, rezidentiat 2022}` means both, not either. This reverses the
+original "OR within each" rule for tags only.
+
+Implemented as one correlated `EXISTS` per tag rather than
+`GROUP BY … HAVING COUNT(DISTINCT …)`: `EXISTS` binds both columns of
+`ix_question_tags_tag_id_question_id` to equality and composes with the topic
+narrowing, while `HAVING` is uncorrelated and must aggregate every index entry
+for every selected tag first. A duplicated tag id is also harmless under
+`EXISTS` and silently matches nothing under `HAVING`. Bounded by
+`MAX_FILTER_TAGS`.
+
+`None` and `[]` differ on the topic axis. `None` means no topic filter; `[]`
+means a topic was selected that expands to zero lessons, which must match
+nothing — reading it as "no filter" would hand the whole bank to someone who
+picked an empty chapter.
+
+`filter_spec` records the selection verbatim, the resolved lesson ids, and
+`tag_match: "all"`. Sessions saved before this change lack that key and keep
+their original `"any"` meaning, so no finished attempt is reinterpreted.
+
 ### 8.5 Pinned semantics
 
 | Question                         | Answer                                                                                                          |
@@ -783,7 +818,7 @@ Postgres plans `IN (subquery)` as a **semi-join** — it stops at the first matc
 | `position` base                  | **0-based**, matching the `order_index` convention already in the schema                                        |
 | `tag_ids: []` or absent          | Both mean **no tag filter**. Never emit `IN ()` — it matches nothing and turns an unfiltered quiz into an error |
 | `document_ids: []` or absent     | Same — no document filter                                                                                       |
-| Combining the two                | AND across axes, OR within each                                                                                 |
+| Combining the two                | AND across axes. Topics OR within the axis; **tags AND** (changed — see §8.6)                                   |
 | `remaining_seconds` when untimed | **`null`**, not a large number                                                                                  |
 | Option order                     | Authored order, **never shuffled** in v1                                                                        |
 | Empty `selected_option_ids`      | Clears the answer. Allowed under `on_finish`, rejected under `immediate`                                        |
@@ -796,13 +831,15 @@ Postgres plans `IN (subquery)` as a **semi-join** — it stops at the first matc
 
 ### 9.1 Screen flows
 
-**`/learn/quizzes` (landing).** `GET /current` plus `GET /quiz-sessions` (history). Open session → resume card. No open session → start form.
+**`/exams` (landing, runner and results).** `GET /current` plus `GET /quiz-sessions` (history). Open session → runner. No open session → start form. Terminal session → results.
 
-The landing page **must** show recent history, and not as a nicety: if a session expires while the user is away, `/current` correctly returns `null` and the expiry would otherwise be completely invisible — the user sees an empty start form with no hint their quiz ended. History is what makes that discoverable.
+> **Implemented as one route, not three.** This section originally specified `/learn/quizzes`, `/learn/quizzes/[sessionId]` and `/learn/quizzes/[sessionId]/results`. Quiz-taking now lives under `/exams` (§9.6), and the three screens are **states of that single page** driven by `GET /current`, because the session id was never addressable in practice: a user may hold only one open session, so `/current` already identifies it, and a per-session URL invites exactly the stale-link cases the two redirect rules below existed to paper over. Those rules survive as state transitions rather than redirects.
 
-**`/learn/quizzes/[sessionId]` (runner).** If the session is terminal, **redirect to `/results`** rather than rendering a dead quiz with a frozen timer. This is the normal path for a link opened after an expiry, not an exotic one.
+The landing state **must** show recent history, and not as a nicety: if a session expires while the user is away, `/current` correctly returns `null` and the expiry would otherwise be completely invisible — the user sees an empty start form with no hint their quiz ended. History is what makes that discoverable.
 
-**`/learn/quizzes/[sessionId]/results`.** If the session is still open the API answers 409 — **redirect back to the runner** rather than surfacing the error. Someone who bookmarked the results URL mid-quiz should land where the quiz is.
+**Terminal session → results, never a dead runner.** A session that expired or was submitted must not render as a quiz with a frozen timer.
+
+**Open session → runner, never results.** `/results` answers 409 while the session is open, and the page shows the runner rather than surfacing that error.
 
 **Starting while one is already open** returns `session_already_open`. The start form shows "You already have a quiz in progress" with a link, and refetches `/current`. Never a raw error toast.
 
@@ -893,7 +930,7 @@ Same on both platforms, stacked in this order:
 | incorrect  | answered, `immediate`, `points_awarded == 0`                  | `--color-danger`, cross glyph           |
 | current    | the visible question                                          | `border-primary`, `aria-current="step"` |
 
-Per-option marking means a multi question is very often **partial**, so the palette needs three graded states, not two — `--color-warning` exists in `globals.css` and is currently unused. A `single_4` question can only ever be correct or incorrect, never partial. Graded chips appear **only** under `reveal_mode="immediate"`. Under `on_finish` the palette shows nothing beyond answered-or-not, or it leaks the answer key through the navigation UI — the same integrity boundary `/results` enforces server-side.
+Per-option marking means a multi question is very often **partial**, so the palette needs three graded states, not two — hence `--color-warning` in `globals.css` alongside success and danger. A `single_4` question can only ever be correct or incorrect, never partial. Graded chips appear **only** under `reveal_mode="immediate"`. Under `on_finish` the palette shows nothing beyond answered-or-not, or it leaks the answer key through the navigation UI — the same integrity boundary `/results` enforces server-side.
 
 Never encode state in colour alone: each chip pairs colour with a glyph and an `aria-label` ("Question 3, answered, correct"). Colour-only status fails WCAG 1.4.1, and on a grid of small chips it is genuinely hard to read. The palette is a `role="group"` with an `aria-label`, matching the `role="toolbar"` / `aria-pressed` idiom already used by `AnnotationToolbar` in the lesson reader.
 
@@ -989,7 +1026,7 @@ Do these in order. Steps 2 and 3 are the ones people skip and then debug for an 
 7. **Routers** — `/v1/questions` (all `require_admin`) and the single-route `/v1/tags`. Register both in `app/main.py`. Reuse `require_admin` from `app/documents/dependencies.py` and `ApiError` from `app/common/errors.py` as-is. (`require_admin` living in the `documents` package despite four domains importing it is pre-existing oddity — not this feature's to fix.)
 8. **Tests** — `tests/test_questions.py`. Every §7.1 validation rule gets a rejection test.
 9. **Contracts, all four layers in order** — zod schemas in `packages/validation/src/index.ts` (+ a realistic-payload test each) → `z.infer` aliases in `packages/contracts/src/index.ts` → `listQuestions` / `createQuestion` / `updateQuestion` / `archiveQuestion` / `importQuestions` / `listTags` in `packages/api-client/src/index.ts` (+ a URL/method test each).
-10. **Admin import UI, web only** — `apps/web/src/app/(app)/learn/quizzes/manage/page.tsx`, gated on `me.data?.role === "admin"` (the pattern in `learn/library/[bookId]/page.tsx`). File input plus JSON textarea, with a **dry-run preview** showing parsed counts and validation errors before committing. Deliberately not on mobile — bulk JSON authoring on a phone has no real use, and this is the one intentional break in web/mobile parity.
+10. **Admin import UI, web only** — `apps/web/src/app/(app)/learn/quizzes/manage/page.tsx` (since moved to `question-bank/manage/`, §9.6), gated on `me.data?.role === "admin"` (the pattern in `learn/library/[bookId]/page.tsx`). File input plus JSON textarea, with a **dry-run preview** showing parsed counts and validation errors before committing. Deliberately not on mobile — bulk JSON authoring on a phone has no real use, and this is the one intentional break in web/mobile parity.
 
 ### PR 2 — `feat/quiz-sessions` (QUIZ-6 … QUIZ-11)
 
@@ -1016,19 +1053,23 @@ Split out of PR 2 deliberately. PR 2 already carries the timer, the state machin
 
 **Web file layout**
 
+As built, after the §9.6 move — the three session screens collapsed into one
+route, per the note in §9.1:
+
 ```
-learn/quizzes/page.tsx                      start form / resume card ("use client")
-learn/quizzes/[sessionId]/page.tsx          runner
-learn/quizzes/[sessionId]/results/page.tsx  reveal
-learn/quizzes/manage/page.tsx               admin import (PR 1)
+exams/page.tsx                  start form / runner / results / history ("use client")
+question-bank/page.tsx          the content tree, expandable to questions
+question-bank/manage/page.tsx   admin import (PR 1)
+components/question-bank-list.tsx   browse + answer inline, shared with the lesson reader
+components/expandable-row.tsx       multi-open expander, shared with the review screen
 ```
 
 **Mobile file layout** — note the runner is `[sessionId]/index.tsx`, **not** `[sessionId].tsx`: a file and a directory of the same name cannot coexist in Expo Router, so the flat form collides with `results.tsx`.
 
 ```
-learn/quizzes/index.tsx
-learn/quizzes/[sessionId]/index.tsx
-learn/quizzes/[sessionId]/results.tsx
+exams/index.tsx
+exams/[sessionId]/index.tsx
+exams/[sessionId]/results.tsx
 ```
 
 `learn/_layout.tsx` is already a `Stack`, so the nested directory nests under the single "Learn" entry rather than leaking as its own tab (the trap LECTURES-18 hit and fixed).
@@ -1104,7 +1145,7 @@ quiz_event_enrolments
   enrolled_at
 ```
 
-**Visibility without a session.** Pre-creating a `quiz_sessions` row for every user when an exam is scheduled is wrong twice over: it writes one mostly-unused row per user per exam, and it collides with the one-open-session index for everyone currently practising. Instead `GET /v1/quiz-events/upcoming` returns published events whose window is still open, powering a banner on `/learn/quizzes` and the Learn hub — countdown before `starts_at`, Start inside the window, results after. **The session row is created lazily, the moment the user enters the exam.**
+**Visibility without a session.** Pre-creating a `quiz_sessions` row for every user when an exam is scheduled is wrong twice over: it writes one mostly-unused row per user per exam, and it collides with the one-open-session index for everyone currently practising. Instead `GET /v1/quiz-events/upcoming` returns published events whose window is still open, powering a banner on `/exams` and the Learn hub — countdown before `starts_at`, Start inside the window, results after. **The session row is created lazily, the moment the user enters the exam.**
 
 **`shared_questions`** is what makes scores comparable: sample once at the event level into a `quiz_event_questions` table, and each session copies that frozen list rather than drawing its own. A future leaderboard or percentile needs this.
 

@@ -1,0 +1,55 @@
+{
+  "allow_new_tags": true,
+  "questions": [
+    {
+      "external_id": "lesson-b-001",
+      "document_id": "648089c1-837b-41e9-83bf-e87adcd25607",
+      "prompt": "Which single agent most directly reduces cardiac preload?",
+      "kind": "single",
+      "scoring_scheme": "single_4",
+      "difficulty": "easy",
+      "status": "published",
+      "tags": ["cardiology"],
+      "options": [
+        { "id": "a", "text": "Nitroglycerin" },
+        { "id": "b", "text": "Phenylephrine" },
+        { "id": "c", "text": "Noradrenaline" },
+        { "id": "d", "text": "Dobutamine" }
+      ],
+      "correct_option_ids": ["a"],
+      "rationales": {
+        "a": "Venodilation reduces venous return, lowering preload.",
+        "b": "An alpha-1 agonist; raises afterload instead.",
+        "c": "Vasopressor — raises preload and afterload.",
+        "d": "Inotrope; increases contractility, not a preload reducer."
+      },
+      "explanation": "Preload is venous return. Venodilators lower it."
+    },
+    {
+      "external_id": "lesson-b-002",
+      "document_id": "648089c1-837b-41e9-83bf-e87adcd25607",
+      "prompt": "Which of the following reduce cardiac preload?",
+      "kind": "multi",
+      "scoring_scheme": "multi_5_per_option",
+      "difficulty": "medium",
+      "status": "published",
+      "tags": ["cardiology", "pharmacology"],
+      "options": [
+        { "id": "a", "text": "Nitroglycerin" },
+        { "id": "b", "text": "Furosemide" },
+        { "id": "c", "text": "Phenylephrine" },
+        { "id": "d", "text": "Noradrenaline" },
+        { "id": "e", "text": "Dobutamine" }
+      ],
+      "correct_option_ids": ["a", "b"],
+      "rationales": {
+        "a": "Venodilation reduces venous return.",
+        "b": "Diuresis reduces circulating volume.",
+        "c": "Alpha-1 agonist; raises afterload.",
+        "d": "Vasopressor — raises preload.",
+        "e": "Inotrope; does not reduce preload."
+      },
+      "explanation": "Venodilators and diuretics lower preload; vasopressors raise it."
+    }
+  ]
+}
