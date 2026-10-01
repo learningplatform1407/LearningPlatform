@@ -437,6 +437,104 @@ def test_single_4_scores_4_or_0_never_partial() -> None:
     assert scheme.grade(frozenset({"b"}), frozenset({"a"}), all_options) == 0
 
 
+def test_import_reports_an_unknown_document_id_against_that_field(
+    admin_client: TestClient,
+) -> None:
+    # A document_id with no matching lesson is a foreign key violation, which
+    # raises the same IntegrityError as a duplicate external_id — so it used
+    # to be reported as "claimed by a concurrent import", sending whoever hit
+    # it hunting for a duplicate that doesn't exist.
+    response = admin_client.post(
+        "/v1/questions/import",
+        json={
+            "allow_new_tags": True,
+            "questions": [_single_payload(document_id=str(UUID(int=404)), status="published")],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["created"] == 0
+    assert body["skipped"] == 1
+    assert [error["field"] for error in body["errors"]] == ["document_id"]
+    assert "concurrent" not in body["errors"][0]["message"]
+
+
+# --- question bank browse (student-facing) ---------------------------------
+
+
+def _as_student(client: TestClient) -> TestClient:
+    """Re-point the shared TestClient at a non-admin identity.
+
+    A test cannot simply request both `admin_client` and `authed_client`:
+    they override the same global `get_current_user` on the same client
+    object, so whichever sets up last silently wins for every request in the
+    test — the same fixture trap documented in test_quizzes.py.
+    """
+    app.dependency_overrides[get_current_user] = lambda: AuthenticatedUser(
+        id=UUID(int=2), email="student@example.com"
+    )
+    return client
+
+
+def test_question_bank_requires_auth(client: TestClient) -> None:
+    assert client.get("/v1/question-bank").status_code == 401
+
+
+def test_question_bank_does_not_require_admin(authed_client: TestClient) -> None:
+    response = authed_client.get("/v1/question-bank")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_question_bank_never_returns_the_answer_key(admin_client: TestClient) -> None:
+    # The whole point of this endpoint: a student may browse the pool, but
+    # correct_option_ids / rationales / explanation must never reach them
+    # outside /results (§7.1).
+    created = admin_client.post(
+        "/v1/questions",
+        json=_multi_payload(
+            status="published",
+            rationales={"a": "leak me", "b": "leak me too"},
+            explanation="leak me as well",
+        ),
+    )
+    assert created.status_code == 200, created.text
+
+    body = _as_student(admin_client).get("/v1/question-bank").json()
+
+    assert len(body) == 1
+    item = body[0]
+    assert item["prompt"]
+    assert item["points_possible"] == 5
+    assert [option["id"] for option in item["options"]] == ["a", "b", "c", "d", "e"]
+    for leaked in ("correct_option_ids", "rationales", "explanation"):
+        assert leaked not in item
+    assert "leak me" not in str(item)
+
+
+def test_question_bank_hides_unpublished_questions(admin_client: TestClient) -> None:
+    admin_client.post("/v1/questions", json=_single_payload(status="draft"))
+    assert _as_student(admin_client).get("/v1/question-bank").json() == []
+
+
+def test_question_bank_filters_by_lesson(admin_client: TestClient) -> None:
+    # What the lesson reader's Quizzes tab sends: a question belongs to a
+    # lesson through questions.document_id, its provenance.
+    created = admin_client.post("/v1/questions", json=_single_payload(status="published")).json()
+    admin_client.post(
+        "/v1/questions", json=_multi_payload(external_id="other-001", status="published")
+    )
+
+    student = _as_student(admin_client)
+    assert len(student.get("/v1/question-bank").json()) == 2
+
+    # Neither carries a document_id, so filtering by a lesson finds none.
+    scoped = student.get("/v1/question-bank", params={"document_ids": [str(UUID(int=99))]}).json()
+    assert scoped == []
+    assert created["document_id"] is None
+
+
 @pytest.mark.parametrize(
     ("selected", "expected_points"),
     [

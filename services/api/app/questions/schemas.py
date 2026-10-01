@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.progress.schemas import QuestionProgressSummary
+
 
 class OptionSchema(BaseModel):
     id: str
@@ -67,6 +69,68 @@ class QuestionUpdateRequest(BaseModel):
     difficulty: Literal["easy", "medium", "hard"] | None = None
     status: Literal["draft", "published", "archived"] | None = None
     tags: list[str] | None = None
+
+
+class OptionResultSchema(BaseModel):
+    """One option after an answer has been graded, carrying both scoring axes:
+    `in_key` says whether it belongs in the answer, `classified_correctly`
+    whether the student earned the point for it. See grading.build_reveal."""
+
+    id: str
+    text: str
+    in_key: bool
+    selected: bool
+    classified_correctly: bool
+    rationale: str | None
+
+
+class QuestionRevealResponse(BaseModel):
+    """A graded question with its answer key revealed. Positionless — a quiz
+    session adds `position` on top of this; a bank answer has no position."""
+
+    prompt: str
+    kind: Literal["single", "multi"]
+    points_awarded: int
+    points_possible: int
+    outcome: Literal["correct", "partial", "incorrect"]
+    explanation: str | None
+    options: list[OptionResultSchema]
+
+
+class BankAnswerRequest(BaseModel):
+    selected_option_ids: list[str] = Field(default_factory=list)
+
+
+class QuestionBankTag(BaseModel):
+    id: UUID
+    slug: str
+    label: str
+
+
+class QuestionBankItem(BaseModel):
+    """The student-facing view of a bank question, for browsing the pool
+    without starting a quiz.
+
+    Deliberately omits `correct_option_ids`, `rationales` and `explanation`.
+    §7.1 keeps the answer key out of every response a student can reach
+    outside `/results`, and this is the one read path that shows a question
+    outside a session — so the omission is the entire safety story. `options`
+    is safe to return verbatim by design (§5.1): it never contains the key.
+    """
+
+    id: UUID
+    prompt: str
+    kind: Literal["single", "multi"]
+    difficulty: Literal["easy", "medium", "hard"]
+    points_possible: int
+    document_id: UUID | None
+    options: list[OptionSchema]
+    tags: list[QuestionBankTag]
+    # None means never attempted. Carrying the outcome is safe here even
+    # though the key is not: "you scored 3/5" reveals how many options you
+    # classified correctly, not which ones — the caller already knows what it
+    # picked, and it only ever describes that caller's own past attempt.
+    progress: QuestionProgressSummary | None = None
 
 
 class TagResponse(BaseModel):

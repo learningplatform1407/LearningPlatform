@@ -1,11 +1,18 @@
 import uuid
+from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import Select, delete, false, func, or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.common.errors import ApiError, FieldError
-from app.questions.constants import MAX_IMPORT_QUESTIONS, QuestionKind, QuestionStatus
+from app.documents.models import Document
+from app.questions.constants import (
+    MAX_FILTER_TAGS,
+    MAX_IMPORT_QUESTIONS,
+    QuestionKind,
+    QuestionStatus,
+)
 from app.questions.models import Question, QuestionTag, Tag
 from app.questions.schemas import (
     ImportErrorItem,
@@ -17,6 +24,7 @@ from app.questions.schemas import (
     QuestionUpdateRequest,
 )
 from app.questions.scoring import get_scheme
+from app.sub_chapters.models import SubChapter
 
 # Which kind each scheme applies to — a scoring_scheme inconsistent with the
 # question's kind (single_4 on a multi, or vice versa) is rejected at import
@@ -96,6 +104,21 @@ def _validate_question(
         )
 
     return errors
+
+
+def _document_error(db: Session, document_id: uuid.UUID | None) -> tuple[str, str] | None:
+    """Checks `document_id` points at a real lesson, as a (field, message)
+    pair or None.
+
+    Without this the FK violation surfaces as an `IntegrityError` — the same
+    exception a duplicate `external_id` raises — and gets reported as
+    "claimed by a concurrent import", sending an admin hunting for a
+    duplicate that was never there. The real cause is almost always a lesson
+    id copied from somewhere that isn't the database.
+    """
+    if document_id is None or db.get(Document, document_id) is not None:
+        return None
+    return ("document_id", f"No lesson exists with id '{document_id}'")
 
 
 def _resolve_tags(
@@ -179,6 +202,9 @@ def create_question(db: Session, created_by: uuid.UUID, data: QuestionCreateRequ
     )
     tags, tag_errors = _resolve_tags(db, data.tags, allow_new=False)
     errors.extend(tag_errors)
+    document_error = _document_error(db, data.document_id)
+    if document_error is not None:
+        errors.append(document_error)
     if errors:
         raise ApiError(
             422,
@@ -241,6 +267,10 @@ def update_question(db: Session, question_id: uuid.UUID, data: QuestionUpdateReq
     if data.tags is not None:
         tags, tag_errors = _resolve_tags(db, data.tags, allow_new=False)
         errors.extend(tag_errors)
+    if "document_id" in data.model_fields_set:
+        document_error = _document_error(db, data.document_id)
+        if document_error is not None:
+            errors.append(document_error)
 
     updates = data.model_dump(exclude_unset=True, exclude={"tags"})
     errors.extend(
@@ -279,6 +309,141 @@ def archive_question(db: Session, question_id: uuid.UUID) -> Question:
     db.commit()
     db.refresh(question)
     return question
+
+
+def apply_published_filter(
+    query: Select[Any],
+    *,
+    document_ids: list[uuid.UUID] | None,
+    tag_ids: list[uuid.UUID],
+) -> Select[Any]:
+    """The one predicate describing "questions a student may be shown".
+
+    Shared by quiz sampling and the bank browse so the two can never drift
+    into disagreeing about what is drawable versus viewable.
+
+    Two axes, behaving differently on purpose:
+
+    - **Topics OR.** `document_ids` is the already-resolved lesson set, so
+      picking a chapter and a lesson unions them.
+    - **Tags AND.** A question must carry *every* selected tag: "treatment"
+      plus "rezidentiat 2022" means questions that are both, not either.
+
+    `None` and `[]` are NOT the same on the topic axis. `None` means no topic
+    filter at all; `[]` means a topic was selected but expands to zero lessons
+    and must therefore match nothing. Reading `[]` as "no filter" would
+    silently hand the entire bank to someone who picked an empty chapter.
+    """
+    # Enforced here rather than per-caller: this is the one place all tag
+    # filtering flows through, and each tag costs its own EXISTS.
+    if len(set(tag_ids)) > MAX_FILTER_TAGS:
+        raise ApiError(
+            400,
+            "invalid_request",
+            f"Cannot filter on more than {MAX_FILTER_TAGS} tags at once",
+            [FieldError(field="tag_ids", message=f"At most {MAX_FILTER_TAGS} tags")],
+        )
+
+    query = query.where(Question.status == QuestionStatus.PUBLISHED)
+
+    if document_ids is not None:
+        # false() renders `false` on Postgres and `0 = 1` on SQLite, so an
+        # empty selection matches nothing without emitting the `IN ()` that
+        # §8.5 forbids.
+        query = query.where(Question.document_id.in_(document_ids) if document_ids else false())
+
+    # One correlated EXISTS per tag. Chosen over GROUP BY / HAVING COUNT
+    # because EXISTS binds both columns of ix_question_tags_tag_id_question_id
+    # to equality — an index probe per candidate, composing with the topic
+    # narrowing above — whereas HAVING is uncorrelated and must aggregate
+    # every index entry for every selected tag before the outer query sees
+    # anything. A repeated tag id is merely redundant here; under HAVING it
+    # would silently match nothing.
+    for tag_id in dict.fromkeys(tag_ids):
+        question_tag = aliased(QuestionTag)
+        query = query.where(
+            select(1)
+            .where(question_tag.question_id == Question.id, question_tag.tag_id == tag_id)
+            .exists()
+        )
+
+    return query
+
+
+def resolve_topic_documents(
+    db: Session,
+    *,
+    chapter_ids: list[uuid.UUID],
+    sub_chapter_ids: list[uuid.UUID],
+    document_ids: list[uuid.UUID],
+) -> list[uuid.UUID] | None:
+    """Expand a topic selection into the lessons it covers, or None when no
+    topic was selected at all.
+
+    Resolved server-side: a 300-lesson chapter would otherwise become 300
+    repeated query parameters, and both clients would have to walk the whole
+    book tree just to build a filter.
+    """
+    if not (chapter_ids or sub_chapter_ids or document_ids):
+        return None
+
+    resolved: set[uuid.UUID] = set(document_ids)
+    predicates = []
+    if sub_chapter_ids:
+        predicates.append(Document.sub_chapter_id.in_(sub_chapter_ids))
+    if chapter_ids:
+        predicates.append(
+            Document.sub_chapter_id.in_(
+                select(SubChapter.id).where(SubChapter.chapter_id.in_(chapter_ids))
+            )
+        )
+    if predicates:
+        # A lesson with a NULL sub_chapter_id (the "Uncategorized" bucket)
+        # never matches IN, which is right: it belongs to no chapter and can
+        # only enter the pool by its own id.
+        resolved.update(db.scalars(select(Document.id).where(or_(*predicates))))
+
+    return sorted(resolved)
+
+
+def _tags_by_question(db: Session, question_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[Tag]]:
+    if not question_ids:
+        return {}
+    rows = db.execute(
+        select(QuestionTag.question_id, Tag)
+        .join(Tag, Tag.id == QuestionTag.tag_id)
+        .where(QuestionTag.question_id.in_(question_ids))
+        .order_by(Tag.label)
+    ).all()
+    grouped: dict[uuid.UUID, list[Tag]] = {}
+    for question_id, tag in rows:
+        grouped.setdefault(question_id, []).append(tag)
+    return grouped
+
+
+def list_published_questions(
+    db: Session,
+    *,
+    document_ids: list[uuid.UUID] | None,
+    tag_ids: list[uuid.UUID],
+    limit: int,
+    offset: int,
+    unassigned: bool = False,
+) -> tuple[list[Question], dict[uuid.UUID, list[Tag]]]:
+    """Backs the student-facing bank browse. Published questions only, and
+    the caller must shape these with `QuestionBankItem`, which omits the
+    answer key — this is the one read path where a student sees a question
+    outside a session, so the omission is the whole safety story."""
+    query = apply_published_filter(select(Question), document_ids=document_ids, tag_ids=tag_ids)
+    if unassigned:
+        # document_id is nullable, so a question can belong to no lesson at
+        # all. Those sit under no node of the bank tree, so without this they
+        # are browsable only by fetching the whole unfiltered bank.
+        query = query.where(Question.document_id.is_(None))
+    questions = list(
+        db.scalars(query.order_by(Question.created_at.desc()).limit(limit).offset(offset))
+    )
+    return questions, _tags_by_question(db, [question.id for question in questions])
 
 
 def list_tags(db: Session) -> list[tuple[Tag, int]]:
@@ -355,6 +520,9 @@ def import_questions(
         item_savepoint = db.begin_nested()
         tags, tag_errors = _resolve_tags(db, item.tags, allow_new=data.allow_new_tags)
         item_errors.extend(tag_errors)
+        document_error = _document_error(db, item.document_id)
+        if document_error is not None:
+            item_errors.append(document_error)
         if item_errors:
             item_savepoint.rollback()
             errors.extend(
@@ -381,7 +549,11 @@ def import_questions(
                 ImportErrorItem(
                     index=index,
                     field="external_id",
-                    message=f"external_id {item.external_id!r} was claimed by a concurrent import",
+                    message=(
+                        f"Could not save external_id {item.external_id!r} — most likely a "
+                        "concurrent import claimed it, or a row it references was removed "
+                        "mid-import"
+                    ),
                 )
             )
             skipped += 1

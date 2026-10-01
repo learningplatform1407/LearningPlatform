@@ -17,8 +17,9 @@ from app.db import models as _db_models  # noqa: F401 -- registers all tables on
 from app.documents.router import router as documents_router
 from app.notebook.router import router as notebook_router
 from app.plans.router import router as plans_router
+from app.questions.router import bank_router, tags_router
 from app.questions.router import router as questions_router
-from app.questions.router import tags_router
+from app.quizzes.router import router as quiz_sessions_router
 from app.sub_chapters.router import router as sub_chapters_router
 from app.users.router import router as users_router
 
@@ -47,6 +48,8 @@ app.include_router(notebook_router)
 app.include_router(cloze_router)
 app.include_router(questions_router)
 app.include_router(tags_router)
+app.include_router(bank_router)
+app.include_router(quiz_sessions_router)
 
 
 @app.exception_handler(ApiError)
