@@ -97,7 +97,7 @@ export default function LearnScreen() {
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.navCard, pressed && styles.cardPressed]}
-          onPress={() => router.push("/learn/quizzes")}
+          onPress={() => router.push("/question-bank")}
           accessibilityRole="button"
         >
           <Text style={styles.navCardTitle}>Quizzes</Text>

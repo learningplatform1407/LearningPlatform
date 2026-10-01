@@ -6,6 +6,8 @@ import { useState } from "react";
 
 const NAV_ITEMS = [
   { href: "/learn", label: "Learn", emoji: "📖" },
+  { href: "/question-bank", label: "Question Bank", emoji: "🗂️" },
+  { href: "/exams", label: "Exams", emoji: "📝" },
   { href: "/assistant", label: "AI Assistant", emoji: "🤖" },
   { href: "/roadmap", label: "Roadmap", emoji: "🗺️" },
   { href: "/feed", label: "Feed", emoji: "📰" },

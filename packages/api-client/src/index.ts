@@ -33,6 +33,180 @@ import type {
   UploadUrlResponse,
 } from "@lp/contracts";
 
+// Minimal quiz-session types, defined inline here rather than threaded
+// through @lp/contracts/@lp/validation (QUIZ-9) — this is deliberately the
+// smallest slice needed for a manual test UI, not the full shared-schema
+// pass. See docs/architecture/quizzes.md §7.2 for the wire contract.
+export interface QuizQuestionOption {
+  id: string;
+  text: string;
+}
+
+export interface QuizSessionQuestion {
+  position: number;
+  prompt: string;
+  kind: "single" | "multi";
+  scoring_scheme: string;
+  points_possible: number;
+  options: QuizQuestionOption[];
+  selected_option_ids: string[] | null;
+  answered_at: string | null;
+  points_awarded: number | null;
+  outcome: "correct" | "partial" | "incorrect" | null;
+}
+
+export interface QuizSession {
+  id: string;
+  status: "active" | "paused" | "completed" | "expired" | "cancelled";
+  reveal_mode: "immediate" | "on_finish";
+  question_count: number;
+  duration_seconds: number | null;
+  remaining_seconds: number | null;
+  server_time: string;
+  points_awarded: number | null;
+  points_possible: number | null;
+  finished_at: string | null;
+  questions: QuizSessionQuestion[];
+}
+
+/**
+ * Topic axis (chapters/sub-chapters/lessons) ORs together and expands to
+ * lessons server-side; the tag axis ANDs. Omitting every topic field means
+ * "no topic filter" — which is *not* the same as selecting every node, since
+ * only the former also includes questions attached to no lesson.
+ */
+export interface TopicFilter {
+  chapterIds?: string[];
+  subChapterIds?: string[];
+  documentIds?: string[];
+  tagIds?: string[];
+}
+
+export interface QuizSessionCreateRequest {
+  chapter_ids?: string[];
+  sub_chapter_ids?: string[];
+  document_ids?: string[];
+  tag_ids?: string[];
+  question_count: number;
+  duration_seconds?: number | null;
+  reveal_mode: "immediate" | "on_finish";
+}
+
+/** A graded question with its answer key revealed — no session position. */
+export interface QuestionReveal {
+  prompt: string;
+  kind: "single" | "multi";
+  points_awarded: number;
+  points_possible: number;
+  outcome: "correct" | "partial" | "incorrect";
+  explanation: string | null;
+  options: QuizOptionResult[];
+}
+
+export interface BankTreeLesson {
+  id: string;
+  title: string;
+  question_count: number;
+  answered_count: number;
+}
+
+export interface BankTreeSubChapter extends BankTreeLesson {
+  lessons: BankTreeLesson[];
+}
+
+export interface BankTreeChapter extends BankTreeLesson {
+  sub_chapters: BankTreeSubChapter[];
+}
+
+export interface BankTreeBook extends BankTreeLesson {
+  chapters: BankTreeChapter[];
+}
+
+export interface BankTree {
+  books: BankTreeBook[];
+  uncategorized_lessons: BankTreeLesson[];
+  unassigned_question_count: number;
+  unassigned_answered_count: number;
+}
+
+export interface QuizAnswerSaved {
+  saved: true;
+}
+
+export interface QuizOptionResult {
+  id: string;
+  text: string;
+  in_key: boolean;
+  selected: boolean;
+  classified_correctly: boolean;
+  rationale: string | null;
+}
+
+export interface QuizQuestionResult {
+  position: number;
+  prompt: string;
+  kind: "single" | "multi";
+  points_awarded: number;
+  points_possible: number;
+  outcome: "correct" | "partial" | "incorrect";
+  explanation: string | null;
+  options: QuizOptionResult[];
+}
+
+export interface QuizSessionResults {
+  id: string;
+  status: "completed" | "expired" | "cancelled";
+  reveal_mode: "immediate" | "on_finish";
+  points_awarded: number | null;
+  points_possible: number | null;
+  finished_at: string | null;
+  questions: QuizQuestionResult[];
+}
+
+export interface QuizSessionHistoryItem {
+  id: string;
+  status: "active" | "paused" | "completed" | "expired" | "cancelled";
+  reveal_mode: "immediate" | "on_finish";
+  question_count: number;
+  points_awarded: number | null;
+  points_possible: number | null;
+  finished_at: string | null;
+  created_at: string;
+}
+
+export interface QuizAvailableCount {
+  available: number;
+}
+
+export interface QuestionBankTag {
+  id: string;
+  slug: string;
+  label: string;
+}
+
+/** The caller's own standing on one question — latest attempt only. */
+export interface QuestionProgress {
+  outcome: "correct" | "partial" | "incorrect";
+  points_awarded: number;
+  points_possible: number;
+  attempt_count: number;
+  last_answered_at: string;
+}
+
+/** Student-facing view of a bank question: no answer key, by design. */
+export interface QuestionBankItem {
+  id: string;
+  prompt: string;
+  kind: "single" | "multi";
+  difficulty: "easy" | "medium" | "hard";
+  points_possible: number;
+  document_id: string | null;
+  options: QuizQuestionOption[];
+  tags: QuestionBankTag[];
+  /** `null` when never attempted — distinct from attempted and scoring zero. */
+  progress: QuestionProgress | null;
+}
+
 export interface ApiClientConfig {
   baseUrl: string;
   getAccessToken: () => Promise<string | null>;
@@ -48,6 +222,16 @@ export class ApiClientError extends Error {
     this.status = status;
     this.body = body;
   }
+}
+
+/** Repeated query params, the shape FastAPI expects for list[UUID]. */
+function topicParams(filter?: TopicFilter): URLSearchParams {
+  const query = new URLSearchParams();
+  for (const id of filter?.chapterIds ?? []) query.append("chapter_ids", id);
+  for (const id of filter?.subChapterIds ?? []) query.append("sub_chapter_ids", id);
+  for (const id of filter?.documentIds ?? []) query.append("document_ids", id);
+  for (const id of filter?.tagIds ?? []) query.append("tag_ids", id);
+  return query;
 }
 
 export function createApiClient(config: ApiClientConfig) {
@@ -152,6 +336,45 @@ export function createApiClient(config: ApiClientConfig) {
         body: JSON.stringify(data),
       }),
     listTags: () => request<Tag[]>("/v1/tags"),
+    listQuestionBank: (
+      params?: TopicFilter & { unassigned?: boolean; limit?: number; offset?: number },
+    ) => {
+      const query = topicParams(params);
+      if (params?.unassigned) query.set("unassigned", "true");
+      if (params?.limit !== undefined) query.set("limit", String(params.limit));
+      if (params?.offset !== undefined) query.set("offset", String(params.offset));
+      const qs = query.toString();
+      return request<QuestionBankItem[]>(`/v1/question-bank${qs ? `?${qs}` : ""}`);
+    },
+    getQuestionBankTree: () => request<BankTree>("/v1/question-bank/tree"),
+    answerBankQuestion: (questionId: string, selectedOptionIds: string[]) =>
+      request<QuestionReveal>(`/v1/question-bank/${questionId}/answers`, {
+        method: "POST",
+        body: JSON.stringify({ selected_option_ids: selectedOptionIds }),
+      }),
+    getCurrentQuizSession: () => request<QuizSession | null>("/v1/quiz-sessions/current"),
+    listQuizSessionHistory: () => request<QuizSessionHistoryItem[]>("/v1/quiz-sessions"),
+    getQuizAvailableCount: (params?: TopicFilter) => {
+      const qs = topicParams(params).toString();
+      return request<QuizAvailableCount>(`/v1/quiz-sessions/available-count${qs ? `?${qs}` : ""}`);
+    },
+    startQuizSession: (data: QuizSessionCreateRequest) =>
+      request<QuizSession>("/v1/quiz-sessions", { method: "POST", body: JSON.stringify(data) }),
+    getQuizSession: (id: string) => request<QuizSession>(`/v1/quiz-sessions/${id}`),
+    answerQuizQuestion: (id: string, position: number, selectedOptionIds: string[]) =>
+      request<QuizAnswerSaved | QuizQuestionResult>(`/v1/quiz-sessions/${id}/answers/${position}`, {
+        method: "PUT",
+        body: JSON.stringify({ selected_option_ids: selectedOptionIds }),
+      }),
+    pauseQuizSession: (id: string) =>
+      request<QuizSession>(`/v1/quiz-sessions/${id}/pause`, { method: "POST" }),
+    resumeQuizSession: (id: string) =>
+      request<QuizSession>(`/v1/quiz-sessions/${id}/resume`, { method: "POST" }),
+    cancelQuizSession: (id: string) =>
+      request<QuizSession>(`/v1/quiz-sessions/${id}/cancel`, { method: "POST" }),
+    submitQuizSession: (id: string) =>
+      request<QuizSession>(`/v1/quiz-sessions/${id}/submit`, { method: "POST" }),
+    getQuizResults: (id: string) => request<QuizSessionResults>(`/v1/quiz-sessions/${id}/results`),
     listFlashcards: (documentId: string) =>
       request<Flashcard[]>(`/v1/documents/${documentId}/flashcards`),
     listClozeCards: (documentId: string) =>

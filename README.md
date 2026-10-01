@@ -217,6 +217,29 @@ classDiagram
         +UUID question_id
         +UUID tag_id
     }
+    class QuizSession {
+        +UUID id
+        +UUID user_id
+        +string status
+        +string reveal_mode
+        +json filter_spec
+        +int question_count
+        +int duration_seconds
+        +int accumulated_seconds
+        +int points_awarded
+        +int points_possible
+    }
+    class QuizSessionQuestion {
+        +UUID id
+        +UUID session_id
+        +UUID question_id
+        +int position
+        +string scoring_scheme
+        +int points_possible
+        +json selected_option_ids
+        +int points_awarded
+        +string outcome
+    }
 
     Profile "1" -- "1" AccountSettings
     Profile "1" -- "*" Subscription
@@ -242,4 +265,8 @@ classDiagram
     Profile "1" -- "*" Question : created_by
     Question "1" -- "*" QuestionTag
     Tag "1" -- "*" QuestionTag
+
+    Profile "1" -- "*" QuizSession : one OPEN at a time
+    QuizSession "1" -- "*" QuizSessionQuestion : frozen at start
+    Question "1" -- "*" QuizSessionQuestion : RESTRICT
 ```

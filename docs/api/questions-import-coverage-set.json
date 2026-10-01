@@ -1,0 +1,303 @@
+{
+  "allow_new_tags": true,
+  "questions": [
+    {
+      "external_id": "cov-a-001",
+      "document_id": "88f89109-c3c5-49f4-a9c7-371f4a4b1a4e",
+      "prompt": "A patient presents with acute dyspnoea and bilateral crackles. Which investigation best confirms cardiogenic pulmonary oedema at the bedside?",
+      "kind": "single",
+      "scoring_scheme": "single_4",
+      "difficulty": "easy",
+      "status": "published",
+      "tags": ["cardiology", "diagnosis", "rezidentiat-2022"],
+      "options": [
+        { "id": "a", "text": "Bedside lung ultrasound showing diffuse B-lines" },
+        { "id": "b", "text": "Serum troponin" },
+        { "id": "c", "text": "24-hour Holter monitor" },
+        { "id": "d", "text": "Exercise tolerance test" }
+      ],
+      "correct_option_ids": ["a"],
+      "rationales": {
+        "a": "Diffuse bilateral B-lines indicate interstitial oedema and are obtainable in minutes.",
+        "b": "Troponin rises in many conditions and does not confirm oedema.",
+        "c": "Holter assesses rhythm over time, not acute fluid status.",
+        "d": "Exercise testing is contraindicated during acute decompensation."
+      },
+      "explanation": "Lung ultrasound is the fastest bedside confirmation of interstitial oedema."
+    },
+    {
+      "external_id": "cov-a-002",
+      "document_id": "88f89109-c3c5-49f4-a9c7-371f4a4b1a4e",
+      "prompt": "Which of the following reduce cardiac preload?",
+      "kind": "multi",
+      "scoring_scheme": "multi_5_per_option",
+      "difficulty": "medium",
+      "status": "published",
+      "tags": ["cardiology", "treatment", "rezidentiat-2022"],
+      "options": [
+        { "id": "a", "text": "Nitroglycerin" },
+        { "id": "b", "text": "Furosemide" },
+        { "id": "c", "text": "Phenylephrine" },
+        { "id": "d", "text": "Noradrenaline" },
+        { "id": "e", "text": "Dobutamine" }
+      ],
+      "correct_option_ids": ["a", "b"],
+      "rationales": {
+        "a": "Venodilation reduces venous return, lowering preload.",
+        "b": "Diuresis reduces circulating volume, lowering preload.",
+        "c": "An alpha-1 agonist; raises afterload rather than reducing preload.",
+        "d": "A vasopressor — raises filling pressures rather than lowering them.",
+        "e": "An inotrope; increases contractility without reducing preload."
+      },
+      "explanation": "Preload is venous return. Venodilators and diuretics lower it; vasopressors raise it."
+    },
+    {
+      "external_id": "cov-a-003",
+      "document_id": "88f89109-c3c5-49f4-a9c7-371f4a4b1a4e",
+      "prompt": "In cardiogenic shock with a systolic pressure of 70 mmHg, which agent is the most appropriate first-line vasopressor?",
+      "kind": "single",
+      "scoring_scheme": "single_4",
+      "difficulty": "hard",
+      "status": "published",
+      "tags": ["cardiology", "treatment", "rezidentiat-2023"],
+      "options": [
+        { "id": "a", "text": "Noradrenaline" },
+        { "id": "b", "text": "Furosemide" },
+        { "id": "c", "text": "Nitroglycerin" },
+        { "id": "d", "text": "Labetalol" }
+      ],
+      "correct_option_ids": ["a"],
+      "rationales": {
+        "a": "Restores perfusion pressure with less tachyarrhythmia than dopamine.",
+        "b": "Diuresis in a hypotensive patient worsens shock.",
+        "c": "Venodilation would drop an already inadequate pressure further.",
+        "d": "Beta blockade is harmful in decompensated shock."
+      },
+      "explanation": "Perfusion pressure comes first; diuresis and vasodilation come after stabilisation."
+    },
+    {
+      "external_id": "cov-b-001",
+      "document_id": "ddff7e74-f381-4d77-9cfd-bafb7dea201b",
+      "prompt": "Which of the following are recognised adverse effects of long-term loop diuretic therapy?",
+      "kind": "multi",
+      "scoring_scheme": "multi_5_per_option",
+      "difficulty": "medium",
+      "status": "published",
+      "tags": ["pharmacology", "treatment", "rezidentiat-2022"],
+      "options": [
+        { "id": "a", "text": "Hypokalaemia" },
+        { "id": "b", "text": "Ototoxicity" },
+        { "id": "c", "text": "Hyperkalaemia" },
+        { "id": "d", "text": "Weight gain" },
+        { "id": "e", "text": "Bradycardia" }
+      ],
+      "correct_option_ids": ["a", "b"],
+      "rationales": {
+        "a": "Increased distal sodium delivery drives potassium loss.",
+        "b": "Dose-related, particularly with rapid intravenous administration.",
+        "c": "Loop diuretics lower potassium; potassium-sparing agents raise it.",
+        "d": "Diuresis causes weight loss, not gain.",
+        "e": "Not a recognised effect of loop diuretics."
+      },
+      "explanation": "Two classics worth holding on to: potassium loss and ototoxicity."
+    },
+    {
+      "external_id": "cov-b-002",
+      "document_id": "ddff7e74-f381-4d77-9cfd-bafb7dea201b",
+      "prompt": "Which laboratory finding most strongly suggests acute digoxin toxicity?",
+      "kind": "single",
+      "scoring_scheme": "single_4",
+      "difficulty": "easy",
+      "status": "published",
+      "tags": ["pharmacology", "diagnosis"],
+      "options": [
+        { "id": "a", "text": "Hyperkalaemia with bradyarrhythmia" },
+        { "id": "b", "text": "Isolated raised bilirubin" },
+        { "id": "c", "text": "Neutrophilia" },
+        { "id": "d", "text": "Raised D-dimer" }
+      ],
+      "correct_option_ids": ["a"],
+      "rationales": {
+        "a": "Na+/K+-ATPase inhibition raises extracellular potassium and slows conduction.",
+        "b": "Points to hepatobiliary disease, not digoxin.",
+        "c": "Non-specific and usually infective.",
+        "d": "Suggests thrombosis, not glycoside toxicity."
+      },
+      "explanation": "Acute digoxin toxicity raises potassium — the opposite of what most people expect."
+    },
+    {
+      "external_id": "cov-b-003",
+      "document_id": "ddff7e74-f381-4d77-9cfd-bafb7dea201b",
+      "prompt": "Which of the following interactions meaningfully increase serum digoxin levels?",
+      "kind": "multi",
+      "scoring_scheme": "multi_5_per_option",
+      "difficulty": "hard",
+      "status": "published",
+      "tags": ["pharmacology", "treatment", "rezidentiat-2023"],
+      "options": [
+        { "id": "a", "text": "Amiodarone" },
+        { "id": "b", "text": "Verapamil" },
+        { "id": "c", "text": "Rifampicin" },
+        { "id": "d", "text": "Paracetamol" },
+        { "id": "e", "text": "Cholestyramine" }
+      ],
+      "correct_option_ids": ["a", "b"],
+      "rationales": {
+        "a": "Reduces renal and non-renal clearance; the digoxin dose is usually halved.",
+        "b": "Inhibits P-glycoprotein-mediated clearance.",
+        "c": "A P-glycoprotein inducer, so it lowers digoxin levels.",
+        "d": "No clinically meaningful interaction.",
+        "e": "Binds digoxin in the gut and reduces absorption."
+      },
+      "explanation": "Amiodarone and verapamil are the two interactions worth memorising."
+    },
+    {
+      "external_id": "cov-c-001",
+      "document_id": "44b1385e-1fb9-409f-905b-a32a2a2a5542",
+      "prompt": "Which class has the strongest mortality benefit in chronic heart failure with reduced ejection fraction?",
+      "kind": "single",
+      "scoring_scheme": "single_4",
+      "difficulty": "medium",
+      "status": "published",
+      "tags": ["cardiology", "pharmacology", "treatment", "rezidentiat-2022"],
+      "options": [
+        { "id": "a", "text": "Beta blockers" },
+        { "id": "b", "text": "Loop diuretics" },
+        { "id": "c", "text": "Digoxin" },
+        { "id": "d", "text": "Short-acting nitrates" }
+      ],
+      "correct_option_ids": ["a"],
+      "rationales": {
+        "a": "Consistent mortality reduction across the major trials.",
+        "b": "Improve symptoms and congestion but do not reduce mortality.",
+        "c": "Reduces hospitalisation without a mortality benefit.",
+        "d": "Symptomatic relief only."
+      },
+      "explanation": "Symptom control and mortality benefit are different axes — diuretics do the first, not the second."
+    },
+    {
+      "external_id": "cov-c-002",
+      "document_id": "44b1385e-1fb9-409f-905b-a32a2a2a5542",
+      "prompt": "Which findings on a 12-lead ECG support left ventricular hypertrophy?",
+      "kind": "multi",
+      "scoring_scheme": "multi_5_per_option",
+      "difficulty": "easy",
+      "status": "published",
+      "tags": ["cardiology", "diagnosis", "rezidentiat-2023"],
+      "options": [
+        { "id": "a", "text": "Increased precordial QRS voltage" },
+        { "id": "b", "text": "Lateral strain pattern" },
+        { "id": "c", "text": "Electrical alternans" },
+        { "id": "d", "text": "Delta waves" },
+        { "id": "e", "text": "Prolonged PR interval" }
+      ],
+      "correct_option_ids": ["a", "b"],
+      "rationales": {
+        "a": "The basis of the Sokolow-Lyon and Cornell criteria.",
+        "b": "Lateral ST depression with T inversion accompanies established hypertrophy.",
+        "c": "Suggests a large pericardial effusion.",
+        "d": "Indicates ventricular pre-excitation.",
+        "e": "Reflects AV nodal conduction delay."
+      },
+      "explanation": "Voltage plus strain is the classic pairing."
+    },
+    {
+      "external_id": "cov-c-003",
+      "document_id": "44b1385e-1fb9-409f-905b-a32a2a2a5542",
+      "prompt": "Which intervention should be withheld until euvolaemia is achieved in decompensated heart failure?",
+      "kind": "single",
+      "scoring_scheme": "single_4",
+      "difficulty": "hard",
+      "status": "published",
+      "tags": ["treatment"],
+      "options": [
+        { "id": "a", "text": "Up-titration of beta blockade" },
+        { "id": "b", "text": "Intravenous furosemide" },
+        { "id": "c", "text": "Daily weight monitoring" },
+        { "id": "d", "text": "Fluid restriction" }
+      ],
+      "correct_option_ids": ["a"],
+      "rationales": {
+        "a": "Negative inotropy during congestion can precipitate further decompensation.",
+        "b": "The mainstay of decongestion.",
+        "c": "A core monitoring measure throughout.",
+        "d": "Appropriate alongside diuresis."
+      },
+      "explanation": "Decongest first, then titrate prognostic therapy."
+    },
+    {
+      "external_id": "cov-d-001",
+      "document_id": "9c7a795a-fbc1-4ce5-b0fa-9fe7d8827d37",
+      "prompt": "Which of the following are appropriate in the first hour of managing acute pulmonary oedema?",
+      "kind": "multi",
+      "scoring_scheme": "multi_5_per_option",
+      "difficulty": "medium",
+      "status": "published",
+      "tags": ["pharmacology", "treatment", "rezidentiat-2022"],
+      "options": [
+        { "id": "a", "text": "Sit the patient upright" },
+        { "id": "b", "text": "Intravenous loop diuretic" },
+        { "id": "c", "text": "Rapid crystalloid bolus" },
+        { "id": "d", "text": "Immediate beta blocker up-titration" },
+        { "id": "e", "text": "Prophylactic broad-spectrum antibiotics" }
+      ],
+      "correct_option_ids": ["a", "b"],
+      "rationales": {
+        "a": "Reduces venous return and improves ventilation mechanics immediately.",
+        "b": "Produces venodilation early and diuresis shortly after.",
+        "c": "Adds volume to an already congested circulation.",
+        "d": "Negative inotropy is harmful during acute congestion.",
+        "e": "Only indicated with evidence of infection."
+      },
+      "explanation": "Posture plus diuresis; avoid anything that adds volume or drops contractility."
+    },
+    {
+      "external_id": "cov-d-002",
+      "document_id": "9c7a795a-fbc1-4ce5-b0fa-9fe7d8827d37",
+      "prompt": "Which biomarker result best argues against heart failure in an undifferentiated breathless patient?",
+      "kind": "single",
+      "scoring_scheme": "single_4",
+      "difficulty": "easy",
+      "status": "draft",
+      "tags": ["diagnosis"],
+      "options": [
+        { "id": "a", "text": "A low BNP" },
+        { "id": "b", "text": "A normal white cell count" },
+        { "id": "c", "text": "A normal CRP" },
+        { "id": "d", "text": "A normal serum sodium" }
+      ],
+      "correct_option_ids": ["a"],
+      "rationales": {
+        "a": "A low BNP has a high negative predictive value for heart failure.",
+        "b": "Non-specific to cardiac failure.",
+        "c": "Reflects inflammation rather than filling pressure.",
+        "d": "Sodium may be normal in established heart failure."
+      },
+      "explanation": "Left as a draft on purpose: drafts must never surface in the bank or in a quiz."
+    },
+    {
+      "external_id": "cov-unassigned-001",
+      "document_id": null,
+      "prompt": "Which acid-base disturbance is most typical of aggressive loop diuresis?",
+      "kind": "single",
+      "scoring_scheme": "single_4",
+      "difficulty": "medium",
+      "status": "published",
+      "tags": ["rezidentiat-2022"],
+      "options": [
+        { "id": "a", "text": "Hypochloraemic metabolic alkalosis" },
+        { "id": "b", "text": "Anion-gap metabolic acidosis" },
+        { "id": "c", "text": "Respiratory alkalosis" },
+        { "id": "d", "text": "Respiratory acidosis" }
+      ],
+      "correct_option_ids": ["a"],
+      "rationales": {
+        "a": "Chloride and volume loss drive bicarbonate retention.",
+        "b": "Suggests lactate, ketones or toxin accumulation.",
+        "c": "Driven by hyperventilation, not diuresis.",
+        "d": "Reflects hypoventilation or CO2 retention."
+      },
+      "explanation": "Deliberately attached to no lesson, so it only appears in the unassigned bucket."
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { Annotation, AnnotationCreateRequest, ClozeRating } from "@lp/contracts";
 
 import { Button } from "@/components/button";
+import { QuestionBankList } from "@/components/question-bank-list";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -218,28 +219,19 @@ function AnnotationToolbar({
 }
 
 function QuizzesTab({ documentId }: { documentId: string }) {
-  const { data, isPending } = useQuery({
-    queryKey: ["quizzes", documentId],
-    queryFn: () => getBrowserApiClient().listQuizzes(documentId),
-  });
-
-  if (isPending) {
-    return <p className="text-sm text-muted-foreground">Loading...</p>;
-  }
-  if (!data || data.length === 0) {
-    return <p className="text-sm text-muted-foreground">Coming soon.</p>;
-  }
+  // Scoped by questions.document_id — a question's provenance, and the only
+  // link between a lesson and a question. Lessons carry no tags of their
+  // own, so "this lesson's questions" means exactly this.
   return (
-    <ul className="flex flex-col gap-xs">
-      {data.map((quiz) => (
-        <li
-          key={quiz.id}
-          className="rounded-md border border-border px-md py-sm text-sm text-foreground"
-        >
-          {quiz.title}
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col gap-md">
+      <QuestionBankList
+        filter={{ documentIds: [documentId] }}
+        emptyMessage="No questions for this lesson yet."
+      />
+      <Link href="/exams" className="text-sm text-primary hover:underline">
+        Practise in an exam →
+      </Link>
+    </div>
   );
 }
 

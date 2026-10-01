@@ -157,7 +157,7 @@ function ImportForm() {
     previewedText !== null && previewedText === jsonText && !commitMutation.isSuccess;
 
   return (
-    <div className="mt-lg flex w-full max-w-4xl flex-col gap-md">
+    <div className="mt-lg flex w-full max-w-[56rem] flex-col gap-md">
       <label className="flex flex-col gap-xs text-sm text-foreground">
         Upload a JSON file
         <input
@@ -237,8 +237,8 @@ export default function ManageQuestionsPage() {
 
   return (
     <main className="p-xl">
-      <Link href="/learn/quizzes" className="text-sm text-muted-foreground hover:underline">
-        ← Quizzes
+      <Link href="/question-bank" className="text-sm text-muted-foreground hover:underline">
+        ← Question Bank
       </Link>
       <h1 className="mt-xs text-2xl font-semibold text-foreground">Import questions</h1>
 

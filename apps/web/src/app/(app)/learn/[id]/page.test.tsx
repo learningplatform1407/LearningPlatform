@@ -11,6 +11,8 @@ const listAnnotations = vi.fn();
 const createAnnotation = vi.fn();
 const deleteAnnotation = vi.fn();
 const listQuizzes = vi.fn();
+const listQuestionBank = vi.fn();
+const getQuizAvailableCount = vi.fn();
 const listFlashcards = vi.fn();
 const listDueClozeCards = vi.fn();
 const submitClozeReview = vi.fn();
@@ -27,6 +29,8 @@ vi.mock("@/lib/api-client.browser", () => ({
     createAnnotation,
     deleteAnnotation,
     listQuizzes,
+    listQuestionBank,
+    getQuizAvailableCount,
     listFlashcards,
     listDueClozeCards,
     submitClozeReview,
@@ -105,6 +109,8 @@ beforeEach(() => {
   createAnnotation.mockReset().mockResolvedValue({});
   deleteAnnotation.mockReset().mockResolvedValue(undefined);
   listQuizzes.mockReset().mockResolvedValue([]);
+  listQuestionBank.mockReset().mockResolvedValue([]);
+  getQuizAvailableCount.mockReset().mockResolvedValue({ available: 0 });
   listFlashcards.mockReset().mockResolvedValue([]);
   listDueClozeCards.mockReset().mockResolvedValue([]);
   submitClozeReview.mockReset();
@@ -662,16 +668,74 @@ describe("LecturePage", () => {
     expect(screen.queryByRole("link", { name: /Chapter/ })).not.toBeInTheDocument();
   });
 
-  test("switching to the Quizzes tab shows a Coming soon placeholder", async () => {
+  test("the Quizzes tab lists this lesson's questions without the answer key", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listQuestionBank.mockResolvedValue([
+      {
+        id: "q1",
+        prompt: "Which drug lowers preload?",
+        kind: "single",
+        difficulty: "medium",
+        points_possible: 4,
+        document_id: "d1",
+        options: [
+          { id: "a", text: "Nitrates" },
+          { id: "b", text: "Vasopressors" },
+        ],
+        tags: [{ id: "t1", slug: "cardiology", label: "Cardiology" }],
+      },
+    ]);
 
     renderPage();
     await screen.findByText("Hello world");
 
     await userEvent.setup().click(screen.getByRole("button", { name: "Quizzes" }));
 
-    expect(await screen.findByText("Coming soon.")).toBeInTheDocument();
-    expect(listQuizzes).toHaveBeenCalledWith("d1");
+    expect(await screen.findByText("Which drug lowers preload?")).toBeInTheDocument();
+    expect(screen.getByText("Nitrates")).toBeInTheDocument();
+    // Scoped to this lesson by document_id — a question's provenance.
+    expect(listQuestionBank).toHaveBeenCalledWith({ documentIds: ["d1"] });
+  });
+
+  test("the Quizzes tab marks a question answered on a previous visit", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listQuestionBank.mockResolvedValue([
+      {
+        id: "q1",
+        prompt: "Which drug lowers preload?",
+        kind: "single",
+        difficulty: "medium",
+        points_possible: 4,
+        document_id: "d1",
+        options: [{ id: "a", text: "Nitrates" }],
+        tags: [],
+        progress: {
+          outcome: "correct",
+          points_awarded: 4,
+          points_possible: 4,
+          attempt_count: 1,
+          last_answered_at: "2026-09-30T10:00:00Z",
+        },
+      },
+    ]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Quizzes" }));
+
+    expect(await screen.findByLabelText("Answered correctly, 4 of 4 points")).toBeInTheDocument();
+  });
+
+  test("the Quizzes tab says so when the lesson has no questions", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listQuestionBank.mockResolvedValue([]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Quizzes" }));
+
+    expect(await screen.findByText("No questions for this lesson yet.")).toBeInTheDocument();
   });
 
   test("switching to the Flashcards tab shows a Coming soon placeholder", async () => {

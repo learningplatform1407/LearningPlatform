@@ -1,4 +1,13 @@
 {
+  "permissions": {
+    "deny": [
+      "Read(./**/.envrc)",
+      "Read(./**/.env)",
+      "Read(./**/.env.*)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
