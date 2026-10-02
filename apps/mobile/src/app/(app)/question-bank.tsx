@@ -1,8 +1,10 @@
 import type { BankTreeChapter, BankTreeLesson, BankTreeSubChapter } from "@lp/api-client";
+import { sumBankStatsCounts } from "@lp/api-client";
 import { useQuery } from "@tanstack/react-query";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
+import { BankStatsLine } from "@/lib/bank-stats-line";
 import { ExpandableRow } from "@/lib/expandable-row";
 import { QuestionBankList } from "@/lib/question-bank-list";
 import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
@@ -27,6 +29,7 @@ function LessonRow({ lesson }: { lesson: BankTreeLesson }) {
       title={lesson.title}
       badge={<ProgressBadge answered={lesson.answered_count} total={lesson.question_count} />}
     >
+      <BankStatsLine counts={lesson} />
       <QuestionBankList
         filter={{ documentIds: [lesson.id] }}
         emptyMessage="No questions for this lesson yet."
@@ -56,6 +59,7 @@ function SubChapterRow({ subChapter }: { subChapter: BankTreeSubChapter }) {
         <ProgressBadge answered={subChapter.answered_count} total={subChapter.question_count} />
       }
     >
+      <BankStatsLine counts={subChapter} />
       <LessonList lessons={subChapter.lessons} />
     </ExpandableRow>
   );
@@ -67,6 +71,7 @@ function ChapterRow({ chapter }: { chapter: BankTreeChapter }) {
       title={chapter.title}
       badge={<ProgressBadge answered={chapter.answered_count} total={chapter.question_count} />}
     >
+      <BankStatsLine counts={chapter} />
       {chapter.sub_chapters.length === 0 ? (
         <Text style={styles.hint}>No sub-chapters.</Text>
       ) : (
@@ -116,6 +121,20 @@ export default function QuestionBankScreen() {
     (sum, lesson) => sum + lesson.question_count,
     0,
   );
+  const unassignedCounts = {
+    question_count: data.unassigned_question_count,
+    answered_count: data.unassigned_answered_count,
+    correct_count: data.unassigned_correct_count,
+    partial_count: data.unassigned_partial_count,
+    incorrect_count: data.unassigned_incorrect_count,
+    points_awarded: data.unassigned_points_awarded,
+    points_possible: data.unassigned_points_possible,
+  };
+  const overall = sumBankStatsCounts([
+    ...data.books,
+    ...data.uncategorized_lessons,
+    unassignedCounts,
+  ]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -124,6 +143,16 @@ export default function QuestionBankScreen() {
         The same structure as your lessons, one level deeper. Answer anything to check yourself —
         attempts are recorded, and you can retry.
       </Text>
+
+      {!isEmpty && (
+        <View style={styles.overviewCard}>
+          <Text style={styles.overviewTitle}>Overall</Text>
+          <Text style={styles.hint}>
+            {overall.answered_count}/{overall.question_count} answered
+          </Text>
+          <BankStatsLine counts={overall} />
+        </View>
+      )}
 
       {isEmpty ? (
         <Text style={styles.hint}>The question bank is empty.</Text>
@@ -135,6 +164,7 @@ export default function QuestionBankScreen() {
               title={book.title}
               badge={<ProgressBadge answered={book.answered_count} total={book.question_count} />}
             >
+              <BankStatsLine counts={book} />
               {book.chapters.length === 0 ? (
                 <Text style={styles.hint}>No chapters.</Text>
               ) : (
@@ -152,6 +182,7 @@ export default function QuestionBankScreen() {
               title="Uncategorized lessons"
               badge={<ProgressBadge answered={uncategorizedAnswered} total={uncategorizedTotal} />}
             >
+              <BankStatsLine counts={sumBankStatsCounts(data.uncategorized_lessons)} />
               <LessonList lessons={data.uncategorized_lessons} />
             </ExpandableRow>
           )}
@@ -169,6 +200,7 @@ export default function QuestionBankScreen() {
                 />
               }
             >
+              <BankStatsLine counts={unassignedCounts} />
               <QuestionBankList unassigned emptyMessage="Nothing here." />
             </ExpandableRow>
           )}
@@ -195,6 +227,18 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: spacing.xs,
+  },
+  overviewCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  overviewTitle: {
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.semibold,
+    color: colors.foreground,
   },
   badgeHint: {
     fontSize: fontSizes.xs,

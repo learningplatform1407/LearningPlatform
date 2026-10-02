@@ -35,6 +35,11 @@ const emptyTree = {
   uncategorized_lessons: [],
   unassigned_question_count: 0,
   unassigned_answered_count: 0,
+  unassigned_correct_count: 0,
+  unassigned_partial_count: 0,
+  unassigned_incorrect_count: 0,
+  unassigned_points_awarded: 0,
+  unassigned_points_possible: 0,
 };
 
 const question = {
@@ -263,6 +268,54 @@ test("marks a question as soon as it is answered, before any refetch", async () 
   expect(
     await screen.findByLabelText("Answered partially correctly, 2 of 4 points"),
   ).toBeInTheDocument();
+});
+
+test("shows success/failing/pending/average-score stats per node and overall", async () => {
+  getQuestionBankTree.mockResolvedValue({
+    ...emptyTree,
+    books: [
+      {
+        id: "b1",
+        title: "Cardiology",
+        question_count: 4,
+        answered_count: 2,
+        correct_count: 1,
+        partial_count: 0,
+        incorrect_count: 1,
+        points_awarded: 4,
+        points_possible: 8,
+        chapters: [
+          {
+            id: "c1",
+            title: "Heart failure",
+            question_count: 4,
+            answered_count: 2,
+            correct_count: 1,
+            partial_count: 0,
+            incorrect_count: 1,
+            points_awarded: 4,
+            points_possible: 8,
+            sub_chapters: [],
+          },
+        ],
+      },
+    ],
+  });
+
+  renderPage();
+
+  // Overall card: sums the one book (nothing uncategorized or unassigned).
+  expect(await screen.findByText("Overall")).toBeInTheDocument();
+  expect(screen.getByText("2/4 answered")).toBeInTheDocument();
+
+  // Per-book line, inside the collapsed-by-default row. With only one book
+  // and nothing uncategorized or unassigned, its stats equal the overall
+  // ones, so the same line appears twice: the Overall card and the book row.
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: /Cardiology/ }));
+  expect(
+    await screen.findAllByText("50% success · 50% failing · 2 pending · avg score 50%"),
+  ).toHaveLength(2);
 });
 
 test("hides the admin import link from students", async () => {

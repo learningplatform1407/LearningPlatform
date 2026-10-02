@@ -26,6 +26,16 @@ function renderScreen() {
   );
 }
 
+// points_possible/points_awarded cover only the answered subset (1 of the 2
+// questions), so both are 4 — the single answered question's point value.
+const COUNTS = {
+  correct_count: 1,
+  partial_count: 0,
+  incorrect_count: 0,
+  points_awarded: 4,
+  points_possible: 4,
+};
+
 const TREE = {
   books: [
     {
@@ -33,19 +43,30 @@ const TREE = {
       title: "Book A",
       question_count: 2,
       answered_count: 1,
+      ...COUNTS,
       chapters: [
         {
           id: "c1",
           title: "Chapter 1",
           question_count: 2,
           answered_count: 1,
+          ...COUNTS,
           sub_chapters: [
             {
               id: "sc1",
               title: "Sub 1.1",
               question_count: 2,
               answered_count: 1,
-              lessons: [{ id: "d1", title: "Lesson A", question_count: 2, answered_count: 1 }],
+              ...COUNTS,
+              lessons: [
+                {
+                  id: "d1",
+                  title: "Lesson A",
+                  question_count: 2,
+                  answered_count: 1,
+                  ...COUNTS,
+                },
+              ],
             },
           ],
         },
@@ -55,6 +76,11 @@ const TREE = {
   uncategorized_lessons: [],
   unassigned_question_count: 0,
   unassigned_answered_count: 0,
+  unassigned_correct_count: 0,
+  unassigned_partial_count: 0,
+  unassigned_incorrect_count: 0,
+  unassigned_points_awarded: 0,
+  unassigned_points_possible: 0,
 };
 
 const QUESTION = {
@@ -117,6 +143,27 @@ test("renders the tree collapsed, and expanding down to a lesson shows its quest
 
   expect(await screen.findByText("What is 2 + 2?")).toBeTruthy();
   expect(mockListQuestionBank).toHaveBeenCalledWith({ documentIds: ["d1"], unassigned: undefined });
+});
+
+test("shows the Overall card and per-node success/failing/pending/average-score stats", async () => {
+  mockGetQuestionBankTree.mockResolvedValue(TREE);
+  mockListQuestionBank.mockResolvedValue([QUESTION]);
+  mockGetQuizAvailableCount.mockResolvedValue({ available: 1 });
+
+  renderScreen();
+
+  // Overall sums the one book (nothing uncategorized or unassigned here), so
+  // "1 correct out of 1 answered, 1 pending" reads as 100% success.
+  expect(await screen.findByText("Overall")).toBeTruthy();
+  expect(screen.getByText("1/2 answered")).toBeTruthy();
+  expect(screen.getByText("100% success · 0% failing · 1 pending · avg score 100%")).toBeTruthy();
+
+  // Expanding the book reveals the same line again — its own stats line,
+  // which equals Overall's here since it's the only book.
+  fireEvent.press(screen.getByText("Book A"));
+  expect(
+    await screen.findAllByText("100% success · 0% failing · 1 pending · avg score 100%"),
+  ).toHaveLength(2);
 });
 
 test("answering a question reveals the outcome", async () => {
