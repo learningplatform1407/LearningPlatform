@@ -108,6 +108,14 @@ export interface BankTreeLesson {
   title: string;
   question_count: number;
   answered_count: number;
+  // Outcome breakdown and points over the *answered* subset only. Rates
+  // (success/failure/average score) are derived from these raw counts via
+  // computeBankStatsRates below, rather than sent pre-divided.
+  correct_count: number;
+  partial_count: number;
+  incorrect_count: number;
+  points_awarded: number;
+  points_possible: number;
 }
 
 export interface BankTreeSubChapter extends BankTreeLesson {
@@ -127,6 +135,71 @@ export interface BankTree {
   uncategorized_lessons: BankTreeLesson[];
   unassigned_question_count: number;
   unassigned_answered_count: number;
+  unassigned_correct_count: number;
+  unassigned_partial_count: number;
+  unassigned_incorrect_count: number;
+  unassigned_points_awarded: number;
+  unassigned_points_possible: number;
+}
+
+/** The raw tally any bank node (lesson, sub-chapter, chapter, book, or the
+ * unassigned bucket) carries, shared so web and mobile derive the same
+ * rates from the same numbers instead of each re-deriving them. */
+export interface BankStatsCounts {
+  question_count: number;
+  answered_count: number;
+  correct_count: number;
+  partial_count: number;
+  incorrect_count: number;
+  points_awarded: number;
+  points_possible: number;
+}
+
+export interface BankStatsRates {
+  pending_count: number;
+  /** correct_count / answered_count — null when nothing's been answered yet,
+   * distinct from a real 0% (answered everything and got it all wrong). */
+  success_rate: number | null;
+  /** incorrect_count / answered_count. Partial attempts count toward
+   * neither rate — they're their own outcome, not halfway between the two. */
+  failure_rate: number | null;
+  /** points_awarded / points_possible over the answered subset. */
+  average_score: number | null;
+}
+
+export function computeBankStatsRates(counts: BankStatsCounts): BankStatsRates {
+  return {
+    pending_count: counts.question_count - counts.answered_count,
+    success_rate: counts.answered_count > 0 ? counts.correct_count / counts.answered_count : null,
+    failure_rate: counts.answered_count > 0 ? counts.incorrect_count / counts.answered_count : null,
+    average_score:
+      counts.points_possible > 0 ? counts.points_awarded / counts.points_possible : null,
+  };
+}
+
+/** Folds several nodes' counts into one, e.g. to get an "overall" figure
+ * across every book, the uncategorized bucket, and the unassigned bucket. */
+export function sumBankStatsCounts(nodes: BankStatsCounts[]): BankStatsCounts {
+  return nodes.reduce<BankStatsCounts>(
+    (total, node) => ({
+      question_count: total.question_count + node.question_count,
+      answered_count: total.answered_count + node.answered_count,
+      correct_count: total.correct_count + node.correct_count,
+      partial_count: total.partial_count + node.partial_count,
+      incorrect_count: total.incorrect_count + node.incorrect_count,
+      points_awarded: total.points_awarded + node.points_awarded,
+      points_possible: total.points_possible + node.points_possible,
+    }),
+    {
+      question_count: 0,
+      answered_count: 0,
+      correct_count: 0,
+      partial_count: 0,
+      incorrect_count: 0,
+      points_awarded: 0,
+      points_possible: 0,
+    },
+  );
 }
 
 export interface QuizAnswerSaved {

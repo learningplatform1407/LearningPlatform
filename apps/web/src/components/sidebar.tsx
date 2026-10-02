@@ -4,10 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
+// Question Bank has no entry of its own here — it's reached from inside
+// Learn (its card on /learn, and the per-lesson tab), the same way Review
+// and Flashcards are. Promoting it to a top-level item would say it's a
+// peer of Learn rather than part of it.
 const NAV_ITEMS = [
   { href: "/learn", label: "Learn", emoji: "📖" },
-  { href: "/question-bank", label: "Question Bank", emoji: "🗂️" },
-  { href: "/exams", label: "Exams", emoji: "📝" },
+  { href: "/exams", label: "Exam Hub", emoji: "📝" },
   { href: "/assistant", label: "AI Assistant", emoji: "🤖" },
   { href: "/roadmap", label: "Roadmap", emoji: "🗺️" },
   { href: "/feed", label: "Feed", emoji: "📰" },
