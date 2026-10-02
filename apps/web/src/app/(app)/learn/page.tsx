@@ -95,7 +95,9 @@ export default function LearnPage() {
         </Card>
         <Card as={Link} href="/question-bank" interactive className="block p-lg">
           <p className="text-lg font-semibold text-foreground">Question Bank</p>
-          <p className="mt-xs text-sm text-muted-foreground">Coming soon.</p>
+          <p className="mt-xs text-sm text-muted-foreground">
+            Browse and answer questions, with stats on your progress.
+          </p>
         </Card>
         <Card as={Link} href="/learn/flashcards" interactive className="block p-lg">
           <p className="text-lg font-semibold text-foreground">Flashcards</p>

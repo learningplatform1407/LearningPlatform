@@ -750,7 +750,7 @@ export default function ExamsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Exams</Text>
+      <Text style={styles.title}>Exam Hub</Text>
       <Text style={styles.hint}>
         Build a custom quiz from any topics and tags. Scheduled mock exams will appear here too.
       </Text>

@@ -100,8 +100,10 @@ export default function LearnScreen() {
           onPress={() => router.push("/question-bank")}
           accessibilityRole="button"
         >
-          <Text style={styles.navCardTitle}>Quizzes</Text>
-          <Text style={styles.navCardSubtitle}>Browse and answer questions.</Text>
+          <Text style={styles.navCardTitle}>Question Bank</Text>
+          <Text style={styles.navCardSubtitle}>
+            Browse and answer questions, with stats on your progress.
+          </Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.navCard, pressed && styles.cardPressed]}

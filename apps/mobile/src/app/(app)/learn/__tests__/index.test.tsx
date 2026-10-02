@@ -26,20 +26,20 @@ beforeEach(() => {
   (router.push as jest.Mock).mockReset();
 });
 
-test("shows Library, Quizzes, Flashcards, and Notebook when nothing has been viewed yet", async () => {
+test("shows Library, Question Bank, Flashcards, and Notebook when nothing has been viewed yet", async () => {
   mockListRecentLessons.mockResolvedValue([]);
 
   renderScreen();
 
   expect(await screen.findByText("Library")).toBeTruthy();
-  expect(screen.getByText("Quizzes")).toBeTruthy();
+  expect(screen.getByText("Question Bank")).toBeTruthy();
   expect(screen.getByText("Flashcards")).toBeTruthy();
   expect(screen.getByText("Notebook")).toBeTruthy();
   expect(screen.queryByText("Continue where you left off")).toBeNull();
   expect(screen.queryByText("Recently opened")).toBeNull();
 });
 
-test("navigates to Library, Quizzes, Flashcards, and Notebook", async () => {
+test("navigates to Library, Question Bank, Flashcards, and Notebook", async () => {
   mockListRecentLessons.mockResolvedValue([]);
 
   renderScreen();
@@ -48,7 +48,7 @@ test("navigates to Library, Quizzes, Flashcards, and Notebook", async () => {
   fireEvent.press(screen.getByText("Library"));
   expect(router.push).toHaveBeenCalledWith("/learn/library");
 
-  fireEvent.press(screen.getByText("Quizzes"));
+  fireEvent.press(screen.getByText("Question Bank"));
   expect(router.push).toHaveBeenCalledWith("/question-bank");
 
   fireEvent.press(screen.getByText("Flashcards"));
