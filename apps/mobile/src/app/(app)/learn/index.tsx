@@ -101,7 +101,7 @@ export default function LearnScreen() {
           accessibilityRole="button"
         >
           <Text style={styles.navCardTitle}>Quizzes</Text>
-          <Text style={styles.navCardSubtitle}>Coming soon.</Text>
+          <Text style={styles.navCardSubtitle}>Browse and answer questions.</Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.navCard, pressed && styles.cardPressed]}
