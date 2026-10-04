@@ -713,7 +713,7 @@ export default function QuizzesPage() {
 
   return (
     <main className="p-xl">
-      <h1 className="text-2xl font-semibold text-foreground">Exams</h1>
+      <h1 className="text-2xl font-semibold text-foreground">Exam Hub</h1>
       <p className="mt-xs text-sm text-muted-foreground">
         Build a custom quiz from any topics and tags. Scheduled mock exams will appear here too.
       </p>

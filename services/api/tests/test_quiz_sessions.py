@@ -834,6 +834,62 @@ def test_bank_tree_counts_roll_up_and_track_answers(
     assert tree["books"][0]["answered_count"] == 1
 
 
+def test_bank_tree_outcome_and_points_roll_up(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    chapter, sub_chapters = _make_chapter(db_session, sub_chapter_count=1)
+    lesson = _make_lesson(db_session, sub_chapter_id=sub_chapters[0].id)
+    right = _make_question(db_session, prompt="Right one", document_id=lesson.id)
+    wrong = _make_question(db_session, prompt="Wrong one", document_id=lesson.id)
+    _make_question(db_session, prompt="Never answered", document_id=lesson.id)
+
+    authed_client.post(f"/v1/question-bank/{right.id}/answers", json={"selected_option_ids": ["a"]})
+    authed_client.post(f"/v1/question-bank/{wrong.id}/answers", json={"selected_option_ids": ["b"]})
+
+    tree = authed_client.get("/v1/question-bank/tree").json()
+    book = tree["books"][0]
+    lesson_node = book["chapters"][0]["sub_chapters"][0]["lessons"][0]
+
+    assert lesson_node["question_count"] == 3
+    assert lesson_node["answered_count"] == 2
+    assert lesson_node["correct_count"] == 1
+    assert lesson_node["partial_count"] == 0
+    assert lesson_node["incorrect_count"] == 1
+    assert lesson_node["points_awarded"] == 4
+    assert lesson_node["points_possible"] == 8
+
+    # The breakdown rolls up through sub-chapter, chapter and book exactly
+    # like question_count/answered_count already do.
+    for node in (
+        book["chapters"][0]["sub_chapters"][0],
+        book["chapters"][0],
+        book,
+    ):
+        assert node["correct_count"] == 1
+        assert node["incorrect_count"] == 1
+        assert node["points_awarded"] == 4
+        assert node["points_possible"] == 8
+
+
+def test_bank_tree_unassigned_outcome_and_points(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    question = _make_question(db_session, prompt="Belongs to no lesson")
+    authed_client.post(
+        f"/v1/question-bank/{question.id}/answers", json={"selected_option_ids": ["a"]}
+    )
+
+    tree = authed_client.get("/v1/question-bank/tree").json()
+
+    assert tree["unassigned_question_count"] == 1
+    assert tree["unassigned_answered_count"] == 1
+    assert tree["unassigned_correct_count"] == 1
+    assert tree["unassigned_partial_count"] == 0
+    assert tree["unassigned_incorrect_count"] == 0
+    assert tree["unassigned_points_awarded"] == 4
+    assert tree["unassigned_points_possible"] == 4
+
+
 def test_bank_tree_lists_lessons_with_no_sub_chapter_separately(
     authed_client: TestClient, db_session: Session
 ) -> None:

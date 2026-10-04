@@ -2,8 +2,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { BankTreeChapter, BankTreeLesson, BankTreeSubChapter } from "@lp/api-client";
+import { sumBankStatsCounts } from "@lp/api-client";
 import Link from "next/link";
 
+import { BankStatsLine } from "@/components/bank-stats-line";
 import { ExpandableRow } from "@/components/expandable-row";
 import { QuestionBankList } from "@/components/question-bank-list";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
@@ -28,6 +30,7 @@ function LessonRow({ lesson }: { lesson: BankTreeLesson }) {
       title={lesson.title}
       badge={<ProgressBadge answered={lesson.answered_count} total={lesson.question_count} />}
     >
+      <BankStatsLine counts={lesson} />
       <QuestionBankList
         filter={{ documentIds: [lesson.id] }}
         emptyMessage="No questions for this lesson yet."
@@ -57,6 +60,7 @@ function SubChapterRow({ subChapter }: { subChapter: BankTreeSubChapter }) {
         <ProgressBadge answered={subChapter.answered_count} total={subChapter.question_count} />
       }
     >
+      <BankStatsLine counts={subChapter} />
       <LessonList lessons={subChapter.lessons} />
     </ExpandableRow>
   );
@@ -68,6 +72,7 @@ function ChapterRow({ chapter }: { chapter: BankTreeChapter }) {
       title={chapter.title}
       badge={<ProgressBadge answered={chapter.answered_count} total={chapter.question_count} />}
     >
+      <BankStatsLine counts={chapter} />
       {chapter.sub_chapters.length === 0 ? (
         <p className="text-sm text-muted-foreground">No sub-chapters.</p>
       ) : (
@@ -95,6 +100,20 @@ export default function QuestionBankPage() {
     tree.data.uncategorized_lessons.length === 0 &&
     tree.data.unassigned_question_count === 0;
 
+  const unassignedCounts = tree.data && {
+    question_count: tree.data.unassigned_question_count,
+    answered_count: tree.data.unassigned_answered_count,
+    correct_count: tree.data.unassigned_correct_count,
+    partial_count: tree.data.unassigned_partial_count,
+    incorrect_count: tree.data.unassigned_incorrect_count,
+    points_awarded: tree.data.unassigned_points_awarded,
+    points_possible: tree.data.unassigned_points_possible,
+  };
+  const overall =
+    tree.data &&
+    unassignedCounts &&
+    sumBankStatsCounts([...tree.data.books, ...tree.data.uncategorized_lessons, unassignedCounts]);
+
   return (
     <main className="p-xl">
       <h1 className="text-2xl font-semibold text-foreground">Question Bank</h1>
@@ -108,6 +127,16 @@ export default function QuestionBankPage() {
         <p role="alert" className="mt-lg text-sm text-danger">
           Failed to load the question bank.
         </p>
+      )}
+
+      {tree.data && overall && (
+        <div className="mt-lg w-full max-w-[48rem] rounded-md border border-border p-md">
+          <h2 className="text-sm font-semibold text-foreground">Overall</h2>
+          <p className="mt-xs text-sm text-muted-foreground">
+            {overall.answered_count}/{overall.question_count} answered
+          </p>
+          <BankStatsLine counts={overall} />
+        </div>
       )}
 
       {tree.data && (
@@ -124,6 +153,7 @@ export default function QuestionBankPage() {
                     <ProgressBadge answered={book.answered_count} total={book.question_count} />
                   }
                 >
+                  <BankStatsLine counts={book} />
                   {book.chapters.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No chapters.</p>
                   ) : (
@@ -152,6 +182,7 @@ export default function QuestionBankPage() {
                     />
                   }
                 >
+                  <BankStatsLine counts={sumBankStatsCounts(tree.data.uncategorized_lessons)} />
                   <LessonList lessons={tree.data.uncategorized_lessons} />
                 </ExpandableRow>
               )}
@@ -159,7 +190,7 @@ export default function QuestionBankPage() {
               {/* Questions whose document_id is null belong to no lesson, so
                   they hang under no node above — without this row they would
                   be unreachable from the bank entirely. */}
-              {tree.data.unassigned_question_count > 0 && (
+              {tree.data.unassigned_question_count > 0 && unassignedCounts && (
                 <ExpandableRow
                   title="Questions not linked to a lesson"
                   badge={
@@ -169,6 +200,7 @@ export default function QuestionBankPage() {
                     />
                   }
                 >
+                  <BankStatsLine counts={unassignedCounts} />
                   <QuestionBankList unassigned emptyMessage="Nothing here." />
                 </ExpandableRow>
               )}

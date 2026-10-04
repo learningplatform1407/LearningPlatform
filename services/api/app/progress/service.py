@@ -9,6 +9,7 @@ answered questions create a row") in one place instead of three.
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
+from typing import NamedTuple
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -84,12 +85,18 @@ def _record_attempt(
         savepoint.commit()
 
 
-def _question_counts(
-    db: Session, user_id: uuid.UUID
-) -> tuple[dict[uuid.UUID, int], dict[uuid.UUID, int]]:
-    """Published questions per lesson, and how many this user has answered.
+class _NodeStats(NamedTuple):
+    totals: dict[uuid.UUID, int]
+    answered: dict[uuid.UUID, int]
+    outcomes: dict[uuid.UUID, dict[str, int]]
+    points: dict[uuid.UUID, tuple[int, int]]
 
-    Two grouped queries rather than one per lesson: the bank tree renders
+
+def _question_counts(db: Session, user_id: uuid.UUID) -> _NodeStats:
+    """Published questions per lesson, how many this user has answered, the
+    outcome breakdown of those answers, and the points earned vs. possible.
+
+    Four grouped queries rather than one per lesson: the bank tree renders
     every node, so per-node counting would be a query per lesson on a screen
     loaded constantly.
     """
@@ -100,15 +107,50 @@ def _question_counts(
         document_id: count
         for document_id, count in db.execute(published.group_by(Question.document_id)).all()
     }
+
+    answered_join = published.join(
+        QuestionProgress, QuestionProgress.question_id == Question.id
+    ).where(QuestionProgress.user_id == user_id)
     answered = {
         document_id: count
-        for document_id, count in db.execute(
-            published.join(QuestionProgress, QuestionProgress.question_id == Question.id)
-            .where(QuestionProgress.user_id == user_id)
+        for document_id, count in db.execute(answered_join.group_by(Question.document_id)).all()
+    }
+
+    outcomes: dict[uuid.UUID, dict[str, int]] = {}
+    outcome_rows = db.execute(
+        select(Question.document_id, QuestionProgress.outcome, func.count(Question.id))
+        .select_from(Question)
+        .join(QuestionProgress, QuestionProgress.question_id == Question.id)
+        .where(
+            Question.status == QuestionStatus.PUBLISHED,
+            Question.document_id.isnot(None),
+            QuestionProgress.user_id == user_id,
+        )
+        .group_by(Question.document_id, QuestionProgress.outcome)
+    ).all()
+    for document_id, outcome, count in outcome_rows:
+        outcomes.setdefault(document_id, {})[outcome] = count
+
+    points: dict[uuid.UUID, tuple[int, int]] = {
+        document_id: (awarded or 0, possible or 0)
+        for document_id, awarded, possible in db.execute(
+            select(
+                Question.document_id,
+                func.sum(QuestionProgress.points_awarded),
+                func.sum(QuestionProgress.points_possible),
+            )
+            .select_from(Question)
+            .join(QuestionProgress, QuestionProgress.question_id == Question.id)
+            .where(
+                Question.status == QuestionStatus.PUBLISHED,
+                Question.document_id.isnot(None),
+                QuestionProgress.user_id == user_id,
+            )
             .group_by(Question.document_id)
         ).all()
     }
-    return totals, answered
+
+    return _NodeStats(totals, answered, outcomes, points)
 
 
 def get_progress_for_questions(
@@ -145,9 +187,18 @@ def get_progress_for_questions(
     }
 
 
-def _unassigned_counts(db: Session, user_id: uuid.UUID) -> tuple[int, int]:
+class _UnassignedStats(NamedTuple):
+    total: int
+    answered: int
+    outcomes: dict[str, int]
+    points_awarded: int
+    points_possible: int
+
+
+def _unassigned_counts(db: Session, user_id: uuid.UUID) -> _UnassignedStats:
     """Published questions belonging to no lesson, and how many this user has
-    answered. They hang under no tree node, so they need their own bucket."""
+    answered, their outcome breakdown, and the points earned vs. possible.
+    They hang under no tree node, so they need their own bucket."""
     unassigned = select(func.count(Question.id)).where(
         Question.status == QuestionStatus.PUBLISHED, Question.document_id.is_(None)
     )
@@ -160,7 +211,33 @@ def _unassigned_counts(db: Session, user_id: uuid.UUID) -> tuple[int, int]:
         )
         or 0
     )
-    return total, answered
+
+    base_where = (
+        Question.status == QuestionStatus.PUBLISHED,
+        Question.document_id.is_(None),
+        QuestionProgress.user_id == user_id,
+    )
+    outcomes = {"correct": 0, "partial": 0, "incorrect": 0}
+    for outcome, count in db.execute(
+        select(QuestionProgress.outcome, func.count(Question.id))
+        .select_from(Question)
+        .join(QuestionProgress, QuestionProgress.question_id == Question.id)
+        .where(*base_where)
+        .group_by(QuestionProgress.outcome)
+    ).all():
+        outcomes[outcome] = count
+
+    points_awarded, points_possible = db.execute(
+        select(
+            func.coalesce(func.sum(QuestionProgress.points_awarded), 0),
+            func.coalesce(func.sum(QuestionProgress.points_possible), 0),
+        )
+        .select_from(Question)
+        .join(QuestionProgress, QuestionProgress.question_id == Question.id)
+        .where(*base_where)
+    ).one()
+
+    return _UnassignedStats(total, answered, outcomes, points_awarded, points_possible)
 
 
 def get_bank_tree(db: Session, user_id: uuid.UUID) -> BankTreeResponse:
@@ -170,14 +247,21 @@ def get_bank_tree(db: Session, user_id: uuid.UUID) -> BankTreeResponse:
     bank shows exactly the structure students already navigate, carried one
     level deeper into the questions themselves.
     """
-    totals, answered = _question_counts(db, user_id)
+    totals, answered, outcomes, points = _question_counts(db, user_id)
 
     def lesson_node(document: Document) -> BankTreeLesson:
+        doc_outcomes = outcomes.get(document.id, {})
+        points_awarded, points_possible = points.get(document.id, (0, 0))
         return BankTreeLesson(
             id=document.id,
             title=document.title,
             question_count=totals.get(document.id, 0),
             answered_count=answered.get(document.id, 0),
+            correct_count=doc_outcomes.get("correct", 0),
+            partial_count=doc_outcomes.get("partial", 0),
+            incorrect_count=doc_outcomes.get("incorrect", 0),
+            points_awarded=points_awarded,
+            points_possible=points_possible,
         )
 
     books: list[BankTreeBook] = []
@@ -198,6 +282,11 @@ def get_bank_tree(db: Session, user_id: uuid.UUID) -> BankTreeResponse:
                         title=sub_chapter.title,
                         question_count=sum(lesson.question_count for lesson in lessons),
                         answered_count=sum(lesson.answered_count for lesson in lessons),
+                        correct_count=sum(lesson.correct_count for lesson in lessons),
+                        partial_count=sum(lesson.partial_count for lesson in lessons),
+                        incorrect_count=sum(lesson.incorrect_count for lesson in lessons),
+                        points_awarded=sum(lesson.points_awarded for lesson in lessons),
+                        points_possible=sum(lesson.points_possible for lesson in lessons),
                         lessons=lessons,
                     )
                 )
@@ -207,6 +296,11 @@ def get_bank_tree(db: Session, user_id: uuid.UUID) -> BankTreeResponse:
                     title=chapter.title,
                     question_count=sum(node.question_count for node in sub_chapters),
                     answered_count=sum(node.answered_count for node in sub_chapters),
+                    correct_count=sum(node.correct_count for node in sub_chapters),
+                    partial_count=sum(node.partial_count for node in sub_chapters),
+                    incorrect_count=sum(node.incorrect_count for node in sub_chapters),
+                    points_awarded=sum(node.points_awarded for node in sub_chapters),
+                    points_possible=sum(node.points_possible for node in sub_chapters),
                     sub_chapters=sub_chapters,
                 )
             )
@@ -216,6 +310,11 @@ def get_bank_tree(db: Session, user_id: uuid.UUID) -> BankTreeResponse:
                 title=book.title,
                 question_count=sum(node.question_count for node in chapters),
                 answered_count=sum(node.answered_count for node in chapters),
+                correct_count=sum(node.correct_count for node in chapters),
+                partial_count=sum(node.partial_count for node in chapters),
+                incorrect_count=sum(node.incorrect_count for node in chapters),
+                points_awarded=sum(node.points_awarded for node in chapters),
+                points_possible=sum(node.points_possible for node in chapters),
                 chapters=chapters,
             )
         )
@@ -224,12 +323,17 @@ def get_bank_tree(db: Session, user_id: uuid.UUID) -> BankTreeResponse:
         lesson_node(document)
         for document in list_documents(db, sub_chapter_id=None, filter_by_sub_chapter=True)
     ]
-    unassigned_total, unassigned_answered = _unassigned_counts(db, user_id)
+    unassigned = _unassigned_counts(db, user_id)
     return BankTreeResponse(
         books=books,
         uncategorized_lessons=uncategorized,
-        unassigned_question_count=unassigned_total,
-        unassigned_answered_count=unassigned_answered,
+        unassigned_question_count=unassigned.total,
+        unassigned_answered_count=unassigned.answered,
+        unassigned_correct_count=unassigned.outcomes["correct"],
+        unassigned_partial_count=unassigned.outcomes["partial"],
+        unassigned_incorrect_count=unassigned.outcomes["incorrect"],
+        unassigned_points_awarded=unassigned.points_awarded,
+        unassigned_points_possible=unassigned.points_possible,
     )
 
 

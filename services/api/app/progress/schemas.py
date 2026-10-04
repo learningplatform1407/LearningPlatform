@@ -25,6 +25,16 @@ class BankTreeLesson(BaseModel):
     title: str
     question_count: int
     answered_count: int
+    # Outcome breakdown and points over the *answered* subset only — a
+    # pending question contributes to question_count but to none of these.
+    # Rates (success/failure/average score) are derived client-side from
+    # these raw counts rather than sent pre-divided, so every caller handles
+    # the "nothing answered yet" zero-division case the same way.
+    correct_count: int
+    partial_count: int
+    incorrect_count: int
+    points_awarded: int
+    points_possible: int
 
 
 class BankTreeSubChapter(BaseModel):
@@ -32,6 +42,11 @@ class BankTreeSubChapter(BaseModel):
     title: str
     question_count: int
     answered_count: int
+    correct_count: int
+    partial_count: int
+    incorrect_count: int
+    points_awarded: int
+    points_possible: int
     lessons: list[BankTreeLesson]
 
 
@@ -40,6 +55,11 @@ class BankTreeChapter(BaseModel):
     title: str
     question_count: int
     answered_count: int
+    correct_count: int
+    partial_count: int
+    incorrect_count: int
+    points_awarded: int
+    points_possible: int
     sub_chapters: list[BankTreeSubChapter]
 
 
@@ -48,6 +68,11 @@ class BankTreeBook(BaseModel):
     title: str
     question_count: int
     answered_count: int
+    correct_count: int
+    partial_count: int
+    incorrect_count: int
+    points_awarded: int
+    points_possible: int
     chapters: list[BankTreeChapter]
 
 
@@ -69,3 +94,8 @@ class BankTreeResponse(BaseModel):
     # exactly these.
     unassigned_question_count: int
     unassigned_answered_count: int
+    unassigned_correct_count: int
+    unassigned_partial_count: int
+    unassigned_incorrect_count: int
+    unassigned_points_awarded: int
+    unassigned_points_possible: int
