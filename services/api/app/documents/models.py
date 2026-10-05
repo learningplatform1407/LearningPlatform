@@ -73,33 +73,8 @@ class LessonView(Base):
     )
 
 
-class Quiz(Base):
-    """Shell record only — no question sub-schema yet, that's still a
-    product-undecided future pass. Exists now purely so a quiz is real DB
-    linkage to a lesson, not a hypothetical future FK."""
-
-    __tablename__ = "quizzes"
-
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
-    title: Mapped[str] = mapped_column(String)
-    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("profiles.id", ondelete="CASCADE"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
-
-
-class Flashcard(Base):
-    __tablename__ = "flashcards"
-
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
-    front_text: Mapped[str] = mapped_column(String)
-    back_text: Mapped[str] = mapped_column(String)
-    order_index: Mapped[int] = mapped_column(Integer, default=0)
-    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("profiles.id", ondelete="CASCADE"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+# Quiz lived here as a shell record linking a lesson to a "quiz" that never
+# gained a question schema. Superseded by the question bank and quiz sessions
+# (app/questions, app/quizzes), which scope questions to a lesson through
+# questions.document_id instead. Flashcard also lived here, and now owns a
+# real feature in app/flashcards.

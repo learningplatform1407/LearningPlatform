@@ -15,8 +15,6 @@ from app.documents.schemas import (
     DocumentResponse,
     DocumentSummaryResponse,
     DocumentVersionResponse,
-    FlashcardResponse,
-    QuizResponse,
     UploadUrlRequest,
     UploadUrlResponse,
 )
@@ -25,8 +23,6 @@ from app.documents.service import (
     get_document,
     get_sub_chapter_summary,
     list_documents,
-    list_flashcards,
-    list_quizzes,
     record_lesson_view,
     register_document,
 )
@@ -119,22 +115,7 @@ def read_document(
     return _to_document_response(db, document)
 
 
-@router.get("/{document_id}/quizzes", response_model=list[QuizResponse])
-def read_quizzes(
-    document_id: UUID,
-    _user: AuthenticatedUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> list[QuizResponse]:
-    return [QuizResponse.model_validate(quiz) for quiz in list_quizzes(db, document_id)]
-
-
-@router.get("/{document_id}/flashcards", response_model=list[FlashcardResponse])
-def read_flashcards(
-    document_id: UUID,
-    _user: AuthenticatedUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> list[FlashcardResponse]:
-    return [
-        FlashcardResponse.model_validate(flashcard)
-        for flashcard in list_flashcards(db, document_id)
-    ]
+# GET /{document_id}/flashcards now lives in app/flashcards/router.py, which
+# serves the same path with scope filtering and real visibility rules. The
+# /quizzes route is gone with the `quizzes` table -- a lesson's questions are
+# reached through the question bank (questions.document_id).

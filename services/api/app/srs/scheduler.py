@@ -1,15 +1,21 @@
 """Pure SM-2 scheduling math -- the same algorithm Anki has used since 1987,
 simplified to whole-day intervals (no Anki-style sub-day "learning steps").
 Kept dependency- and side-effect-free so each rating branch is directly
-unit-testable against hand-computed examples; app/cloze/service.py is what
-reads/writes ClozeReviewState around a call to compute_next_state.
+unit-testable against hand-computed examples.
+
+Shared by every spaced-repetition feature rather than owned by one: cloze
+Review (app/cloze/service.py, ClozeReviewState) and Flashcards
+(app/flashcards/service.py, FlashcardReviewState) each own their own state
+table and both call compute_next_state. It lives under app/srs/ precisely so
+neither has to import from the other's package -- adding a third card type
+means a third state table, never a second copy of this file.
 """
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-ClozeRating = Literal["again", "hard", "good", "easy"]
+ReviewRating = Literal["again", "hard", "good", "easy"]
 
 # SM-2's ease floor -- a card can get progressively harder to schedule
 # further apart, but never below a 130% multiplier, matching Anki.
@@ -34,7 +40,7 @@ class SchedulerResult:
 
 
 def compute_next_state(
-    rating: ClozeRating, state: SchedulerState, now: datetime | None = None
+    rating: ReviewRating, state: SchedulerState, now: datetime | None = None
 ) -> SchedulerResult:
     now = now or datetime.now(UTC)
     ease, interval, repetitions = state.ease_factor, state.interval_days, state.repetitions

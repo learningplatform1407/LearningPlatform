@@ -8,7 +8,6 @@ from app.books.service import list_books
 from app.chapters.service import list_chapters
 from app.cloze.generation import generate_cloze_spans
 from app.cloze.models import ClozeCard, ClozeReviewState
-from app.cloze.scheduler import ClozeRating, SchedulerState, compute_next_state
 from app.cloze.schemas import (
     ReviewSummaryBook,
     ReviewSummaryChapter,
@@ -19,6 +18,7 @@ from app.cloze.schemas import (
 from app.common.errors import ApiError
 from app.documents.models import Document
 from app.documents.service import list_documents
+from app.srs.scheduler import ReviewRating, SchedulerState, compute_next_state
 from app.sub_chapters.service import list_sub_chapters
 
 
@@ -81,7 +81,7 @@ def list_due_cloze_cards(db: Session, document: Document, user_id: uuid.UUID) ->
 
 
 def submit_cloze_review(
-    db: Session, cloze_card_id: uuid.UUID, user_id: uuid.UUID, rating: ClozeRating
+    db: Session, cloze_card_id: uuid.UUID, user_id: uuid.UUID, rating: ReviewRating
 ) -> ClozeReviewState:
     card = db.get(ClozeCard, cloze_card_id)
     if card is None:

@@ -10,13 +10,8 @@ from app.books.models import Book
 from app.chapters.models import Chapter
 from app.cloze.models import ClozeCard, ClozeReviewState
 from app.db.external import auth_users
-from app.documents.models import (
-    Document,
-    DocumentVersion,
-    Flashcard,
-    LessonView,
-    Quiz,
-)
+from app.documents.models import Document, DocumentVersion, LessonView
+from app.flashcards.models import Flashcard, FlashcardReviewState
 from app.notebook.models import NotebookEntry
 from app.plans.models import Subscription
 from app.progress.models import QuestionProgress
@@ -36,13 +31,13 @@ __all__ = [
     "DocumentAnnotation",
     "DocumentVersion",
     "Flashcard",
+    "FlashcardReviewState",
     "LessonView",
     "NotebookEntry",
     "Profile",
     "Question",
     "QuestionProgress",
     "QuestionTag",
-    "Quiz",
     "QuizSession",
     "QuizSessionQuestion",
     "SubChapter",

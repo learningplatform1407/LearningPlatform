@@ -10,7 +10,7 @@ from app.chapters.models import Chapter
 from app.common.errors import ApiError
 from app.documents.constants import ALLOWED_MIME_TYPES, MAX_UPLOAD_BYTES
 from app.documents.extraction import ExtractedBlock, ExtractionError, extract_pdf
-from app.documents.models import Document, DocumentVersion, Flashcard, LessonView, Quiz
+from app.documents.models import Document, DocumentVersion, LessonView
 from app.documents.schemas import (
     ChapterSummary,
     DocumentCreateRequest,
@@ -181,19 +181,3 @@ def list_recent_lessons(
         .limit(limit)
     ).all()
     return [(document, last_viewed_at) for document, last_viewed_at in rows]
-
-
-def list_quizzes(db: Session, document_id: uuid.UUID) -> list[Quiz]:
-    return list(
-        db.scalars(select(Quiz).where(Quiz.document_id == document_id).order_by(Quiz.created_at))
-    )
-
-
-def list_flashcards(db: Session, document_id: uuid.UUID) -> list[Flashcard]:
-    return list(
-        db.scalars(
-            select(Flashcard)
-            .where(Flashcard.document_id == document_id)
-            .order_by(Flashcard.order_index)
-        )
-    )

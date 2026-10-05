@@ -10,9 +10,9 @@ from app.auth.schemas import AuthenticatedUser
 from app.books.models import Book
 from app.chapters.models import Chapter
 from app.cloze.generation import generate_cloze_spans
-from app.cloze.scheduler import SchedulerState, compute_next_state
 from app.documents.models import Document, DocumentVersion
 from app.main import app
+from app.srs.scheduler import SchedulerState, compute_next_state
 from app.sub_chapters.models import SubChapter
 from app.users.models import AccountSettings, Profile
 
