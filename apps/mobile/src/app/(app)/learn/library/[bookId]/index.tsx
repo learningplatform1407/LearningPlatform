@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { BankTreeChapter, BankTreeLesson, BankTreeSubChapter } from "@lp/api-client";
+import { computeLessonCompletionPercent } from "@lp/api-client";
 import * as DocumentPicker from "expo-document-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
@@ -14,6 +16,7 @@ import {
 
 import { getApiClient } from "@/lib/api-client";
 import { sha256Hex } from "@/lib/checksum";
+import { ProgressBar } from "@/lib/progress-bar";
 import { supabase } from "@/lib/supabase";
 import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
 
@@ -32,6 +35,13 @@ function UncategorizedLessonsScreen() {
     queryKey: ["documents", "uncategorized"],
     queryFn: () => getApiClient().listDocuments("none"),
   });
+  const tree = useQuery({
+    queryKey: ["question-bank-tree"],
+    queryFn: () => getApiClient().getQuestionBankTree(),
+  });
+  const lessonProgress = new Map<string, BankTreeLesson>(
+    tree.data?.uncategorized_lessons.map((lesson) => [lesson.id, lesson]),
+  );
 
   const [title, setTitle] = useState("");
   const [pickedFile, setPickedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
@@ -117,16 +127,26 @@ function UncategorizedLessonsScreen() {
       }
       ListEmptyComponent={<Text style={styles.empty}>No lessons yet.</Text>}
       renderItem={({ item }) => (
-        <Pressable
-          style={styles.row}
-          onPress={() => router.push(`/learn/${item.id}`)}
-          accessibilityRole="button"
-        >
-          <Text style={styles.rowTitle}>{item.title}</Text>
-          <Text style={styles.rowStatus}>
-            {item.status ? (STATUS_LABEL[item.status] ?? item.status) : ""}
-          </Text>
-        </Pressable>
+        <View>
+          <Pressable
+            style={styles.row}
+            onPress={() => router.push(`/learn/${item.id}`)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.rowTitle}>{item.title}</Text>
+            <Text style={styles.rowStatus}>
+              {item.status ? (STATUS_LABEL[item.status] ?? item.status) : ""}
+            </Text>
+          </Pressable>
+          <ProgressBar
+            percent={computeLessonCompletionPercent(
+              lessonProgress.get(item.id) ?? {
+                eligible_lesson_count: 0,
+                completed_lesson_count: 0,
+              },
+            )}
+          />
+        </View>
       )}
       ListFooterComponent={
         isAdmin ? (
@@ -171,10 +191,12 @@ function LessonList({
   subChapterId,
   isAdmin,
   onUploaded,
+  lessonProgress,
 }: {
   subChapterId: string;
   isAdmin: boolean;
   onUploaded?: () => void;
+  lessonProgress: Map<string, BankTreeLesson>;
 }) {
   const queryClient = useQueryClient();
   const documents = useQuery({
@@ -257,17 +279,26 @@ function LessonList({
         <Text style={styles.empty}>No lessons yet.</Text>
       ) : (
         documents.data.map((item) => (
-          <Pressable
-            key={item.id}
-            style={styles.row}
-            onPress={() => router.push(`/learn/${item.id}`)}
-            accessibilityRole="button"
-          >
-            <Text style={styles.rowTitle}>{item.title}</Text>
-            <Text style={styles.rowStatus}>
-              {item.status ? (STATUS_LABEL[item.status] ?? item.status) : ""}
-            </Text>
-          </Pressable>
+          <View key={item.id}>
+            <Pressable
+              style={styles.row}
+              onPress={() => router.push(`/learn/${item.id}`)}
+              accessibilityRole="button"
+            >
+              <Text style={styles.rowTitle}>{item.title}</Text>
+              <Text style={styles.rowStatus}>
+                {item.status ? (STATUS_LABEL[item.status] ?? item.status) : ""}
+              </Text>
+            </Pressable>
+            <ProgressBar
+              percent={computeLessonCompletionPercent(
+                lessonProgress.get(item.id) ?? {
+                  eligible_lesson_count: 0,
+                  completed_lesson_count: 0,
+                },
+              )}
+            />
+          </View>
         ))
       )}
 
@@ -310,17 +341,22 @@ function LessonList({
 
 function SubChapterRow({
   subChapter,
+  subChapterNode,
   isAdmin,
   isExpanded,
   onToggle,
   onUploaded,
 }: {
   subChapter: { id: string; title: string; lesson_count: number };
+  subChapterNode: BankTreeSubChapter | undefined;
   isAdmin: boolean;
   isExpanded: boolean;
   onToggle: () => void;
   onUploaded: () => void;
 }) {
+  const lessonProgress = new Map<string, BankTreeLesson>(
+    subChapterNode?.lessons.map((lesson) => [lesson.id, lesson]),
+  );
   return (
     <View style={styles.subChapterCard}>
       <Pressable
@@ -335,9 +371,19 @@ function SubChapterRow({
           {isExpanded ? "▲" : "▼"}
         </Text>
       </Pressable>
+      {subChapterNode && (
+        <View style={styles.progressWrapper}>
+          <ProgressBar percent={computeLessonCompletionPercent(subChapterNode)} />
+        </View>
+      )}
       {isExpanded && (
         <View style={styles.subChapterBody}>
-          <LessonList subChapterId={subChapter.id} isAdmin={isAdmin} onUploaded={onUploaded} />
+          <LessonList
+            subChapterId={subChapter.id}
+            isAdmin={isAdmin}
+            onUploaded={onUploaded}
+            lessonProgress={lessonProgress}
+          />
         </View>
       )}
     </View>
@@ -346,17 +392,22 @@ function SubChapterRow({
 
 function ChapterRow({
   chapter,
+  chapterNode,
   bookId,
   isAdmin,
   isExpanded,
   onToggle,
 }: {
   chapter: { id: string; title: string; sub_chapter_count: number };
+  chapterNode: BankTreeChapter | undefined;
   bookId: string;
   isAdmin: boolean;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
+  const subChapterProgress = new Map<string, BankTreeSubChapter>(
+    chapterNode?.sub_chapters.map((subChapter) => [subChapter.id, subChapter]),
+  );
   const queryClient = useQueryClient();
   const subChapters = useQuery({
     queryKey: ["sub-chapters", chapter.id],
@@ -399,6 +450,11 @@ function ChapterRow({
           {isExpanded ? "▲" : "▼"}
         </Text>
       </Pressable>
+      {chapterNode && (
+        <View style={styles.progressWrapper}>
+          <ProgressBar percent={computeLessonCompletionPercent(chapterNode)} />
+        </View>
+      )}
       {isExpanded && (
         <View style={styles.chapterBody}>
           {subChapters.isPending ? (
@@ -415,6 +471,7 @@ function ChapterRow({
                 <SubChapterRow
                   key={subChapter.id}
                   subChapter={subChapter}
+                  subChapterNode={subChapterProgress.get(subChapter.id)}
                   isAdmin={isAdmin}
                   isExpanded={expandedSubChapterId === subChapter.id}
                   onToggle={() =>
@@ -468,6 +525,14 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
     queryKey: ["chapters", bookId],
     queryFn: () => getApiClient().listChapters(bookId),
   });
+  const tree = useQuery({
+    queryKey: ["question-bank-tree"],
+    queryFn: () => getApiClient().getQuestionBankTree(),
+  });
+  const bookNode = tree.data?.books.find((book) => book.id === bookId);
+  const chapterProgress = new Map<string, BankTreeChapter>(
+    bookNode?.chapters.map((chapter) => [chapter.id, chapter]),
+  );
 
   const [expandedChapterId, setExpandedChapterId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -517,12 +582,21 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
             <Text style={styles.backLink}>← Library</Text>
           </Pressable>
           <Text style={styles.title}>Chapters</Text>
+          {bookNode && (
+            <View style={styles.overallProgress}>
+              <ProgressBar
+                percent={computeLessonCompletionPercent(bookNode)}
+                label="Overall progress"
+              />
+            </View>
+          )}
         </>
       }
       ListEmptyComponent={<Text style={styles.empty}>No chapters yet.</Text>}
       renderItem={({ item }) => (
         <ChapterRow
           chapter={item}
+          chapterNode={chapterProgress.get(item.id)}
           bookId={bookId}
           isAdmin={isAdmin}
           isExpanded={expandedChapterId === item.id}
@@ -576,6 +650,14 @@ const styles = StyleSheet.create({
   },
   lessonListContent: {
     gap: spacing.xs,
+  },
+  progressWrapper: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  overallProgress: {
+    marginTop: spacing.xs,
+    maxWidth: 384,
   },
   backLink: {
     fontSize: fontSizes.sm,

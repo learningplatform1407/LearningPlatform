@@ -871,6 +871,126 @@ def test_bank_tree_outcome_and_points_roll_up(
         assert node["points_possible"] == 8
 
 
+def test_bank_tree_lesson_completion_threshold(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    # Five questions so 4/5 = 0.80 lands exactly on the threshold (>=), and
+    # 3/4 = 0.75 lands just under it — the two cases that actually exercise
+    # the boundary rather than an obviously-above/obviously-below score.
+    chapter, sub_chapters = _make_chapter(db_session, sub_chapter_count=1)
+    lesson = _make_lesson(db_session, sub_chapter_id=sub_chapters[0].id)
+    questions = [_make_question(db_session, document_id=lesson.id) for _ in range(5)]
+
+    for question in questions[:3]:
+        authed_client.post(
+            f"/v1/question-bank/{question.id}/answers", json={"selected_option_ids": ["a"]}
+        )
+    authed_client.post(
+        f"/v1/question-bank/{questions[3].id}/answers", json={"selected_option_ids": ["b"]}
+    )
+
+    tree = authed_client.get("/v1/question-bank/tree").json()
+    lesson_node = tree["books"][0]["chapters"][0]["sub_chapters"][0]["lessons"][0]
+    assert lesson_node["answered_count"] == 4
+    assert lesson_node["correct_count"] == 3
+    assert lesson_node["eligible_lesson_count"] == 1
+    # 3/4 = 0.75, just under the 0.8 threshold.
+    assert lesson_node["completed_lesson_count"] == 0
+
+    authed_client.post(
+        f"/v1/question-bank/{questions[4].id}/answers", json={"selected_option_ids": ["a"]}
+    )
+
+    tree = authed_client.get("/v1/question-bank/tree").json()
+    lesson_node = tree["books"][0]["chapters"][0]["sub_chapters"][0]["lessons"][0]
+    # 4/5 = 0.80, exactly the threshold — ">=" must count this as completed.
+    assert lesson_node["answered_count"] == 5
+    assert lesson_node["correct_count"] == 4
+    assert lesson_node["completed_lesson_count"] == 1
+
+
+def test_bank_tree_lesson_with_no_questions_is_not_eligible(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    chapter, sub_chapters = _make_chapter(db_session, sub_chapter_count=1)
+    empty_lesson = _make_lesson(db_session, sub_chapter_id=sub_chapters[0].id)
+    answered_lesson = _make_lesson(db_session, sub_chapter_id=sub_chapters[0].id)
+    question = _make_question(db_session, document_id=answered_lesson.id)
+    authed_client.post(
+        f"/v1/question-bank/{question.id}/answers", json={"selected_option_ids": ["a"]}
+    )
+
+    tree = authed_client.get("/v1/question-bank/tree").json()
+    lessons = {
+        node["id"]: node for node in tree["books"][0]["chapters"][0]["sub_chapters"][0]["lessons"]
+    }
+    assert lessons[str(empty_lesson.id)]["eligible_lesson_count"] == 0
+    assert lessons[str(empty_lesson.id)]["completed_lesson_count"] == 0
+    assert lessons[str(answered_lesson.id)]["eligible_lesson_count"] == 1
+    assert lessons[str(answered_lesson.id)]["completed_lesson_count"] == 1
+
+    # The lesson with no questions is excluded from both the numerator and
+    # the denominator at every ancestor — a sub-chapter with one completed,
+    # eligible lesson and one ineligible one rolls up to 1/1, not 1/2.
+    sub_chapter_node = tree["books"][0]["chapters"][0]["sub_chapters"][0]
+    for node in (sub_chapter_node, tree["books"][0]["chapters"][0], tree["books"][0]):
+        assert node["eligible_lesson_count"] == 1
+        assert node["completed_lesson_count"] == 1
+
+
+def test_bank_tree_completed_lesson_count_rolls_up_across_sub_chapters(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    chapter, sub_chapters = _make_chapter(db_session, sub_chapter_count=2)
+    completed_lesson = _make_lesson(db_session, sub_chapter_id=sub_chapters[0].id)
+    incomplete_lesson = _make_lesson(db_session, sub_chapter_id=sub_chapters[1].id)
+    good_question = _make_question(db_session, document_id=completed_lesson.id)
+    bad_question = _make_question(db_session, document_id=incomplete_lesson.id)
+    authed_client.post(
+        f"/v1/question-bank/{good_question.id}/answers", json={"selected_option_ids": ["a"]}
+    )
+    authed_client.post(
+        f"/v1/question-bank/{bad_question.id}/answers", json={"selected_option_ids": ["b"]}
+    )
+
+    tree = authed_client.get("/v1/question-bank/tree").json()
+    book = tree["books"][0]
+
+    assert book["chapters"][0]["eligible_lesson_count"] == 2
+    assert book["chapters"][0]["completed_lesson_count"] == 1
+    assert book["eligible_lesson_count"] == 2
+    assert book["completed_lesson_count"] == 1
+
+
+def test_bank_tree_quiz_session_answer_counts_toward_completion(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    # The same completion rollup regardless of whether an answer came from a
+    # quiz session (submitted + graded) or straight from the bank — both
+    # paths write `question_progress` through the same `grade_and_record`.
+    lesson = _make_lesson(db_session)
+    _make_question(db_session, document_id=lesson.id)
+
+    session = authed_client.post(
+        "/v1/quiz-sessions",
+        json={
+            "document_ids": [str(lesson.id)],
+            "question_count": 1,
+            "duration_seconds": None,
+            "reveal_mode": "on_finish",
+        },
+    ).json()
+    authed_client.put(
+        f"/v1/quiz-sessions/{session['id']}/answers/0", json={"selected_option_ids": ["a"]}
+    )
+    authed_client.post(f"/v1/quiz-sessions/{session['id']}/submit")
+
+    tree = authed_client.get("/v1/question-bank/tree").json()
+    lesson_node = tree["uncategorized_lessons"][0]
+    assert lesson_node["eligible_lesson_count"] == 1
+    assert lesson_node["completed_lesson_count"] == 1
+
+
 def test_bank_tree_unassigned_outcome_and_points(
     authed_client: TestClient, db_session: Session
 ) -> None:

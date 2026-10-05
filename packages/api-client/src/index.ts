@@ -116,6 +116,13 @@ export interface BankTreeLesson {
   incorrect_count: number;
   points_awarded: number;
   points_possible: number;
+  // Lesson-completion rollup (Library's progress bars). Same shape at every
+  // level of the tree — a lesson is a one-lesson subtree of itself — so
+  // these are each 0 or 1 here, and the sum of children at every container
+  // level above. `eligible` excludes lessons with zero published questions;
+  // `completed` is success_rate >= the server's threshold.
+  eligible_lesson_count: number;
+  completed_lesson_count: number;
 }
 
 export interface BankTreeSubChapter extends BankTreeLesson {
@@ -200,6 +207,24 @@ export function sumBankStatsCounts(nodes: BankStatsCounts[]): BankStatsCounts {
       points_possible: 0,
     },
   );
+}
+
+/** The lesson-completion counts any bank node (lesson, sub-chapter, chapter,
+ * book) carries — a lesson is 0/1 of itself, a container the sum of its
+ * descendants. Shared so Library's progress bars and any future caller
+ * derive the same percentage from the same numbers. */
+export interface LessonCompletionCounts {
+  eligible_lesson_count: number;
+  completed_lesson_count: number;
+}
+
+/** completed / eligible as a 0–100 percentage, or null when nothing in this
+ * subtree is eligible — same null-for-empty contract as
+ * computeBankStatsRates, so every caller renders "nothing to show" the
+ * same way instead of a divide-by-zero or a misleading 0%. */
+export function computeLessonCompletionPercent(counts: LessonCompletionCounts): number | null {
+  if (counts.eligible_lesson_count === 0) return null;
+  return (counts.completed_lesson_count / counts.eligible_lesson_count) * 100;
 }
 
 export interface QuizAnswerSaved {

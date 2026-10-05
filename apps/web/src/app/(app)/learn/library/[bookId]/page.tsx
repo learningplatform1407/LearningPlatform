@@ -1,11 +1,14 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { BankTreeChapter, BankTreeLesson, BankTreeSubChapter } from "@lp/api-client";
+import { computeLessonCompletionPercent } from "@lp/api-client";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/button";
+import { ProgressBar } from "@/components/progress-bar";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { sha256Hex } from "@/lib/checksum";
 import { createClient } from "@/lib/supabase/client";
@@ -25,6 +28,13 @@ function UncategorizedLessonsPage() {
     queryKey: ["documents", "uncategorized"],
     queryFn: () => getBrowserApiClient().listDocuments("none"),
   });
+  const tree = useQuery({
+    queryKey: ["question-bank-tree"],
+    queryFn: () => getBrowserApiClient().getQuestionBankTree(),
+  });
+  const lessonProgress = new Map<string, BankTreeLesson>(
+    tree.data?.uncategorized_lessons.map((lesson) => [lesson.id, lesson]),
+  );
 
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -90,16 +100,24 @@ function UncategorizedLessonsPage() {
         ) : (
           <ul className="flex flex-col gap-xs">
             {uncategorized.data?.map((doc) => (
-              <li key={doc.id}>
-                <Link
-                  href={`/learn/${doc.id}`}
-                  className="flex items-center justify-between rounded-md border border-border px-md py-sm hover:bg-muted"
-                >
+              <li
+                key={doc.id}
+                className="rounded-md border border-border px-md py-sm hover:bg-muted"
+              >
+                <Link href={`/learn/${doc.id}`} className="flex items-center justify-between">
                   <span className="text-sm font-medium text-foreground">{doc.title}</span>
                   <span className="text-xs text-muted-foreground">
                     {doc.status ? (STATUS_LABEL[doc.status] ?? doc.status) : ""}
                   </span>
                 </Link>
+                <ProgressBar
+                  percent={computeLessonCompletionPercent(
+                    lessonProgress.get(doc.id) ?? {
+                      eligible_lesson_count: 0,
+                      completed_lesson_count: 0,
+                    },
+                  )}
+                />
               </li>
             ))}
           </ul>
@@ -153,10 +171,12 @@ function LessonList({
   subChapterId,
   isAdmin,
   invalidateKeys = [],
+  lessonProgress,
 }: {
   subChapterId: string;
   isAdmin: boolean;
   invalidateKeys?: unknown[][];
+  lessonProgress: Map<string, BankTreeLesson>;
 }) {
   const queryClient = useQueryClient();
   const documents = useQuery({
@@ -229,16 +249,21 @@ function LessonList({
       ) : (
         <ul className="flex flex-col gap-xs">
           {documents.data.map((doc) => (
-            <li key={doc.id}>
-              <Link
-                href={`/learn/${doc.id}`}
-                className="flex items-center justify-between rounded-md border border-border px-md py-sm hover:bg-muted"
-              >
+            <li key={doc.id} className="rounded-md border border-border px-md py-sm hover:bg-muted">
+              <Link href={`/learn/${doc.id}`} className="flex items-center justify-between">
                 <span className="text-sm font-medium text-foreground">{doc.title}</span>
                 <span className="text-xs text-muted-foreground">
                   {doc.status ? (STATUS_LABEL[doc.status] ?? doc.status) : ""}
                 </span>
               </Link>
+              <ProgressBar
+                percent={computeLessonCompletionPercent(
+                  lessonProgress.get(doc.id) ?? {
+                    eligible_lesson_count: 0,
+                    completed_lesson_count: 0,
+                  },
+                )}
+              />
             </li>
           ))}
         </ul>
@@ -289,17 +314,22 @@ function LessonList({
 
 function SubChapterRow({
   subChapter,
+  subChapterNode,
   chapterId,
   isAdmin,
   isExpanded,
   onToggle,
 }: {
   subChapter: { id: string; title: string; lesson_count: number };
+  subChapterNode: BankTreeSubChapter | undefined;
   chapterId: string;
   isAdmin: boolean;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
+  const lessonProgress = new Map<string, BankTreeLesson>(
+    subChapterNode?.lessons.map((lesson) => [lesson.id, lesson]),
+  );
   return (
     <li className="rounded-md border border-border">
       <button
@@ -314,12 +344,18 @@ function SubChapterRow({
           {isExpanded ? "▲" : "▼"}
         </span>
       </button>
+      {subChapterNode && (
+        <div className="px-md pb-sm">
+          <ProgressBar percent={computeLessonCompletionPercent(subChapterNode)} />
+        </div>
+      )}
       {isExpanded && (
         <div className="border-t border-border px-md py-md">
           <LessonList
             subChapterId={subChapter.id}
             isAdmin={isAdmin}
             invalidateKeys={[["sub-chapters", chapterId]]}
+            lessonProgress={lessonProgress}
           />
         </div>
       )}
@@ -329,17 +365,22 @@ function SubChapterRow({
 
 function ChapterRow({
   chapter,
+  chapterNode,
   bookId,
   isAdmin,
   isExpanded,
   onToggle,
 }: {
   chapter: { id: string; title: string; sub_chapter_count: number };
+  chapterNode: BankTreeChapter | undefined;
   bookId: string;
   isAdmin: boolean;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
+  const subChapterProgress = new Map<string, BankTreeSubChapter>(
+    chapterNode?.sub_chapters.map((subChapter) => [subChapter.id, subChapter]),
+  );
   const queryClient = useQueryClient();
   const subChapters = useQuery({
     queryKey: ["sub-chapters", chapter.id],
@@ -379,6 +420,11 @@ function ChapterRow({
           {isExpanded ? "▲" : "▼"}
         </span>
       </button>
+      {chapterNode && (
+        <div className="px-md pb-sm">
+          <ProgressBar percent={computeLessonCompletionPercent(chapterNode)} />
+        </div>
+      )}
       {isExpanded && (
         <div className="border-t border-border px-md py-md">
           {subChapters.isPending ? (
@@ -395,6 +441,7 @@ function ChapterRow({
                 <SubChapterRow
                   key={subChapter.id}
                   subChapter={subChapter}
+                  subChapterNode={subChapterProgress.get(subChapter.id)}
                   chapterId={chapter.id}
                   isAdmin={isAdmin}
                   isExpanded={expandedSubChapterId === subChapter.id}
@@ -455,6 +502,14 @@ function BookChaptersPage({ bookId }: { bookId: string }) {
     queryKey: ["chapters", bookId],
     queryFn: () => getBrowserApiClient().listChapters(bookId),
   });
+  const tree = useQuery({
+    queryKey: ["question-bank-tree"],
+    queryFn: () => getBrowserApiClient().getQuestionBankTree(),
+  });
+  const bookNode = tree.data?.books.find((book) => book.id === bookId);
+  const chapterProgress = new Map<string, BankTreeChapter>(
+    bookNode?.chapters.map((chapter) => [chapter.id, chapter]),
+  );
 
   const [expandedChapterId, setExpandedChapterId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -498,6 +553,14 @@ function BookChaptersPage({ bookId }: { bookId: string }) {
         ← Library
       </Link>
       <h1 className="mt-xs text-2xl font-semibold text-foreground">Chapters</h1>
+      {bookNode && (
+        <div className="mt-sm max-w-[24rem]">
+          <ProgressBar
+            percent={computeLessonCompletionPercent(bookNode)}
+            label="Overall progress"
+          />
+        </div>
+      )}
 
       {chapters.data.length === 0 ? (
         <p className="mt-md text-sm text-muted-foreground">No chapters yet.</p>
@@ -507,6 +570,7 @@ function BookChaptersPage({ bookId }: { bookId: string }) {
             <ChapterRow
               key={chapter.id}
               chapter={chapter}
+              chapterNode={chapterProgress.get(chapter.id)}
               bookId={bookId}
               isAdmin={isAdmin}
               isExpanded={expandedChapterId === chapter.id}

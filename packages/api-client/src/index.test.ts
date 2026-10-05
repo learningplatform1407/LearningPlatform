@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { ApiClientError, createApiClient } from "./index";
+import { ApiClientError, computeLessonCompletionPercent, createApiClient } from "./index";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -497,5 +497,31 @@ describe("createApiClient", () => {
     const [url, init] = lastCall(fetchMock);
     expect(url).toBe("http://api.test/v1/tags");
     expect(init.method ?? "GET").toBe("GET");
+  });
+});
+
+describe("computeLessonCompletionPercent", () => {
+  test("returns null when nothing in the subtree is eligible", () => {
+    expect(
+      computeLessonCompletionPercent({ eligible_lesson_count: 0, completed_lesson_count: 0 }),
+    ).toBeNull();
+  });
+
+  test("a single completed lesson is 100", () => {
+    expect(
+      computeLessonCompletionPercent({ eligible_lesson_count: 1, completed_lesson_count: 1 }),
+    ).toBe(100);
+  });
+
+  test("a single incomplete lesson is 0, not null — it is eligible, just not done", () => {
+    expect(
+      computeLessonCompletionPercent({ eligible_lesson_count: 1, completed_lesson_count: 0 }),
+    ).toBe(0);
+  });
+
+  test("a container node divides completed by eligible", () => {
+    expect(
+      computeLessonCompletionPercent({ eligible_lesson_count: 4, completed_lesson_count: 3 }),
+    ).toBe(75);
   });
 });

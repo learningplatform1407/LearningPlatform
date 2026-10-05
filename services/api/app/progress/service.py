@@ -19,6 +19,7 @@ from app.books.service import list_books
 from app.chapters.service import list_chapters
 from app.documents.models import Document
 from app.documents.service import list_documents
+from app.progress.constants import LESSON_COMPLETION_THRESHOLD
 from app.progress.models import QuestionProgress
 from app.progress.schemas import (
     BankTreeBook,
@@ -252,16 +253,33 @@ def get_bank_tree(db: Session, user_id: uuid.UUID) -> BankTreeResponse:
     def lesson_node(document: Document) -> BankTreeLesson:
         doc_outcomes = outcomes.get(document.id, {})
         points_awarded, points_possible = points.get(document.id, (0, 0))
+        question_count = totals.get(document.id, 0)
+        answered_count = answered.get(document.id, 0)
+        correct_count = doc_outcomes.get("correct", 0)
+        # Excludes lessons with no published questions from both the
+        # numerator and denominator — a lesson that can never be answered
+        # should not count as "incomplete" against its chapter, the same
+        # "not a stat" treatment BankStatsLine gives a zero-question node.
+        eligible = 1 if question_count > 0 else 0
+        completed = (
+            1
+            if eligible
+            and answered_count > 0
+            and correct_count / answered_count >= LESSON_COMPLETION_THRESHOLD
+            else 0
+        )
         return BankTreeLesson(
             id=document.id,
             title=document.title,
-            question_count=totals.get(document.id, 0),
-            answered_count=answered.get(document.id, 0),
-            correct_count=doc_outcomes.get("correct", 0),
+            question_count=question_count,
+            answered_count=answered_count,
+            correct_count=correct_count,
             partial_count=doc_outcomes.get("partial", 0),
             incorrect_count=doc_outcomes.get("incorrect", 0),
             points_awarded=points_awarded,
             points_possible=points_possible,
+            eligible_lesson_count=eligible,
+            completed_lesson_count=completed,
         )
 
     books: list[BankTreeBook] = []
@@ -287,6 +305,12 @@ def get_bank_tree(db: Session, user_id: uuid.UUID) -> BankTreeResponse:
                         incorrect_count=sum(lesson.incorrect_count for lesson in lessons),
                         points_awarded=sum(lesson.points_awarded for lesson in lessons),
                         points_possible=sum(lesson.points_possible for lesson in lessons),
+                        eligible_lesson_count=sum(
+                            lesson.eligible_lesson_count for lesson in lessons
+                        ),
+                        completed_lesson_count=sum(
+                            lesson.completed_lesson_count for lesson in lessons
+                        ),
                         lessons=lessons,
                     )
                 )
@@ -301,6 +325,10 @@ def get_bank_tree(db: Session, user_id: uuid.UUID) -> BankTreeResponse:
                     incorrect_count=sum(node.incorrect_count for node in sub_chapters),
                     points_awarded=sum(node.points_awarded for node in sub_chapters),
                     points_possible=sum(node.points_possible for node in sub_chapters),
+                    eligible_lesson_count=sum(node.eligible_lesson_count for node in sub_chapters),
+                    completed_lesson_count=sum(
+                        node.completed_lesson_count for node in sub_chapters
+                    ),
                     sub_chapters=sub_chapters,
                 )
             )
@@ -315,6 +343,8 @@ def get_bank_tree(db: Session, user_id: uuid.UUID) -> BankTreeResponse:
                 incorrect_count=sum(node.incorrect_count for node in chapters),
                 points_awarded=sum(node.points_awarded for node in chapters),
                 points_possible=sum(node.points_possible for node in chapters),
+                eligible_lesson_count=sum(node.eligible_lesson_count for node in chapters),
+                completed_lesson_count=sum(node.completed_lesson_count for node in chapters),
                 chapters=chapters,
             )
         )

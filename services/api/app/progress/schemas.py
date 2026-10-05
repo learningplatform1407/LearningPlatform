@@ -35,6 +35,15 @@ class BankTreeLesson(BaseModel):
     incorrect_count: int
     points_awarded: int
     points_possible: int
+    # Lesson-completion rollup (Library's progress bars). Shaped the same way
+    # at every level of the tree — a lesson is just a one-lesson subtree of
+    # itself — so `eligible_lesson_count`/`completed_lesson_count` are each
+    # 0 or 1 here, and the sum of children at every container level below.
+    # `eligible` excludes lessons with zero published questions from both the
+    # numerator and denominator; `completed` is `success_rate >= threshold`,
+    # the same ratio the Question Bank already derives, just thresholded.
+    eligible_lesson_count: int
+    completed_lesson_count: int
 
 
 class BankTreeSubChapter(BaseModel):
@@ -47,6 +56,8 @@ class BankTreeSubChapter(BaseModel):
     incorrect_count: int
     points_awarded: int
     points_possible: int
+    eligible_lesson_count: int
+    completed_lesson_count: int
     lessons: list[BankTreeLesson]
 
 
@@ -60,6 +71,8 @@ class BankTreeChapter(BaseModel):
     incorrect_count: int
     points_awarded: int
     points_possible: int
+    eligible_lesson_count: int
+    completed_lesson_count: int
     sub_chapters: list[BankTreeSubChapter]
 
 
@@ -73,6 +86,8 @@ class BankTreeBook(BaseModel):
     incorrect_count: int
     points_awarded: int
     points_possible: int
+    eligible_lesson_count: int
+    completed_lesson_count: int
     chapters: list[BankTreeChapter]
 
 
@@ -99,3 +114,7 @@ class BankTreeResponse(BaseModel):
     unassigned_incorrect_count: int
     unassigned_points_awarded: int
     unassigned_points_possible: int
+    # No eligible/completed-lesson pair here: these are questions with no
+    # document_id at all, so there is no lesson to be "completed" — the
+    # Library page (the only consumer of lesson-completion) never shows this
+    # bucket in the first place, unlike the Question Bank page which does.
