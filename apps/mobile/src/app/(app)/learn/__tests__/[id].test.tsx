@@ -9,7 +9,9 @@ const mockCreateSignedUrl = jest.fn();
 const mockListAnnotations = jest.fn();
 const mockCreateAnnotation = jest.fn();
 const mockDeleteAnnotation = jest.fn();
-const mockListQuizzes = jest.fn();
+const mockListQuestionBank = jest.fn();
+const mockGetQuizAvailableCount = jest.fn();
+const mockAnswerBankQuestion = jest.fn();
 const mockListFlashcards = jest.fn();
 const mockListDueClozeCards = jest.fn();
 const mockSubmitClozeReview = jest.fn();
@@ -25,7 +27,9 @@ jest.mock("@/lib/api-client", () => ({
     listAnnotations: mockListAnnotations,
     createAnnotation: mockCreateAnnotation,
     deleteAnnotation: mockDeleteAnnotation,
-    listQuizzes: mockListQuizzes,
+    listQuestionBank: mockListQuestionBank,
+    getQuizAvailableCount: mockGetQuizAvailableCount,
+    answerBankQuestion: mockAnswerBankQuestion,
     listFlashcards: mockListFlashcards,
     listDueClozeCards: mockListDueClozeCards,
     submitClozeReview: mockSubmitClozeReview,
@@ -102,7 +106,9 @@ beforeEach(() => {
   mockListAnnotations.mockReset().mockResolvedValue([]);
   mockCreateAnnotation.mockReset().mockResolvedValue({});
   mockDeleteAnnotation.mockReset().mockResolvedValue(undefined);
-  mockListQuizzes.mockReset().mockResolvedValue([]);
+  mockListQuestionBank.mockReset().mockResolvedValue([]);
+  mockGetQuizAvailableCount.mockReset().mockResolvedValue({ available: 0 });
+  mockAnswerBankQuestion.mockReset();
   mockListFlashcards.mockReset().mockResolvedValue([]);
   mockListDueClozeCards.mockReset().mockResolvedValue([]);
   mockSubmitClozeReview.mockReset();
@@ -394,16 +400,87 @@ test("omits the breadcrumb when the lesson is uncategorized", async () => {
   expect(screen.queryByText(/Chapter One/)).toBeNull();
 });
 
-test("switching to the Quizzes tab shows a Coming soon placeholder", async () => {
+test("the Quizzes tab lists this lesson's questions without the answer key", async () => {
   mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListQuestionBank.mockResolvedValue([
+    {
+      id: "q1",
+      prompt: "Which drug lowers preload?",
+      kind: "single",
+      difficulty: "medium",
+      points_possible: 4,
+      document_id: "d1",
+      options: [
+        { id: "a", text: "Nitrates" },
+        { id: "b", text: "Vasopressors" },
+      ],
+      tags: [{ id: "t1", slug: "cardiology", label: "Cardiology" }],
+    },
+  ]);
 
   renderScreen();
   await screen.findByText("Hello world");
 
   fireEvent.press(screen.getByText("Quizzes"));
 
-  expect(await screen.findByText("Coming soon.")).toBeTruthy();
-  expect(mockListQuizzes).toHaveBeenCalledWith("d1");
+  expect(await screen.findByText("Which drug lowers preload?")).toBeTruthy();
+  expect(screen.getByText("Nitrates")).toBeTruthy();
+  // Scoped to this lesson by document_id — a question's provenance.
+  expect(mockListQuestionBank).toHaveBeenCalledWith({ documentIds: ["d1"] });
+});
+
+test("the Quizzes tab marks a question answered on a previous visit", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListQuestionBank.mockResolvedValue([
+    {
+      id: "q1",
+      prompt: "Which drug lowers preload?",
+      kind: "single",
+      difficulty: "medium",
+      points_possible: 4,
+      document_id: "d1",
+      options: [{ id: "a", text: "Nitrates" }],
+      tags: [],
+      progress: {
+        outcome: "correct",
+        points_awarded: 4,
+        points_possible: 4,
+        attempt_count: 1,
+        last_answered_at: "2026-09-30T10:00:00Z",
+      },
+    },
+  ]);
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Quizzes"));
+
+  expect(await screen.findByLabelText("Answered correctly, 4 of 4 points")).toBeTruthy();
+});
+
+test("the Quizzes tab says so when the lesson has no questions", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListQuestionBank.mockResolvedValue([]);
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Quizzes"));
+
+  expect(await screen.findByText("No questions for this lesson yet.")).toBeTruthy();
+});
+
+test("the Quizzes tab links through to the Exam Hub", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Quizzes"));
+  fireEvent.press(await screen.findByText("Practise in an exam →"));
+
+  expect(router.push).toHaveBeenCalledWith("/exams");
 });
 
 test("switching to the Flashcards tab shows a Coming soon placeholder", async () => {

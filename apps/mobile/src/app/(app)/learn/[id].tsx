@@ -25,6 +25,7 @@ import {
   NotebookEntryEditor,
   NotebookEntryList,
 } from "@/lib/notebook-entry-editor";
+import { QuestionBankList } from "@/lib/question-bank-list";
 import { supabase } from "@/lib/supabase";
 import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
 import { spliceAnnotations, spliceClozeSpans } from "@/lib/text-offset";
@@ -225,24 +226,18 @@ function SelectableParagraph({
 }
 
 function QuizzesTab({ documentId }: { documentId: string }) {
-  const { data, isPending } = useQuery({
-    queryKey: ["quizzes", documentId],
-    queryFn: () => getApiClient().listQuizzes(documentId),
-  });
-
-  if (isPending) {
-    return <Text style={styles.hint}>Loading...</Text>;
-  }
-  if (!data || data.length === 0) {
-    return <Text style={styles.hint}>Coming soon.</Text>;
-  }
+  // Scoped by questions.document_id — a question's provenance, and the only
+  // link between a lesson and a question. Lessons carry no tags of their
+  // own, so "this lesson's questions" means exactly this.
   return (
-    <View style={styles.tabList}>
-      {data.map((quiz) => (
-        <View key={quiz.id} style={styles.tabListRow}>
-          <Text style={styles.rowTitle}>{quiz.title}</Text>
-        </View>
-      ))}
+    <View style={styles.quizzesTab}>
+      <QuestionBankList
+        filter={{ documentIds: [documentId] }}
+        emptyMessage="No questions for this lesson yet."
+      />
+      <Pressable onPress={() => router.push("/exams")}>
+        <Text style={styles.tabLink}>Practise in an exam →</Text>
+      </Pressable>
     </View>
   );
 }
@@ -1180,6 +1175,13 @@ const styles = StyleSheet.create({
   },
   tabButtonTextActive: {
     color: colors.foreground,
+  },
+  quizzesTab: {
+    gap: spacing.md,
+  },
+  tabLink: {
+    fontSize: fontSizes.sm,
+    color: colors.primary,
   },
   tabList: {
     gap: spacing.xs,
