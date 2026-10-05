@@ -150,22 +150,130 @@ export const subChapterCreateRequestSchema = z.object({
   title: z.string(),
 });
 
-export const quizResponseSchema = z.object({
-  id: z.string(),
-  document_id: z.string(),
-  title: z.string(),
-  created_at: z.string(),
-});
+// `quizResponseSchema` is gone with the `quizzes` table — a lesson's
+// questions are reached through the question bank (questions.document_id).
+
+/** Where a card came from, and therefore who can see it. Written by the
+ * endpoint that created it, never derived from the author's role. */
+export const flashcardScopeSchema = z.enum(["official", "personal"]);
+
+export const flashcardStatusSchema = z.enum(["draft", "published", "archived"]);
+
+/** The All / Official / Mine toggle. */
+export const flashcardScopeFilterSchema = z.enum(["all", "official", "personal"]);
 
 export const flashcardResponseSchema = z.object({
   id: z.string(),
   document_id: z.string(),
   front_text: z.string(),
   back_text: z.string(),
+  scope: flashcardScopeSchema,
+  status: flashcardStatusSchema,
   order_index: z.number(),
+  is_mine: z.boolean(),
 });
 
-export const clozeRatingSchema = z.enum(["again", "hard", "good", "easy"]);
+/** A card as the deck runner receives it. Carries `back_text` up front:
+ * unlike a question, a flashcard's back is not an answer key, so the reveal
+ * needs no second request and the client simply holds it until tapped. */
+export const flashcardCardSchema = z.object({
+  id: z.string(),
+  document_id: z.string(),
+  front_text: z.string(),
+  back_text: z.string(),
+  scope: flashcardScopeSchema,
+  is_mine: z.boolean(),
+  due_at: z.string().nullable(),
+  is_new: z.boolean(),
+});
+
+export const flashcardCreateRequestSchema = z.object({
+  front_text: z.string().min(1),
+  back_text: z.string().min(1),
+});
+
+export const flashcardUpdateRequestSchema = z.object({
+  front_text: z.string().min(1).optional(),
+  back_text: z.string().min(1).optional(),
+});
+
+/** The four SM-2 grades, shared by cloze Review and Flashcards — they run
+ * separate queues over the same scheduler, so the grades must not drift. */
+export const reviewRatingSchema = z.enum(["again", "hard", "good", "easy"]);
+
+/** @deprecated Use `reviewRatingSchema` — kept so cloze call sites keep
+ * reading naturally. */
+export const clozeRatingSchema = reviewRatingSchema;
+
+export const flashcardRatingRequestSchema = z.object({
+  rating: reviewRatingSchema,
+});
+
+export const flashcardReviewStateResponseSchema = z.object({
+  id: z.string(),
+  flashcard_id: z.string(),
+  ease_factor: z.number(),
+  interval_days: z.number(),
+  repetitions: z.number(),
+  due_at: z.string(),
+  last_reviewed_at: z.string().nullable(),
+});
+
+export const flashcardImportItemSchema = z.object({
+  external_id: z.string().min(1),
+  document_id: z.string(),
+  front_text: z.string().min(1),
+  back_text: z.string().min(1),
+  order_index: z.number().optional(),
+  status: flashcardStatusSchema.optional(),
+});
+
+export const flashcardImportRequestSchema = z.object({
+  flashcards: z.array(flashcardImportItemSchema),
+});
+
+export const flashcardImportResultSchema = z.object({
+  created: z.number(),
+  updated: z.number(),
+  skipped: z.number(),
+  errors: z.array(z.object({ index: z.number(), field: z.string(), message: z.string() })),
+});
+
+const flashcardSummaryLessonSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  due_count: z.number(),
+  new_count: z.number(),
+});
+
+const flashcardSummarySubChapterSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  due_count: z.number(),
+  new_count: z.number(),
+  lessons: z.array(flashcardSummaryLessonSchema),
+});
+
+const flashcardSummaryChapterSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  due_count: z.number(),
+  new_count: z.number(),
+  sub_chapters: z.array(flashcardSummarySubChapterSchema),
+});
+
+const flashcardSummaryBookSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  due_count: z.number(),
+  new_count: z.number(),
+  chapters: z.array(flashcardSummaryChapterSchema),
+});
+
+export const flashcardSummaryResponseSchema = z.object({
+  books: z.array(flashcardSummaryBookSchema),
+  uncategorized_lessons: z.array(flashcardSummaryLessonSchema),
+});
 
 export const clozeCardResponseSchema = z.object({
   id: z.string(),

@@ -18,7 +18,19 @@ import type {
   documentVersionResponseSchema,
   entitlementResponseSchema,
   extractedContentSchema,
+  flashcardCardSchema,
+  flashcardCreateRequestSchema,
+  flashcardImportItemSchema,
+  flashcardImportRequestSchema,
+  flashcardImportResultSchema,
+  flashcardRatingRequestSchema,
   flashcardResponseSchema,
+  flashcardReviewStateResponseSchema,
+  flashcardScopeFilterSchema,
+  flashcardScopeSchema,
+  flashcardStatusSchema,
+  flashcardSummaryResponseSchema,
+  flashcardUpdateRequestSchema,
   questionImportErrorSchema,
   questionImportRequestSchema,
   questionImportResultSchema,
@@ -31,8 +43,8 @@ import type {
   questionOptionSchema,
   questionResponseSchema,
   questionUpdateRequestSchema,
-  quizResponseSchema,
   recentLessonResponseSchema,
+  reviewRatingSchema,
   reviewSummaryBookSchema,
   reviewSummaryChapterSchema,
   reviewSummaryLessonSchema,
@@ -67,8 +79,21 @@ export type ChapterCreateRequest = z.infer<typeof chapterCreateRequestSchema>;
 export type RecentLesson = z.infer<typeof recentLessonResponseSchema>;
 export type SubChapter = z.infer<typeof subChapterResponseSchema>;
 export type SubChapterCreateRequest = z.infer<typeof subChapterCreateRequestSchema>;
-export type Quiz = z.infer<typeof quizResponseSchema>;
 export type Flashcard = z.infer<typeof flashcardResponseSchema>;
+export type FlashcardScope = z.infer<typeof flashcardScopeSchema>;
+export type FlashcardStatus = z.infer<typeof flashcardStatusSchema>;
+export type FlashcardScopeFilter = z.infer<typeof flashcardScopeFilterSchema>;
+export type FlashcardCard = z.infer<typeof flashcardCardSchema>;
+export type FlashcardCreateRequest = z.infer<typeof flashcardCreateRequestSchema>;
+export type FlashcardUpdateRequest = z.infer<typeof flashcardUpdateRequestSchema>;
+export type FlashcardRatingRequest = z.infer<typeof flashcardRatingRequestSchema>;
+export type FlashcardReviewState = z.infer<typeof flashcardReviewStateResponseSchema>;
+export type FlashcardImportItem = z.infer<typeof flashcardImportItemSchema>;
+export type FlashcardImportRequest = z.infer<typeof flashcardImportRequestSchema>;
+export type FlashcardImportResult = z.infer<typeof flashcardImportResultSchema>;
+export type FlashcardSummaryResponse = z.infer<typeof flashcardSummaryResponseSchema>;
+/** The four SM-2 grades, shared by Review and Flashcards. */
+export type ReviewRating = z.infer<typeof reviewRatingSchema>;
 export type ClozeRating = z.infer<typeof clozeRatingSchema>;
 export type ClozeCard = z.infer<typeof clozeCardResponseSchema>;
 export type ClozeRatingRequest = z.infer<typeof clozeRatingRequestSchema>;

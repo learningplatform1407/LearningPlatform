@@ -289,16 +289,6 @@ describe("createApiClient", () => {
     expect(JSON.parse(init.body as string)).toEqual({ title: "Sub A" });
   });
 
-  test("listQuizzes hits GET /v1/documents/{id}/quizzes", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse([]));
-
-    const result = await client().listQuizzes("d1");
-
-    expect(result).toEqual([]);
-    const [url] = lastCall(fetchMock);
-    expect(url).toBe("http://api.test/v1/documents/d1/quizzes");
-  });
-
   test("listFlashcards hits GET /v1/documents/{id}/flashcards", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse([]));
 
@@ -307,6 +297,101 @@ describe("createApiClient", () => {
     expect(result).toEqual([]);
     const [url] = lastCall(fetchMock);
     expect(url).toBe("http://api.test/v1/documents/d1/flashcards");
+  });
+
+  test("listFlashcards passes the scope filter through", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    await client().listFlashcards("d1", "personal");
+
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/documents/d1/flashcards?scope=personal");
+  });
+
+  test("listDueFlashcards hits GET /v1/documents/{id}/flashcards/due", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    const result = await client().listDueFlashcards("d1");
+
+    expect(result).toEqual([]);
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/documents/d1/flashcards/due");
+  });
+
+  test("listDueFlashcards serializes scope and limit", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    await client().listDueFlashcards("d1", { scope: "official", limit: 5 });
+
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/documents/d1/flashcards/due?scope=official&limit=5");
+  });
+
+  test("createFlashcard POSTs to /v1/documents/{id}/flashcards", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "f1" }));
+
+    await client().createFlashcard("d1", { front_text: "Q", back_text: "A" });
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/documents/d1/flashcards");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ front_text: "Q", back_text: "A" });
+  });
+
+  test("updateFlashcard PATCHes /v1/flashcards/{id}", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "f1" }));
+
+    await client().updateFlashcard("f1", { back_text: "Better" });
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/flashcards/f1");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ back_text: "Better" });
+  });
+
+  test("deleteFlashcard DELETEs /v1/flashcards/{id}", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(null));
+
+    await client().deleteFlashcard("f1");
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/flashcards/f1");
+    expect(init.method).toBe("DELETE");
+  });
+
+  test("submitFlashcardReview POSTs the rating to /v1/flashcards/{id}/review", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ id: "s1", flashcard_id: "f1", ease_factor: 2.5, interval_days: 1 }),
+    );
+
+    await client().submitFlashcardReview("f1", "good");
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/flashcards/f1/review");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ rating: "good" });
+  });
+
+  test("getFlashcardSummary hits GET /v1/me/flashcard-summary", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ books: [], uncategorized_lessons: [] }));
+
+    const result = await client().getFlashcardSummary();
+
+    expect(result).toEqual({ books: [], uncategorized_lessons: [] });
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/me/flashcard-summary");
+  });
+
+  test("importFlashcards carries dry_run in the query string", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ created: 1, updated: 0, skipped: 0, errors: [] }),
+    );
+
+    await client().importFlashcards({ flashcards: [] }, true);
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/flashcards/import?dry_run=true");
+    expect(init.method).toBe("POST");
   });
 
   test("listClozeCards hits GET /v1/documents/{id}/cloze-cards", async () => {
