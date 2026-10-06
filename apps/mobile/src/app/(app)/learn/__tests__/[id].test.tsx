@@ -13,6 +13,11 @@ const mockListQuestionBank = jest.fn();
 const mockGetQuizAvailableCount = jest.fn();
 const mockAnswerBankQuestion = jest.fn();
 const mockListFlashcards = jest.fn();
+const mockListDueFlashcards = jest.fn();
+const mockCreateFlashcard = jest.fn();
+const mockUpdateFlashcard = jest.fn();
+const mockDeleteFlashcard = jest.fn();
+const mockSubmitFlashcardReview = jest.fn();
 const mockListDueClozeCards = jest.fn();
 const mockSubmitClozeReview = jest.fn();
 const mockListNotebookEntries = jest.fn();
@@ -31,6 +36,11 @@ jest.mock("@/lib/api-client", () => ({
     getQuizAvailableCount: mockGetQuizAvailableCount,
     answerBankQuestion: mockAnswerBankQuestion,
     listFlashcards: mockListFlashcards,
+    listDueFlashcards: mockListDueFlashcards,
+    createFlashcard: mockCreateFlashcard,
+    updateFlashcard: mockUpdateFlashcard,
+    deleteFlashcard: mockDeleteFlashcard,
+    submitFlashcardReview: mockSubmitFlashcardReview,
     listDueClozeCards: mockListDueClozeCards,
     submitClozeReview: mockSubmitClozeReview,
     listNotebookEntries: mockListNotebookEntries,
@@ -110,6 +120,11 @@ beforeEach(() => {
   mockGetQuizAvailableCount.mockReset().mockResolvedValue({ available: 0 });
   mockAnswerBankQuestion.mockReset();
   mockListFlashcards.mockReset().mockResolvedValue([]);
+  mockListDueFlashcards.mockReset().mockResolvedValue([]);
+  mockCreateFlashcard.mockReset();
+  mockUpdateFlashcard.mockReset();
+  mockDeleteFlashcard.mockReset().mockResolvedValue(undefined);
+  mockSubmitFlashcardReview.mockReset();
   mockListDueClozeCards.mockReset().mockResolvedValue([]);
   mockSubmitClozeReview.mockReset();
   mockListNotebookEntries.mockReset().mockResolvedValue([]);
@@ -483,16 +498,133 @@ test("the Quizzes tab links through to the Exam Hub", async () => {
   expect(router.push).toHaveBeenCalledWith("/exams");
 });
 
-test("switching to the Flashcards tab shows a Coming soon placeholder", async () => {
+function officialCard(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "f1",
+    document_id: "d1",
+    front_text: "What is a CDN?",
+    back_text: "A content delivery network.",
+    scope: "official",
+    is_mine: false,
+    due_at: null,
+    is_new: true,
+    ...overrides,
+  };
+}
+
+test("the Flashcards tab shows the front only until the card is tapped", async () => {
   mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListDueFlashcards.mockResolvedValue([officialCard()]);
 
   renderScreen();
   await screen.findByText("Hello world");
 
   fireEvent.press(screen.getByText("Flashcards"));
 
-  expect(await screen.findByText("Coming soon.")).toBeTruthy();
-  expect(mockListFlashcards).toHaveBeenCalledWith("d1");
+  expect(await screen.findByText("What is a CDN?")).toBeTruthy();
+  // The back ships with the deck but must not be rendered before the tap —
+  // that reveal-on-demand is the whole interaction.
+  expect(screen.queryByText("A content delivery network.")).toBeNull();
+  expect(screen.getByText("Tap to reveal")).toBeTruthy();
+
+  fireEvent.press(screen.getByText("What is a CDN?"));
+
+  expect(await screen.findByText("A content delivery network.")).toBeTruthy();
+  for (const label of ["Again", "Hard", "Good", "Easy"]) {
+    expect(screen.getByText(label)).toBeTruthy();
+  }
+});
+
+test("grading a flashcard submits the rating and reports the next interval", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListDueFlashcards.mockResolvedValue([officialCard()]);
+  mockSubmitFlashcardReview.mockResolvedValue({
+    id: "s1",
+    flashcard_id: "f1",
+    ease_factor: 2.5,
+    interval_days: 1,
+    repetitions: 1,
+    due_at: "2026-10-07T00:00:00Z",
+    last_reviewed_at: "2026-10-06T00:00:00Z",
+  });
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Flashcards"));
+  fireEvent.press(await screen.findByText("What is a CDN?"));
+  fireEvent.press(screen.getByText("Good"));
+
+  await waitFor(() => expect(mockSubmitFlashcardReview).toHaveBeenCalledWith("f1", "good"));
+  expect(await screen.findByText("Next review in 1 day.")).toBeTruthy();
+  expect(
+    await screen.findByText("You're all caught up — nothing to review right now."),
+  ).toBeTruthy();
+});
+
+test("the Flashcards tab says so when the lesson has no cards at all", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListDueFlashcards.mockResolvedValue([]);
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Flashcards"));
+
+  expect(
+    await screen.findByText(
+      "No flashcards for this lesson yet. Add your own, or check back for official ones.",
+    ),
+  ).toBeTruthy();
+});
+
+test("the scope toggle narrows the deck to the learner's own cards", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListDueFlashcards.mockResolvedValue([officialCard()]);
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Flashcards"));
+  await screen.findByText("What is a CDN?");
+
+  fireEvent.press(screen.getByText("Mine"));
+
+  await waitFor(() =>
+    expect(mockListDueFlashcards).toHaveBeenCalledWith("d1", { scope: "personal" }),
+  );
+});
+
+test("a learner can add their own card to the lesson", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListDueFlashcards.mockResolvedValue([]);
+  mockCreateFlashcard.mockResolvedValue({
+    id: "f2",
+    document_id: "d1",
+    front_text: "Mnemonic?",
+    back_text: "Remember it like this.",
+    scope: "personal",
+    status: "published",
+    order_index: 0,
+    is_mine: true,
+  });
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Flashcards"));
+  fireEvent.press(await screen.findByText("Add a card"));
+
+  fireEvent.changeText(screen.getByLabelText("Front"), "Mnemonic?");
+  fireEvent.changeText(screen.getByLabelText("Back"), "Remember it like this.");
+  fireEvent.press(screen.getByText("Save card"));
+
+  await waitFor(() =>
+    expect(mockCreateFlashcard).toHaveBeenCalledWith("d1", {
+      front_text: "Mnemonic?",
+      back_text: "Remember it like this.",
+    }),
+  );
 });
 
 test("the Review tab shows the whole lesson with the due word blanked, then reveals it on demand", async () => {

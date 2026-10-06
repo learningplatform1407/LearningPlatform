@@ -3,6 +3,10 @@ import type {
   AnnotationCreateRequest,
   ClozeRating,
   DocumentResponse,
+  Flashcard,
+  FlashcardScope,
+  FlashcardScopeFilter,
+  ReviewRating,
 } from "@lp/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
@@ -242,25 +246,328 @@ function QuizzesTab({ documentId }: { documentId: string }) {
   );
 }
 
-function FlashcardsTab({ documentId }: { documentId: string }) {
-  const { data, isPending } = useQuery({
-    queryKey: ["flashcards", documentId],
-    queryFn: () => getApiClient().listFlashcards(documentId),
+const SCOPE_FILTERS = [
+  { key: "all", label: "All" },
+  { key: "official", label: "Official" },
+  { key: "personal", label: "Mine" },
+] as const;
+
+function ScopeToggle({
+  scope,
+  onChange,
+}: {
+  scope: FlashcardScopeFilter;
+  onChange: (scope: FlashcardScopeFilter) => void;
+}) {
+  return (
+    <View style={styles.scopeToggle} accessibilityRole="radiogroup">
+      {SCOPE_FILTERS.map((filter) => (
+        <Pressable
+          key={filter.key}
+          onPress={() => onChange(filter.key)}
+          accessibilityRole="radio"
+          accessibilityState={{ selected: scope === filter.key }}
+          style={[styles.scopeButton, scope === filter.key && styles.scopeButtonActive]}
+        >
+          <Text
+            style={[styles.scopeButtonText, scope === filter.key && styles.scopeButtonTextActive]}
+          >
+            {filter.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+/** Official vs personal, always paired with a word rather than colour alone. */
+function ScopeBadge({ scope }: { scope: FlashcardScope }) {
+  return (
+    <View style={styles.scopeBadge}>
+      <Text style={styles.scopeBadgeText}>{scope === "official" ? "Official" : "Mine"}</Text>
+    </View>
+  );
+}
+
+function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: () => void }) {
+  const [front, setFront] = useState("");
+  const [back, setBack] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const create = useMutation({
+    mutationFn: () =>
+      getApiClient().createFlashcard(documentId, { front_text: front, back_text: back }),
+    onSuccess: onDone,
+    onError: () => setError("Could not save that card."),
   });
 
-  if (isPending) {
+  return (
+    <View style={styles.cardForm}>
+      <Text style={styles.formLabel}>Front</Text>
+      <TextInput
+        accessibilityLabel="Front"
+        value={front}
+        onChangeText={setFront}
+        style={styles.formInput}
+      />
+      <Text style={styles.formLabel}>Back</Text>
+      <TextInput
+        accessibilityLabel="Back"
+        value={back}
+        onChangeText={setBack}
+        multiline
+        style={[styles.formInput, styles.formInputMultiline]}
+      />
+      {error && <Text style={styles.errorText}>{error}</Text>}
+      <View style={styles.formActions}>
+        <Pressable
+          disabled={front.trim() === "" || back.trim() === "" || create.isPending}
+          onPress={() => create.mutate()}
+          accessibilityRole="button"
+          style={styles.primaryButton}
+        >
+          <Text style={styles.primaryButtonText}>Save card</Text>
+        </Pressable>
+        <Pressable onPress={onDone} accessibilityRole="button" style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>Cancel</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function MyFlashcardRow({ card, onChanged }: { card: Flashcard; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [front, setFront] = useState(card.front_text);
+  const [back, setBack] = useState(card.back_text);
+
+  const update = useMutation({
+    mutationFn: () =>
+      getApiClient().updateFlashcard(card.id, { front_text: front, back_text: back }),
+    onSuccess: () => {
+      setEditing(false);
+      onChanged();
+    },
+  });
+  const remove = useMutation({
+    mutationFn: () => getApiClient().deleteFlashcard(card.id),
+    onSuccess: onChanged,
+  });
+
+  if (editing) {
+    return (
+      <View style={styles.cardForm}>
+        <TextInput
+          accessibilityLabel="Front"
+          value={front}
+          onChangeText={setFront}
+          style={styles.formInput}
+        />
+        <TextInput
+          accessibilityLabel="Back"
+          value={back}
+          onChangeText={setBack}
+          multiline
+          style={[styles.formInput, styles.formInputMultiline]}
+        />
+        <View style={styles.formActions}>
+          <Pressable
+            disabled={update.isPending}
+            onPress={() => update.mutate()}
+            accessibilityRole="button"
+            style={styles.primaryButton}
+          >
+            <Text style={styles.primaryButtonText}>Save</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setEditing(false)}
+            accessibilityRole="button"
+            style={styles.secondaryButton}
+          >
+            <Text style={styles.secondaryButtonText}>Cancel</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.myCardRow}>
+      <View style={styles.myCardText}>
+        <Text style={styles.rowTitle}>{card.front_text}</Text>
+        <Text style={styles.hint}>{card.back_text}</Text>
+      </View>
+      <View style={styles.myCardActions}>
+        <ScopeBadge scope={card.scope} />
+        <Pressable onPress={() => setEditing(true)} accessibilityRole="button">
+          <Text style={styles.linkText}>Edit</Text>
+        </Pressable>
+        <Pressable
+          disabled={remove.isPending}
+          onPress={() => remove.mutate()}
+          accessibilityRole="button"
+        >
+          <Text style={styles.deleteText}>Delete</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function FlashcardsTab({ documentId }: { documentId: string }) {
+  const queryClient = useQueryClient();
+  const [scope, setScope] = useState<FlashcardScopeFilter>("all");
+  const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
+  const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  const deckQuery = useQuery({
+    queryKey: ["flashcards", "due", documentId, scope],
+    queryFn: () => getApiClient().listDueFlashcards(documentId, { scope }),
+  });
+  const mineQuery = useQuery({
+    queryKey: ["flashcards", "mine", documentId],
+    queryFn: () => getApiClient().listFlashcards(documentId, "personal"),
+  });
+
+  function refresh() {
+    void queryClient.invalidateQueries({ queryKey: ["flashcards"] });
+  }
+
+  const reviewMutation = useMutation({
+    mutationFn: ({ cardId, rating }: { cardId: string; rating: ReviewRating }) =>
+      getApiClient().submitFlashcardReview(cardId, rating),
+    onSuccess: (state, variables) => {
+      setGradedIds((previous) => new Set(previous).add(variables.cardId));
+      setRevealedCardId(null);
+      setFeedback(
+        `Next review in ${state.interval_days} ${state.interval_days === 1 ? "day" : "days"}.`,
+      );
+      refresh();
+    },
+  });
+
+  // Filtered client-side rather than trusting the refetched list to shrink,
+  // so a background refetch can't move the card out from under you — same
+  // reasoning as the Review tab.
+  const queue = (deckQuery.data ?? []).filter((card) => !gradedIds.has(card.id));
+  const currentCard = queue[0];
+  const revealed = currentCard !== undefined && revealedCardId === currentCard.id;
+
+  if (deckQuery.isPending) {
     return <Text style={styles.hint}>Loading...</Text>;
   }
-  if (!data || data.length === 0) {
-    return <Text style={styles.hint}>Coming soon.</Text>;
+  if (deckQuery.isError) {
+    return <Text style={styles.errorText}>Failed to load flashcards.</Text>;
   }
+
+  const myCards = mineQuery.data ?? [];
+
   return (
-    <View style={styles.tabList}>
-      {data.map((flashcard) => (
-        <View key={flashcard.id} style={styles.tabListRow}>
-          <Text style={styles.rowTitle}>{flashcard.front_text}</Text>
+    <View style={styles.flashcardsTab}>
+      <View style={styles.flashcardsHeader}>
+        <ScopeToggle scope={scope} onChange={setScope} />
+        {!adding && (
+          <Pressable
+            onPress={() => setAdding(true)}
+            accessibilityRole="button"
+            style={styles.secondaryButton}
+          >
+            <Text style={styles.secondaryButtonText}>Add a card</Text>
+          </Pressable>
+        )}
+      </View>
+
+      {adding && (
+        <AddFlashcardForm
+          documentId={documentId}
+          onDone={() => {
+            setAdding(false);
+            refresh();
+          }}
+        />
+      )}
+
+      {!currentCard && (
+        <Text style={styles.hint}>
+          {(deckQuery.data ?? []).length === 0 && gradedIds.size === 0
+            ? "No flashcards for this lesson yet. Add your own, or check back for official ones."
+            : "You're all caught up — nothing to review right now."}
+        </Text>
+      )}
+
+      {currentCard && (
+        <>
+          <Text style={styles.hint}>
+            Card {gradedIds.size + 1} of {gradedIds.size + queue.length}
+          </Text>
+          <Pressable
+            onPress={() => setRevealedCardId(currentCard.id)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: revealed }}
+            style={styles.flashcard}
+          >
+            <ScopeBadge scope={currentCard.scope} />
+            <Text style={styles.flashcardFront}>{currentCard.front_text}</Text>
+            {revealed ? (
+              <Text style={styles.flashcardBack}>{currentCard.back_text}</Text>
+            ) : (
+              <Text style={styles.hint}>Tap to reveal</Text>
+            )}
+          </Pressable>
+
+          {revealed && (
+            <View style={styles.gradeRow}>
+              <Pressable
+                disabled={reviewMutation.isPending}
+                onPress={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "again" })}
+                accessibilityRole="button"
+                style={styles.gradeButton}
+              >
+                <Text style={styles.deleteText}>Again</Text>
+              </Pressable>
+              <Pressable
+                disabled={reviewMutation.isPending}
+                onPress={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "hard" })}
+                accessibilityRole="button"
+                style={styles.gradeButton}
+              >
+                <Text style={styles.reviewWarningText}>Hard</Text>
+              </Pressable>
+              <Pressable
+                disabled={reviewMutation.isPending}
+                onPress={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "good" })}
+                accessibilityRole="button"
+                style={styles.gradeButton}
+              >
+                <Text style={styles.rowTitle}>Good</Text>
+              </Pressable>
+              <Pressable
+                disabled={reviewMutation.isPending}
+                onPress={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "easy" })}
+                accessibilityRole="button"
+                style={styles.gradeButton}
+              >
+                <Text style={styles.reviewSuccessText}>Easy</Text>
+              </Pressable>
+            </View>
+          )}
+        </>
+      )}
+
+      {feedback && <Text style={styles.hint}>{feedback}</Text>}
+
+      {myCards.length > 0 && (
+        <View style={styles.myCardsSection}>
+          <Text style={styles.myCardsHeading}>Your cards</Text>
+          <View style={styles.tabList}>
+            {myCards.map((card) => (
+              <MyFlashcardRow key={card.id} card={card} onChanged={refresh} />
+            ))}
+          </View>
         </View>
-      ))}
+      )}
     </View>
   );
 }
@@ -1368,5 +1675,181 @@ const styles = StyleSheet.create({
     color: colors.success,
     fontWeight: fontWeights.medium,
     fontSize: fontSizes.sm,
+  },
+  flashcardsTab: {
+    gap: spacing.md,
+    alignItems: "center",
+  },
+  flashcardsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    alignSelf: "stretch",
+  },
+  scopeToggle: {
+    flexDirection: "row",
+    gap: spacing.xs,
+  },
+  scopeButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  scopeButtonActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.muted,
+  },
+  scopeButtonText: {
+    fontSize: fontSizes.xs,
+    color: colors.mutedForeground,
+  },
+  scopeButtonTextActive: {
+    color: colors.foreground,
+  },
+  scopeBadge: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: 1,
+    paddingHorizontal: spacing.xs,
+  },
+  scopeBadgeText: {
+    fontSize: fontSizes.xs,
+    color: colors.mutedForeground,
+  },
+  flashcard: {
+    alignSelf: "stretch",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    minHeight: 160,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: spacing.xl,
+  },
+  flashcardFront: {
+    fontSize: fontSizes.lg,
+    lineHeight: lineHeight(fontSizes.lg),
+    fontWeight: fontWeights.medium,
+    color: colors.foreground,
+    textAlign: "center",
+  },
+  flashcardBack: {
+    fontSize: fontSizes.sm,
+    lineHeight: lineHeight(fontSizes.sm),
+    color: colors.foreground,
+    textAlign: "center",
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.sm,
+    alignSelf: "stretch",
+  },
+  gradeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: spacing.sm,
+  },
+  gradeButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  cardForm: {
+    alignSelf: "stretch",
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: spacing.md,
+  },
+  formLabel: {
+    fontSize: fontSizes.sm,
+    color: colors.foreground,
+  },
+  formInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    fontSize: fontSizes.sm,
+    color: colors.foreground,
+  },
+  formInputMultiline: {
+    minHeight: 72,
+    textAlignVertical: "top",
+  },
+  formActions: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  primaryButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  primaryButtonText: {
+    color: colors.primaryForeground,
+    fontWeight: fontWeights.medium,
+    fontSize: fontSizes.sm,
+  },
+  secondaryButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  secondaryButtonText: {
+    color: colors.foreground,
+    fontWeight: fontWeights.medium,
+    fontSize: fontSizes.sm,
+  },
+  linkText: {
+    fontSize: fontSizes.sm,
+    color: colors.primary,
+  },
+  errorText: {
+    fontSize: fontSizes.sm,
+    color: colors.danger,
+  },
+  myCardsSection: {
+    alignSelf: "stretch",
+    gap: spacing.xs,
+  },
+  myCardsHeading: {
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.medium,
+    color: colors.foreground,
+  },
+  myCardRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  myCardText: {
+    flexShrink: 1,
+  },
+  myCardActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
   },
 });
