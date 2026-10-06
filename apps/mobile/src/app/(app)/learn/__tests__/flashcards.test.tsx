@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { router } from "expo-router";
 
 import FlashcardsScreen from "../flashcards";
@@ -30,11 +30,12 @@ beforeEach(() => {
 
 function renderScreen() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <FlashcardsScreen />
     </QueryClientProvider>,
   );
+  return { ...view, queryClient };
 }
 
 test("reports due and new separately rather than summing them", async () => {
@@ -114,4 +115,21 @@ test("surfaces a load failure", async () => {
   mockGetFlashcardSummary.mockRejectedValue(new Error("boom"));
   renderScreen();
   expect(await screen.findByText("Failed to load your flashcard summary.")).toBeTruthy();
+});
+
+test("refetches when the lesson runner invalidates the flashcards namespace", async () => {
+  // The counts here are derived from grading and exclusion, which happen on
+  // another screen and invalidate the ["flashcards"] prefix. A sibling key
+  // like ["flashcard-summary"] does not prefix-match, so the hub used to keep
+  // showing a backlog the learner had already cleared — and unlike web there
+  // is no window-focus refetch here to cover it up.
+  const { queryClient } = renderScreen();
+  await screen.findByText("No lessons yet.");
+  expect(mockGetFlashcardSummary).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    await queryClient.invalidateQueries({ queryKey: ["flashcards"] });
+  });
+
+  await waitFor(() => expect(mockGetFlashcardSummary).toHaveBeenCalledTimes(2));
 });

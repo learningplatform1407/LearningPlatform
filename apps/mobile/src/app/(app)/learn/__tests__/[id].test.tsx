@@ -1091,3 +1091,20 @@ test("the lesson list offers exclusion on official cards the learner cannot edit
   expect(screen.queryByText("Edit")).toBeNull();
   expect(screen.queryByText("Delete")).toBeNull();
 });
+
+test("a failed grade is reported rather than silently doing nothing", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListDueFlashcards.mockResolvedValue([officialCard()]);
+  mockSubmitFlashcardReview.mockRejectedValue(new Error("offline"));
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Flashcards"));
+  fireEvent.press(await screen.findByText("What is a CDN?"));
+  fireEvent.press(screen.getByText("Good"));
+
+  expect(await screen.findByText("Could not save that rating.")).toBeTruthy();
+  // The card must stay in the queue — it was never actually graded.
+  expect(screen.getByText("What is a CDN?")).toBeTruthy();
+});

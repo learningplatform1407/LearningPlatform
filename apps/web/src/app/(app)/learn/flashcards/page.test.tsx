@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -23,11 +23,12 @@ beforeEach(() => {
 
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <FlashcardsPage />
     </QueryClientProvider>,
   );
+  return { ...view, queryClient };
 }
 
 describe("FlashcardsPage", () => {
@@ -100,6 +101,22 @@ describe("FlashcardsPage", () => {
     expect(screen.getByRole("link", { name: /Lesson 1/ })).toBeInTheDocument();
     // One eager fetch — the counts require walking every lesson anyway.
     expect(getFlashcardSummary).toHaveBeenCalledTimes(1);
+  });
+
+  test("refetches when the lesson runner invalidates the flashcards namespace", async () => {
+    // The counts here are derived from grading and exclusion, which happen on
+    // another page and invalidate the ["flashcards"] prefix. A sibling key
+    // like ["flashcard-summary"] does not prefix-match, so the hub used to
+    // keep showing a backlog the learner had already cleared.
+    const { queryClient } = renderPage();
+    await screen.findByText("No lessons yet.");
+    expect(getFlashcardSummary).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ["flashcards"] });
+    });
+
+    await waitFor(() => expect(getFlashcardSummary).toHaveBeenCalledTimes(2));
   });
 
   test("says so when there are no lessons at all", async () => {

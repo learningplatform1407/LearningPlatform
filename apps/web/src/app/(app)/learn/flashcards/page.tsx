@@ -139,7 +139,12 @@ export default function FlashcardsPage() {
   const api = getBrowserApiClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => api.getMe() });
   const { data, isPending, isError } = useQuery({
-    queryKey: ["flashcard-summary"],
+    // Under the "flashcards" namespace on purpose: the lesson runner
+    // invalidates that whole prefix after a grade or an exclusion, and these
+    // counts are derived from exactly those writes. A sibling key like
+    // ["flashcard-summary"] does *not* prefix-match, which left the hub
+    // showing a stale backlog after studying.
+    queryKey: ["flashcards", "summary"],
     queryFn: () => api.getFlashcardSummary(),
   });
 

@@ -455,6 +455,7 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
   const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
   const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
   const deckQuery = useQuery({
@@ -480,11 +481,16 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
     onSuccess: (state, variables) => {
       setGradedIds((previous) => new Set(previous).add(variables.cardId));
       setRevealedCardId(null);
+      setActionError(null);
       setFeedback(
         `Next review in ${state.interval_days} ${state.interval_days === 1 ? "day" : "days"}.`,
       );
       refresh();
     },
+    // Without this a failed grade silently does nothing: the card stays
+    // revealed, the buttons re-enable, and the learner has no idea the
+    // rating never landed.
+    onError: () => setActionError("Could not save that rating."),
   });
 
   const excludeMutation = useMutation({
@@ -495,9 +501,11 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
       // dropped it from the deck.
       setGradedIds((previous) => new Set(previous).add(cardId));
       setRevealedCardId(null);
+      setActionError(null);
       setFeedback("Excluded from reviews. You can include it again below.");
       refresh();
     },
+    onError: () => setActionError("Could not exclude that card."),
   });
 
   // Filtered client-side rather than trusting the refetched list to shrink,
@@ -621,6 +629,11 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
       )}
 
       {feedback && <p className="text-xs text-muted-foreground">{feedback}</p>}
+      {actionError && (
+        <p role="alert" className="text-xs text-danger">
+          {actionError}
+        </p>
+      )}
 
       {lessonCards.length > 0 && (
         <section className="w-full max-w-[32rem]">

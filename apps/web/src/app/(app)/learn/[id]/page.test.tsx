@@ -909,6 +909,24 @@ describe("LecturePage", () => {
     ).toBeInTheDocument();
   });
 
+  test("a failed grade is reported rather than silently doing nothing", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([officialCard()]);
+    submitFlashcardReview.mockRejectedValue(new Error("offline"));
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await user.click(await screen.findByText("What is a CDN?"));
+    await user.click(screen.getByRole("button", { name: "Good" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not save that rating.");
+    // The card must stay in the queue — it was never actually graded.
+    expect(screen.getByText("What is a CDN?")).toBeInTheDocument();
+  });
+
   test("the Flashcards tab says so when the lesson has no cards at all", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
     listDueFlashcards.mockResolvedValue([]);

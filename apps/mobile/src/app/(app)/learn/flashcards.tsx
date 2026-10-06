@@ -134,7 +134,13 @@ function BookRow({ book }: { book: SummaryBook }) {
 
 export default function FlashcardsScreen() {
   const { data, isPending, isError } = useQuery({
-    queryKey: ["flashcard-summary"],
+    // Under the "flashcards" namespace on purpose: the lesson runner
+    // invalidates that whole prefix after a grade or an exclusion, and these
+    // counts are derived from exactly those writes. A sibling key like
+    // ["flashcard-summary"] does *not* prefix-match, which left the hub
+    // showing a stale backlog after studying — and unlike web there is no
+    // window-focus refetch here to eventually cover it up.
+    queryKey: ["flashcards", "summary"],
     queryFn: () => getApiClient().getFlashcardSummary(),
   });
 
