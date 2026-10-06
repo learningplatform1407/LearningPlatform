@@ -23,6 +23,13 @@ class FlashcardResponse(BaseModel):
     order_index: int
     is_mine: bool
     suspended: bool
+    # Computed server-side rather than re-derived by each client, because
+    # `is_mine` alone is the wrong test and getting it wrong is invisible
+    # until a button 404s. An admin who imported an official card *did*
+    # create it, so is_mine is true, but official cards are not editable;
+    # conversely any admin may retire one, including one they did not import.
+    can_edit: bool
+    can_delete: bool
 
 
 class FlashcardCardResponse(BaseModel):

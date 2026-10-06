@@ -1034,6 +1034,8 @@ function lessonCard(overrides: Record<string, unknown> = {}) {
     order_index: 0,
     is_mine: false,
     suspended: false,
+    can_edit: false,
+    can_delete: false,
     ...overrides,
   };
 }
@@ -1078,7 +1080,7 @@ test("an excluded card is still listed, and can be included again", async () => 
 test("the lesson list offers exclusion on official cards the learner cannot edit", async () => {
   mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
   mockListDueFlashcards.mockResolvedValue([]);
-  mockListFlashcards.mockResolvedValue([lessonCard({ is_mine: false })]);
+  mockListFlashcards.mockResolvedValue([lessonCard({ can_edit: false, can_delete: false })]);
 
   renderScreen();
   await screen.findByText("Hello world");
@@ -1112,7 +1114,9 @@ test("a failed grade is reported rather than silently doing nothing", async () =
 test("cancelling an edit discards the draft instead of committing it later", async () => {
   mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
   mockListDueFlashcards.mockResolvedValue([]);
-  mockListFlashcards.mockResolvedValue([lessonCard({ is_mine: true, front_text: "Mitral valve" })]);
+  mockListFlashcards.mockResolvedValue([
+    lessonCard({ can_edit: true, can_delete: true, front_text: "Mitral valve" }),
+  ]);
 
   renderScreen();
   await screen.findByText("Hello world");
@@ -1191,4 +1195,51 @@ test("switching scope resets the session counter", async () => {
   // previous scope would report a position the new deck doesn't have.
   expect(await screen.findByText("Card 1 of 1")).toBeTruthy();
   expect(screen.queryByText("Next review in 1 day.")).toBeNull();
+});
+
+test("Again brings the card back later in the same session", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListDueFlashcards.mockResolvedValue([
+    officialCard(),
+    officialCard({ id: "f2", front_text: "What is TTL?" }),
+  ]);
+  mockSubmitFlashcardReview.mockResolvedValue({
+    id: "s1",
+    flashcard_id: "f1",
+    suspended: false,
+    ease_factor: 2.3,
+    interval_days: 1,
+    repetitions: 0,
+    due_at: "2026-10-08T00:00:00Z",
+    last_reviewed_at: "2026-10-07T00:00:00Z",
+  });
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Flashcards"));
+  fireEvent.press(await screen.findByText("What is a CDN?"));
+  fireEvent.press(screen.getByText("Again"));
+
+  // The server scheduled it for tomorrow — its floor is a whole day — so
+  // holding it client-side is what makes "Again" mean "again now".
+  expect(await screen.findByText("You'll see this one again before you finish.")).toBeTruthy();
+  expect(await screen.findByText("What is TTL?")).toBeTruthy();
+  expect(screen.getByText("Card 1 of 2")).toBeTruthy();
+});
+
+test("an official card offers Retire to an admin, never Edit", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListDueFlashcards.mockResolvedValue([]);
+  mockListFlashcards.mockResolvedValue([
+    lessonCard({ is_mine: true, can_edit: false, can_delete: true, scope: "official" }),
+  ]);
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Flashcards"));
+
+  expect(await screen.findByText("Retire")).toBeTruthy();
+  expect(screen.queryByText("Edit")).toBeNull();
 });

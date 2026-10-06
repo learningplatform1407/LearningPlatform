@@ -10,6 +10,7 @@ import type {
   AnnotationCreateRequest,
   ClozeRating,
   Flashcard,
+  FlashcardCard,
   FlashcardScope,
   FlashcardScopeFilter,
   ReviewRating,
@@ -457,24 +458,27 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
         >
           {card.suspended ? "Include in reviews" : "Exclude from reviews"}
         </button>
-        {card.is_mine && (
-          <>
-            <button
-              type="button"
-              onClick={openEditor}
-              className="text-xs text-primary hover:underline"
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              disabled={remove.isPending}
-              onClick={() => remove.mutate()}
-              className="text-xs text-danger hover:underline"
-            >
-              Delete
-            </button>
-          </>
+        {card.can_edit && (
+          <button
+            type="button"
+            onClick={openEditor}
+            className="text-xs text-primary hover:underline"
+          >
+            Edit
+          </button>
+        )}
+        {card.can_delete && (
+          <button
+            type="button"
+            disabled={remove.isPending}
+            onClick={() => remove.mutate()}
+            className="text-xs text-danger hover:underline"
+          >
+            {/* Retiring an official card archives it for everyone; deleting
+                your own personal card removes it. Different verbs because
+                they are different actions. */}
+            {card.scope === "official" ? "Retire" : "Delete"}
+          </button>
         )}
       </div>
     </li>
@@ -485,7 +489,16 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
   const queryClient = useQueryClient();
   const [scope, setScope] = useState<FlashcardScopeFilter>("all");
   const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
+  // Cards removed from the server-driven queue. Every graded card lands
+  // here, including "Again" ones — those are re-added to the tail via
+  // `againCards` instead.
   const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
+  // "Again" means show me again now. The scheduler's floor is one whole day,
+  // so the server will say tomorrow; holding the card locally is what keeps
+  // the promise within this session. Kept as card objects rather than ids so
+  // a background refetch (which no longer returns them, they are not due)
+  // cannot drop them mid-session.
+  const [againCards, setAgainCards] = useState<FlashcardCard[]>([]);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -511,12 +524,27 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
     mutationFn: ({ cardId, rating }: { cardId: string; rating: ReviewRating }) =>
       getBrowserApiClient().submitFlashcardReview(cardId, rating),
     onSuccess: (state, variables) => {
-      setGradedIds((previous) => new Set(previous).add(variables.cardId));
+      const { cardId, rating } = variables;
+      setGradedIds((previous) => new Set(previous).add(cardId));
       setRevealedCardId(null);
       setActionError(null);
-      setFeedback(
-        `Next review in ${state.interval_days} ${state.interval_days === 1 ? "day" : "days"}.`,
-      );
+
+      if (rating === "again") {
+        setAgainCards((previous) => {
+          const card = [...(deckQuery.data ?? []), ...previous].find((c) => c.id === cardId);
+          const withoutIt = previous.filter((c) => c.id !== cardId);
+          // Appended, so it comes back after the rest of the queue rather
+          // than immediately — re-reading the answer you just saw teaches
+          // nothing.
+          return card ? [...withoutIt, card] : withoutIt;
+        });
+        setFeedback("You'll see this one again before you finish.");
+      } else {
+        setAgainCards((previous) => previous.filter((c) => c.id !== cardId));
+        setFeedback(
+          `Next review in ${state.interval_days} ${state.interval_days === 1 ? "day" : "days"}.`,
+        );
+      }
       refresh();
     },
     // Without this a failed grade silently does nothing: the card stays
@@ -532,6 +560,7 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
       // is simply done with for this session, and the server has already
       // dropped it from the deck.
       setGradedIds((previous) => new Set(previous).add(cardId));
+      setAgainCards((previous) => previous.filter((c) => c.id !== cardId));
       setRevealedCardId(null);
       setActionError(null);
       setFeedback("Excluded from reviews. You can include it again below.");
@@ -543,8 +572,13 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
   // Filtered client-side rather than trusting the refetched list to shrink,
   // so a background refetch can't move the card out from under you — same
   // reasoning as ReviewTab above.
-  const queue = (deckQuery.data ?? []).filter((card) => !gradedIds.has(card.id));
+  const queue = [
+    ...(deckQuery.data ?? []).filter((card) => !gradedIds.has(card.id)),
+    ...againCards,
+  ];
   const currentCard = queue[0];
+  // Cards actually finished: graded and not waiting to come back round.
+  const completed = gradedIds.size - againCards.length;
   const revealed = currentCard !== undefined && revealedCardId === currentCard.id;
 
   if (deckQuery.isPending) {
@@ -572,6 +606,7 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
             // from the previous scope onto a shorter deck.
             setScope(next);
             setGradedIds(new Set());
+            setAgainCards([]);
             setRevealedCardId(null);
             setFeedback(null);
             setActionError(null);
@@ -608,7 +643,7 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
       {currentCard && (
         <>
           <p className="text-xs text-muted-foreground">
-            Card {gradedIds.size + 1} of {gradedIds.size + queue.length}
+            Card {completed + 1} of {completed + queue.length}
           </p>
           <button
             type="button"

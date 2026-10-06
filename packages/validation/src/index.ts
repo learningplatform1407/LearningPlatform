@@ -174,6 +174,11 @@ export const flashcardResponseSchema = z.object({
   /** Taken out of *this* learner's rotation. Per-user, so a shared official
    * card suspended by one person stays in everyone else's deck. */
   suspended: z.boolean(),
+  /** Computed server-side. `is_mine` is deliberately NOT the test: an admin
+   * who imported an official card created it, so is_mine is true, but
+   * official cards are not editable. */
+  can_edit: z.boolean(),
+  can_delete: z.boolean(),
 });
 
 /** A card as the deck runner receives it. Carries `back_text` up front:

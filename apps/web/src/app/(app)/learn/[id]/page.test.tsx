@@ -787,6 +787,8 @@ describe("LecturePage", () => {
       order_index: 0,
       is_mine: false,
       suspended: false,
+      can_edit: false,
+      can_delete: false,
       ...overrides,
     };
   }
@@ -843,7 +845,9 @@ describe("LecturePage", () => {
   test("cancelling an edit discards the draft instead of committing it later", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
     listDueFlashcards.mockResolvedValue([]);
-    listFlashcards.mockResolvedValue([lessonCard({ is_mine: true, front_text: "Mitral valve" })]);
+    listFlashcards.mockResolvedValue([
+      lessonCard({ can_edit: true, can_delete: true, front_text: "Mitral valve" }),
+    ]);
 
     renderPage();
     await screen.findByText("Hello world");
@@ -866,7 +870,7 @@ describe("LecturePage", () => {
   test("Save is blocked while a field is empty", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
     listDueFlashcards.mockResolvedValue([]);
-    listFlashcards.mockResolvedValue([lessonCard({ is_mine: true })]);
+    listFlashcards.mockResolvedValue([lessonCard({ can_edit: true, can_delete: true })]);
 
     renderPage();
     await screen.findByText("Hello world");
@@ -1017,6 +1021,91 @@ describe("LecturePage", () => {
     expect(
       await screen.findByText("You're all caught up — nothing to review right now."),
     ).toBeInTheDocument();
+  });
+
+  test("Again brings the card back later in the same session", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([
+      officialCard(),
+      officialCard({ id: "f2", front_text: "What is TTL?" }),
+    ]);
+    submitFlashcardReview.mockResolvedValue({
+      id: "s1",
+      flashcard_id: "f1",
+      suspended: false,
+      ease_factor: 2.3,
+      interval_days: 1,
+      repetitions: 0,
+      due_at: "2026-10-08T00:00:00Z",
+      last_reviewed_at: "2026-10-07T00:00:00Z",
+    });
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await user.click(await screen.findByText("What is a CDN?"));
+    await user.click(screen.getByRole("button", { name: "Again" }));
+
+    // The server scheduled it for tomorrow — its floor is a whole day — so
+    // holding it client-side is what makes "Again" mean "again now".
+    expect(
+      await screen.findByText("You'll see this one again before you finish."),
+    ).toBeInTheDocument();
+    // Appended, not re-shown immediately: the next card is the other one.
+    expect(await screen.findByText("What is TTL?")).toBeInTheDocument();
+    // Two cards still to do, and nothing counted as finished.
+    expect(screen.getByText("Card 1 of 2")).toBeInTheDocument();
+  });
+
+  test("a card rated Again and then Good is finished and does not return", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([officialCard()]);
+    submitFlashcardReview.mockResolvedValue({
+      id: "s1",
+      flashcard_id: "f1",
+      suspended: false,
+      ease_factor: 2.3,
+      interval_days: 1,
+      repetitions: 0,
+      due_at: "2026-10-08T00:00:00Z",
+      last_reviewed_at: "2026-10-07T00:00:00Z",
+    });
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await user.click(await screen.findByText("What is a CDN?"));
+    await user.click(screen.getByRole("button", { name: "Again" }));
+
+    // It came back as the only card left.
+    await user.click(await screen.findByText("What is a CDN?"));
+    await user.click(screen.getByRole("button", { name: "Good" }));
+
+    expect(
+      await screen.findByText("You're all caught up — nothing to review right now."),
+    ).toBeInTheDocument();
+  });
+
+  test("an official card offers Retire to an admin, never Edit", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([]);
+    // What the importing admin actually gets back: they created it, so
+    // is_mine is true, but an official card is not editable.
+    listFlashcards.mockResolvedValue([
+      lessonCard({ is_mine: true, can_edit: false, can_delete: true, scope: "official" }),
+    ]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Flashcards" }));
+
+    expect(await screen.findByRole("button", { name: "Retire" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
   });
 
   test("a failed grade is reported rather than silently doing nothing", async () => {

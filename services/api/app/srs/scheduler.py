@@ -22,6 +22,13 @@ ReviewRating = Literal["again", "hard", "good", "easy"]
 # default -- four places that have to agree and nothing to make them.
 DEFAULT_EASE_FACTOR = 2.5
 
+# Anki's default ceiling, and it is load-bearing rather than cosmetic:
+# intervals compound by ease (which itself grows on `easy`), so eleven
+# consecutive `easy` grades reached ~2,500 years and the twelfth overflowed
+# `datetime`, surfacing as an unhandled 500. Reachable because neither review
+# endpoint requires the card to be due, so a client can post repeatedly.
+MAX_INTERVAL_DAYS = 36_500
+
 # SM-2's ease floor -- a card can get progressively harder to schedule
 # further apart, but never below a 130% multiplier, matching Anki.
 _MIN_EASE = 1.3
@@ -83,6 +90,12 @@ def compute_next_state(
             interval = round(interval * _EASY_BONUS)
             ease = ease + 0.15
         repetitions += 1
+
+    # Clamped at the end so every branch is covered by one rule. The floor
+    # of 1 also closes a latent hole: `good`/`easy` on a (not normally
+    # reachable) state with repetitions >= 2 and interval 0 computed
+    # round(0 * ease) == 0, which would have left the card permanently due.
+    interval = max(1, min(interval, MAX_INTERVAL_DAYS))
 
     return SchedulerResult(
         ease_factor=ease,

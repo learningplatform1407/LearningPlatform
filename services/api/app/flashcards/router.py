@@ -54,8 +54,18 @@ router = APIRouter(prefix="/v1/flashcards", tags=["flashcards"])
 
 
 def _to_response(
-    card: Flashcard, user_id: UUID, state: FlashcardReviewState | None = None
+    card: Flashcard,
+    user_id: UUID,
+    state: FlashcardReviewState | None = None,
+    *,
+    is_admin: bool = False,
 ) -> FlashcardResponse:
+    """`can_edit`/`can_delete` mirror `update_personal_card` and `delete_card`
+    exactly. They are computed here, next to nothing, rather than inferred by
+    the clients: both platforms previously gated their buttons on `is_mine`,
+    which showed Edit on an admin's own imported official cards (the PATCH
+    then 404'd) and hid Delete from any admin who had not imported them."""
+    is_own_personal = card.scope == FlashcardScope.PERSONAL and card.created_by == user_id
     return FlashcardResponse(
         id=card.id,
         document_id=card.document_id,
@@ -68,6 +78,8 @@ def _to_response(
         # No state row means the card has never been touched by this user,
         # which includes never having been suspended.
         suspended=state is not None and state.suspended,
+        can_edit=is_own_personal,
+        can_delete=is_own_personal or (card.scope == FlashcardScope.OFFICIAL and is_admin),
     )
 
 
@@ -85,8 +97,9 @@ def read_flashcards(
 ) -> list[FlashcardResponse]:
     _require_document(db, document_id)
     profile = get_or_create_profile(db, user)
+    is_admin = profile.role == Role.ADMIN
     return [
-        _to_response(card, profile.id, state)
+        _to_response(card, profile.id, state, is_admin=is_admin)
         for card, state in list_lesson_cards(db, profile.id, document_id, scope)
     ]
 
@@ -131,7 +144,7 @@ def create_flashcard(
     # creates the profile row flashcards.created_by FKs against.
     profile = get_or_create_profile(db, user)
     card = create_personal_card(db, profile.id, document_id, data.front_text, data.back_text)
-    return _to_response(card, profile.id)
+    return _to_response(card, profile.id, is_admin=profile.role == Role.ADMIN)
 
 
 @router.patch("/{flashcard_id}", response_model=FlashcardResponse)
@@ -146,7 +159,12 @@ def update_flashcard(
     # Passing the state matters: `suspended` is documented as computed per
     # caller, and omitting it would report every edited card as back in the
     # rotation regardless of whether the learner had excluded it.
-    return _to_response(card, profile.id, get_review_state(db, profile.id, card.id))
+    return _to_response(
+        card,
+        profile.id,
+        get_review_state(db, profile.id, card.id),
+        is_admin=profile.role == Role.ADMIN,
+    )
 
 
 @router.delete("/{flashcard_id}", status_code=204)

@@ -537,6 +537,8 @@ describe("flashcardResponseSchema", () => {
       order_index: 0,
       is_mine: false,
       suspended: false,
+      can_edit: false,
+      can_delete: false,
     };
 
     expect(flashcardResponseSchema.safeParse(payload).success).toBe(true);
@@ -553,6 +555,8 @@ describe("flashcardResponseSchema", () => {
       order_index: 0,
       is_mine: false,
       suspended: false,
+      can_edit: false,
+      can_delete: false,
     };
 
     expect(flashcardResponseSchema.safeParse(payload).success).toBe(false);

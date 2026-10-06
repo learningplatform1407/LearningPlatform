@@ -164,6 +164,42 @@ Note this is a different axis from suspension (§5.4): archiving removes a card 
 an admin action on the card; suspending removes it for _one learner_ and is that learner's action on
 their own review state.
 
+### 5.6 "Again" means again now, not tomorrow
+
+The scheduler's floor is one whole day, so `again` schedules the card for
+tomorrow like every other rating does on a new card. Taken literally that
+makes `Again` and `Good` nearly indistinguishable: both make the card vanish
+for the rest of the session.
+
+So the runner holds `again` cards client-side and appends them to the tail of
+the current queue. The server still records tomorrow — the schedule is
+honest — but the promise `Again` makes to the learner is kept within the
+session. They are held as card objects rather than ids because a background
+refetch no longer returns them (they are not due), which would otherwise drop
+them mid-session. Appended rather than shown immediately: re-reading an answer
+you just saw teaches nothing.
+
+Proper sub-day relearning steps would need intervals in minutes rather than
+days, which is a schema change and would alter cloze Review too, since the
+scheduler is shared. Deliberately not done.
+
+### 5.7 Permissions are computed server-side, because `is_mine` is the wrong test
+
+`can_edit` and `can_delete` ride on every response carrying a card, mirroring
+`update_personal_card` and `delete_card` exactly:
+
+- `can_edit` = the card is `personal` **and** the caller created it.
+- `can_delete` = that, **or** the card is `official` and the caller is an admin
+  (which archives rather than deletes — §5.5).
+
+Both clients originally gated their buttons on `is_mine`, which is wrong in
+both directions and was found in real use rather than by a test. An admin who
+imports official cards _is_ their creator, so `is_mine` is true and an Edit
+button appeared — and 404'd, because official cards are not editable.
+Meanwhile an admin who had _not_ imported them saw no Delete button at all,
+despite being allowed to retire them. Deriving the rule in two clients was
+the mistake; the server owns it now.
+
 ## 6. The draw
 
 `draw_lesson_deck(db, user_id, document_id, scope, limit)`:
@@ -241,6 +277,18 @@ make a freshly imported deck look like a backlog.
 **`/learn/flashcards/manage`.** Web-only admin importer: file input, JSON textarea, dry-run preview,
 and commit disabled until a dry run has been made against the exact current payload. Bulk JSON
 authoring on a phone has no use, the same intentional parity break as the question importer.
+
+### 9.1 Interval ceiling
+
+`MAX_INTERVAL_DAYS = 36_500` in `app/srs/scheduler.py`, Anki's default, and it
+is load-bearing rather than cosmetic. Intervals compound by ease and ease
+itself grows on `easy`, so eleven consecutive `easy` grades reached roughly
+2,500 years and the next overflowed `datetime`, surfacing as an unhandled 500.
+Reachable because neither review endpoint requires the card to be due, so a
+client can post repeatedly. The same clamp floors the interval at one day,
+which also closes a latent hole where `good` on a `repetitions >= 2,
+interval 0` state computed `round(0 * ease) == 0` and would have left the card
+permanently due.
 
 ## 10. Known follow-ups
 

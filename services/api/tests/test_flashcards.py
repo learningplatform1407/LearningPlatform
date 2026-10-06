@@ -571,6 +571,46 @@ def test_editing_a_suspended_card_still_reports_it_as_suspended(
     assert edited.json()["suspended"] is True
 
 
+def test_an_admin_cannot_edit_the_official_cards_they_imported(
+    admin_client: TestClient, document_id: str, db_session: Session
+) -> None:
+    """The importing admin *is* the creator, so `is_mine` is true on an
+    official card -- which is why both clients used to offer an Edit button
+    that 404'd. `can_edit` reports the server's real rule instead."""
+    admin_client.post("/v1/flashcards/import", json=_payload(document_id))
+    card = db_session.scalar(select(Flashcard).where(Flashcard.external_id == "fc-1"))
+    assert card is not None
+
+    listed = admin_client.get(f"/v1/documents/{document_id}/flashcards").json()
+    assert listed[0]["is_mine"] is True, "the importing admin did create it"
+    assert listed[0]["can_edit"] is False, "but official cards are not editable"
+    # An admin may still retire it -- a different rule, hence a second flag.
+    assert listed[0]["can_delete"] is True
+
+    assert (
+        admin_client.patch(f"/v1/flashcards/{card.id}", json={"back_text": "x"}).status_code == 404
+    )
+
+
+def test_a_learner_can_edit_and_delete_only_their_own_personal_cards(
+    authed_client: TestClient,
+    document_id: str,
+    db_session: Session,
+    admin_user: AuthenticatedUser,
+) -> None:
+    mine = authed_client.post(
+        f"/v1/documents/{document_id}/flashcards", json={"front_text": "Q", "back_text": "A"}
+    ).json()
+    assert (mine["can_edit"], mine["can_delete"]) == (True, True)
+
+    _add_card(db_session, document_id, admin_user.id, front="Official")
+    listed = authed_client.get(
+        f"/v1/documents/{document_id}/flashcards", params={"scope": "official"}
+    ).json()
+    # A learner may neither edit nor retire shared content.
+    assert (listed[0]["can_edit"], listed[0]["can_delete"]) == (False, False)
+
+
 # --- suspension (opting a card out of the rotation) -------------------------
 
 
