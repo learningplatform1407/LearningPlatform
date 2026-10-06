@@ -28,3 +28,25 @@ the admin screen at `/question-bank/manage`:
 **The `document_id`s in the last two are local dev lesson ids**, so replace them
 with ids from your own database — the id in `/learn/<id>` — or the import is
 rejected.
+
+## Flashcard import samples
+
+Payloads for `POST /v1/flashcards/import`, uploadable as-is from the admin
+screen at `/learn/flashcards/manage`. Every imported card is `official` and
+visible to everyone studying its lesson; `external_id` is the upsert key, so
+re-importing the same payload updates those cards instead of duplicating them.
+
+- `flashcards-import-sample.json` — six cards for one lesson. Definition and
+  mnemonic style rather than multiple choice, which is the point of the
+  feature: flashcards cover what the exam pool doesn't. The last entry is
+  `draft`, so it must stay out of every deck, list and count until a
+  re-import flips it to `published`.
+- `flashcards-import-rejections.json` — deliberately invalid, for checking the
+  error display. Exercises both server-side rejections at once: a duplicate
+  `external_id` within the payload (index 1) and an unknown `document_id`
+  (index 2). Validation is per batch, so the one valid card is skipped too.
+
+**Replace the `document_id`s before importing**, same as above. Blank
+`front_text`/`back_text` and a payload over 500 cards are also rejected, but
+the first is caught client-side by `flashcardImportRequestSchema` and surfaces
+as a format error rather than reaching the server.

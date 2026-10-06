@@ -1,0 +1,22 @@
+{
+  "flashcards": [
+    {
+      "external_id": "reject-fc-001",
+      "document_id": "648089c1-837b-41e9-83bf-e87adcd25607",
+      "front_text": "This card is fine on its own",
+      "back_text": "It is still skipped: validation is per batch, so one bad entry rejects the whole payload rather than importing part of it. `skipped` in the result counts every card, including this one."
+    },
+    {
+      "external_id": "reject-fc-001",
+      "document_id": "648089c1-837b-41e9-83bf-e87adcd25607",
+      "front_text": "Duplicate external_id",
+      "back_text": "Collides with entry 0. Reported as index 1, field external_id — the upsert key has to be unique within a payload or two entries would fight over the same row."
+    },
+    {
+      "external_id": "reject-fc-003",
+      "document_id": "00000000-0000-0000-0000-000000000000",
+      "front_text": "Unknown lesson",
+      "back_text": "This document_id does not exist. Reported as index 2, field document_id — a card must be bound to a real lecture."
+    }
+  ]
+}
