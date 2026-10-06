@@ -1,8 +1,11 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+
+import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 // Question Bank has no entry of its own here — it's reached from inside
 // Learn (its card on /learn, and the per-lesson tab), the same way Review
@@ -18,9 +21,16 @@ const NAV_ITEMS = [
 
 const PROFILE_ITEM = { href: "/profile", label: "Profile", emoji: "👤" } as const;
 
+// A directory of the content tools, not a second home for them — authoring
+// stays inline where the content lives (books/chapters/lectures on the
+// Library page), so the parent is always already chosen. See
+// docs/architecture/README.md.
+const ADMIN_ITEM = { href: "/admin", label: "Admin", emoji: "🛠️" } as const;
+
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const me = useQuery({ queryKey: ["me"], queryFn: () => getBrowserApiClient().getMe() });
 
   return (
     <nav
@@ -47,6 +57,17 @@ export function Sidebar() {
             active={pathname.startsWith(item.href)}
           />
         ))}
+        {/* Appended conditionally rather than added to NAV_ITEMS, which is
+            the list every learner sees. /admin is the one exception to the
+            comment above: it is not part of Learn, it is a directory of the
+            content tools, and it only exists for admins. */}
+        {me.data?.role === "admin" && (
+          <NavLink
+            item={ADMIN_ITEM}
+            collapsed={collapsed}
+            active={pathname.startsWith(ADMIN_ITEM.href)}
+          />
+        )}
       </ul>
 
       <div className="mt-auto flex flex-col gap-xs border-t border-border px-sm pt-md">

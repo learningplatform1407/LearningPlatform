@@ -5,7 +5,15 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 
-import type { Annotation, AnnotationCreateRequest, ClozeRating } from "@lp/contracts";
+import type {
+  Annotation,
+  AnnotationCreateRequest,
+  ClozeRating,
+  Flashcard,
+  FlashcardScope,
+  FlashcardScopeFilter,
+  ReviewRating,
+} from "@lp/contracts";
 
 import { Button } from "@/components/button";
 import { QuestionBankList } from "@/components/question-bank-list";
@@ -235,29 +243,334 @@ function QuizzesTab({ documentId }: { documentId: string }) {
   );
 }
 
-function FlashcardsTab({ documentId }: { documentId: string }) {
-  const { data, isPending } = useQuery({
-    queryKey: ["flashcards", documentId],
-    queryFn: () => getBrowserApiClient().listFlashcards(documentId),
+const SCOPE_FILTERS = [
+  { key: "all", label: "All" },
+  { key: "official", label: "Official" },
+  { key: "personal", label: "Mine" },
+] as const;
+
+function ScopeToggle({
+  scope,
+  onChange,
+}: {
+  scope: FlashcardScopeFilter;
+  onChange: (scope: FlashcardScopeFilter) => void;
+}) {
+  return (
+    <div role="group" aria-label="Filter flashcards" className="flex gap-xs">
+      {SCOPE_FILTERS.map((filter) => (
+        <button
+          key={filter.key}
+          type="button"
+          aria-pressed={scope === filter.key}
+          onClick={() => onChange(filter.key)}
+          className={`rounded-md border px-sm py-xs text-xs ${
+            scope === filter.key
+              ? "border-primary bg-muted text-foreground"
+              : "border-border text-muted-foreground hover:bg-muted"
+          }`}
+        >
+          {filter.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Official vs personal, always paired with a word rather than colour alone. */
+function ScopeBadge({ scope }: { scope: FlashcardScope }) {
+  return (
+    <span className="rounded-md border border-border px-xs py-[0.0625rem] text-xs text-muted-foreground">
+      {scope === "official" ? "Official" : "Mine"}
+    </span>
+  );
+}
+
+function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: () => void }) {
+  const [front, setFront] = useState("");
+  const [back, setBack] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const create = useMutation({
+    mutationFn: () =>
+      getBrowserApiClient().createFlashcard(documentId, { front_text: front, back_text: back }),
+    onSuccess: () => {
+      setFront("");
+      setBack("");
+      setError(null);
+      onDone();
+    },
+    onError: () => setError("Could not save that card."),
   });
 
-  if (isPending) {
+  return (
+    <form
+      className="flex w-full max-w-[32rem] flex-col gap-sm rounded-md border border-border p-md"
+      onSubmit={(event) => {
+        event.preventDefault();
+        create.mutate();
+      }}
+    >
+      <label className="flex flex-col gap-xs text-sm text-foreground">
+        Front
+        <input
+          value={front}
+          onChange={(event) => setFront(event.target.value)}
+          className="w-full rounded-md border border-border bg-background px-sm py-xs text-sm"
+        />
+      </label>
+      <label className="flex flex-col gap-xs text-sm text-foreground">
+        Back
+        <textarea
+          value={back}
+          onChange={(event) => setBack(event.target.value)}
+          rows={3}
+          className="w-full rounded-md border border-border bg-background px-sm py-xs text-sm"
+        />
+      </label>
+      {error && (
+        <p role="alert" className="text-xs text-danger">
+          {error}
+        </p>
+      )}
+      <div className="flex gap-sm">
+        <Button type="submit" disabled={!front.trim() || !back.trim() || create.isPending}>
+          Save card
+        </Button>
+        <Button type="button" variant="secondary" onClick={onDone}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function MyFlashcardRow({ card, onChanged }: { card: Flashcard; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [front, setFront] = useState(card.front_text);
+  const [back, setBack] = useState(card.back_text);
+
+  const update = useMutation({
+    mutationFn: () =>
+      getBrowserApiClient().updateFlashcard(card.id, { front_text: front, back_text: back }),
+    onSuccess: () => {
+      setEditing(false);
+      onChanged();
+    },
+  });
+  const remove = useMutation({
+    mutationFn: () => getBrowserApiClient().deleteFlashcard(card.id),
+    onSuccess: onChanged,
+  });
+
+  if (editing) {
+    return (
+      <li className="flex flex-col gap-xs rounded-md border border-border p-sm">
+        <input
+          aria-label="Front"
+          value={front}
+          onChange={(event) => setFront(event.target.value)}
+          className="w-full rounded-md border border-border bg-background px-sm py-xs text-sm"
+        />
+        <textarea
+          aria-label="Back"
+          value={back}
+          onChange={(event) => setBack(event.target.value)}
+          rows={2}
+          className="w-full rounded-md border border-border bg-background px-sm py-xs text-sm"
+        />
+        <div className="flex gap-xs">
+          <Button disabled={update.isPending} onClick={() => update.mutate()}>
+            Save
+          </Button>
+          <Button variant="secondary" onClick={() => setEditing(false)}>
+            Cancel
+          </Button>
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <li className="flex items-start justify-between gap-sm rounded-md border border-border px-md py-sm">
+      <div className="min-w-0">
+        <p className="text-sm text-foreground">{card.front_text}</p>
+        <p className="text-xs text-muted-foreground">{card.back_text}</p>
+      </div>
+      <div className="flex shrink-0 gap-xs">
+        <ScopeBadge scope={card.scope} />
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="text-xs text-primary hover:underline"
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          disabled={remove.isPending}
+          onClick={() => remove.mutate()}
+          className="text-xs text-danger hover:underline"
+        >
+          Delete
+        </button>
+      </div>
+    </li>
+  );
+}
+
+function FlashcardsTab({ documentId }: { documentId: string }) {
+  const queryClient = useQueryClient();
+  const [scope, setScope] = useState<FlashcardScopeFilter>("all");
+  const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
+  const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  const deckQuery = useQuery({
+    queryKey: ["flashcards", "due", documentId, scope],
+    queryFn: () => getBrowserApiClient().listDueFlashcards(documentId, { scope }),
+  });
+  const mineQuery = useQuery({
+    queryKey: ["flashcards", "mine", documentId],
+    queryFn: () => getBrowserApiClient().listFlashcards(documentId, "personal"),
+  });
+
+  function refresh() {
+    void queryClient.invalidateQueries({ queryKey: ["flashcards"] });
+  }
+
+  const reviewMutation = useMutation({
+    mutationFn: ({ cardId, rating }: { cardId: string; rating: ReviewRating }) =>
+      getBrowserApiClient().submitFlashcardReview(cardId, rating),
+    onSuccess: (state, variables) => {
+      setGradedIds((previous) => new Set(previous).add(variables.cardId));
+      setRevealedCardId(null);
+      setFeedback(
+        `Next review in ${state.interval_days} ${state.interval_days === 1 ? "day" : "days"}.`,
+      );
+      refresh();
+    },
+  });
+
+  // Filtered client-side rather than trusting the refetched list to shrink,
+  // so a background refetch can't move the card out from under you — same
+  // reasoning as ReviewTab above.
+  const queue = (deckQuery.data ?? []).filter((card) => !gradedIds.has(card.id));
+  const currentCard = queue[0];
+  const revealed = currentCard !== undefined && revealedCardId === currentCard.id;
+
+  if (deckQuery.isPending) {
     return <p className="text-sm text-muted-foreground">Loading...</p>;
   }
-  if (!data || data.length === 0) {
-    return <p className="text-sm text-muted-foreground">Coming soon.</p>;
+  if (deckQuery.isError) {
+    return (
+      <p role="alert" className="text-sm text-danger">
+        Failed to load flashcards.
+      </p>
+    );
   }
+
+  const myCards = mineQuery.data ?? [];
+
   return (
-    <ul className="flex flex-col gap-xs">
-      {data.map((flashcard) => (
-        <li
-          key={flashcard.id}
-          className="rounded-md border border-border px-md py-sm text-sm text-foreground"
-        >
-          {flashcard.front_text}
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col items-center gap-md">
+      <div className="flex w-full max-w-[32rem] items-center justify-between gap-sm">
+        <ScopeToggle scope={scope} onChange={setScope} />
+        {!adding && (
+          <Button variant="secondary" onClick={() => setAdding(true)}>
+            Add a card
+          </Button>
+        )}
+      </div>
+
+      {adding && (
+        <AddFlashcardForm
+          documentId={documentId}
+          onDone={() => {
+            setAdding(false);
+            refresh();
+          }}
+        />
+      )}
+
+      {!currentCard && (
+        <p className="text-sm text-muted-foreground">
+          {(deckQuery.data ?? []).length === 0 && gradedIds.size === 0
+            ? "No flashcards for this lesson yet. Add your own, or check back for official ones."
+            : "You're all caught up — nothing to review right now."}
+        </p>
+      )}
+
+      {currentCard && (
+        <>
+          <p className="text-xs text-muted-foreground">
+            Card {gradedIds.size + 1} of {gradedIds.size + queue.length}
+          </p>
+          <button
+            type="button"
+            aria-expanded={revealed}
+            onClick={() => setRevealedCardId(currentCard.id)}
+            className="flex min-h-[10rem] w-full max-w-[32rem] flex-col items-center justify-center gap-sm rounded-md border border-border p-xl text-center hover:bg-muted"
+          >
+            <ScopeBadge scope={currentCard.scope} />
+            <p className="text-lg font-medium text-foreground">{currentCard.front_text}</p>
+            {revealed ? (
+              <p className="border-t border-border pt-sm text-sm text-foreground">
+                {currentCard.back_text}
+              </p>
+            ) : (
+              <span className="text-xs text-muted-foreground">Tap to reveal</span>
+            )}
+          </button>
+
+          {revealed && (
+            <div className="flex flex-wrap items-center justify-center gap-sm">
+              <Button
+                variant="danger"
+                disabled={reviewMutation.isPending}
+                onClick={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "again" })}
+              >
+                Again
+              </Button>
+              <Button
+                variant="warning"
+                disabled={reviewMutation.isPending}
+                onClick={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "hard" })}
+              >
+                Hard
+              </Button>
+              <Button
+                disabled={reviewMutation.isPending}
+                onClick={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "good" })}
+              >
+                Good
+              </Button>
+              <Button
+                variant="success"
+                disabled={reviewMutation.isPending}
+                onClick={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "easy" })}
+              >
+                Easy
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+
+      {feedback && <p className="text-xs text-muted-foreground">{feedback}</p>}
+
+      {myCards.length > 0 && (
+        <section className="w-full max-w-[32rem]">
+          <h2 className="mb-xs text-sm font-medium text-foreground">Your cards</h2>
+          <ul className="flex flex-col gap-xs">
+            {myCards.map((card) => (
+              <MyFlashcardRow key={card.id} card={card} onChanged={refresh} />
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
   );
 }
 

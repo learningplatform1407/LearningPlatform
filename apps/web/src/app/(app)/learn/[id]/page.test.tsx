@@ -10,10 +10,14 @@ const createSignedUrl = vi.fn();
 const listAnnotations = vi.fn();
 const createAnnotation = vi.fn();
 const deleteAnnotation = vi.fn();
-const listQuizzes = vi.fn();
 const listQuestionBank = vi.fn();
 const getQuizAvailableCount = vi.fn();
 const listFlashcards = vi.fn();
+const listDueFlashcards = vi.fn();
+const createFlashcard = vi.fn();
+const updateFlashcard = vi.fn();
+const deleteFlashcard = vi.fn();
+const submitFlashcardReview = vi.fn();
 const listDueClozeCards = vi.fn();
 const submitClozeReview = vi.fn();
 const listNotebookEntries = vi.fn();
@@ -28,10 +32,14 @@ vi.mock("@/lib/api-client.browser", () => ({
     listAnnotations,
     createAnnotation,
     deleteAnnotation,
-    listQuizzes,
     listQuestionBank,
     getQuizAvailableCount,
     listFlashcards,
+    listDueFlashcards,
+    createFlashcard,
+    updateFlashcard,
+    deleteFlashcard,
+    submitFlashcardReview,
     listDueClozeCards,
     submitClozeReview,
     listNotebookEntries,
@@ -108,7 +116,11 @@ beforeEach(() => {
   listAnnotations.mockReset().mockResolvedValue([]);
   createAnnotation.mockReset().mockResolvedValue({});
   deleteAnnotation.mockReset().mockResolvedValue(undefined);
-  listQuizzes.mockReset().mockResolvedValue([]);
+  listDueFlashcards.mockReset().mockResolvedValue([]);
+  createFlashcard.mockReset();
+  updateFlashcard.mockReset();
+  deleteFlashcard.mockReset().mockResolvedValue(undefined);
+  submitFlashcardReview.mockReset();
   listQuestionBank.mockReset().mockResolvedValue([]);
   getQuizAvailableCount.mockReset().mockResolvedValue({ available: 0 });
   listFlashcards.mockReset().mockResolvedValue([]);
@@ -738,16 +750,162 @@ describe("LecturePage", () => {
     expect(await screen.findByText("No questions for this lesson yet.")).toBeInTheDocument();
   });
 
-  test("switching to the Flashcards tab shows a Coming soon placeholder", async () => {
+  function officialCard(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "f1",
+      document_id: "d1",
+      front_text: "What is a CDN?",
+      back_text: "A content delivery network.",
+      scope: "official",
+      is_mine: false,
+      due_at: null,
+      is_new: true,
+      ...overrides,
+    };
+  }
+
+  test("the Flashcards tab shows the front only until the card is tapped", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([officialCard()]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+
+    expect(await screen.findByText("What is a CDN?")).toBeInTheDocument();
+    // The back ships with the deck but must not be rendered before the tap —
+    // that reveal-on-demand is the whole interaction.
+    expect(screen.queryByText("A content delivery network.")).not.toBeInTheDocument();
+    expect(screen.getByText("Tap to reveal")).toBeInTheDocument();
+
+    await user.click(screen.getByText("What is a CDN?"));
+
+    expect(await screen.findByText("A content delivery network.")).toBeInTheDocument();
+    for (const label of ["Again", "Hard", "Good", "Easy"]) {
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    }
+  });
+
+  test("grading a flashcard submits the rating and reports the next interval", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([officialCard()]);
+    submitFlashcardReview.mockResolvedValue({
+      id: "s1",
+      flashcard_id: "f1",
+      ease_factor: 2.5,
+      interval_days: 1,
+      repetitions: 1,
+      due_at: "2026-10-07T00:00:00Z",
+      last_reviewed_at: "2026-10-06T00:00:00Z",
+    });
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await user.click(await screen.findByText("What is a CDN?"));
+    await user.click(screen.getByRole("button", { name: "Good" }));
+
+    expect(submitFlashcardReview).toHaveBeenCalledWith("f1", "good");
+    expect(await screen.findByText("Next review in 1 day.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("You're all caught up — nothing to review right now."),
+    ).toBeInTheDocument();
+  });
+
+  test("the Flashcards tab says so when the lesson has no cards at all", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([]);
 
     renderPage();
     await screen.findByText("Hello world");
 
     await userEvent.setup().click(screen.getByRole("button", { name: "Flashcards" }));
 
-    expect(await screen.findByText("Coming soon.")).toBeInTheDocument();
-    expect(listFlashcards).toHaveBeenCalledWith("d1");
+    expect(
+      await screen.findByText(
+        "No flashcards for this lesson yet. Add your own, or check back for official ones.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  test("the scope toggle narrows the deck to the learner's own cards", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([officialCard()]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await screen.findByText("What is a CDN?");
+
+    await user.click(screen.getByRole("button", { name: "Mine" }));
+
+    expect(listDueFlashcards).toHaveBeenCalledWith("d1", { scope: "personal" });
+  });
+
+  test("a learner can add their own card to the lesson", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([]);
+    createFlashcard.mockResolvedValue({
+      id: "f2",
+      document_id: "d1",
+      front_text: "Mnemonic?",
+      back_text: "Remember it like this.",
+      scope: "personal",
+      status: "published",
+      order_index: 0,
+      is_mine: true,
+    });
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await user.click(await screen.findByRole("button", { name: "Add a card" }));
+
+    await user.type(screen.getByLabelText("Front"), "Mnemonic?");
+    await user.type(screen.getByLabelText("Back"), "Remember it like this.");
+    await user.click(screen.getByRole("button", { name: "Save card" }));
+
+    expect(createFlashcard).toHaveBeenCalledWith("d1", {
+      front_text: "Mnemonic?",
+      back_text: "Remember it like this.",
+    });
+  });
+
+  test("a card carries its provenance as a word, not just a colour", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([officialCard({ scope: "personal", is_mine: true })]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Flashcards" }));
+
+    // Queried through the card rather than by bare text: the scope filter
+    // offers a button labelled "Mine" too, so a global text match is
+    // ambiguous. Provenance is always a word, never colour alone (WCAG 1.4.1).
+    const card = await screen.findByRole("button", { name: /What is a CDN\?/ });
+    expect(card).toHaveTextContent("Mine");
+  });
+
+  test("an official card is badged as official", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([officialCard()]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Flashcards" }));
+
+    const card = await screen.findByRole("button", { name: /What is a CDN\?/ });
+    expect(card).toHaveTextContent("Official");
   });
 
   test("the Review tab shows the whole lesson with the due word blanked, then reveals it on demand", async () => {

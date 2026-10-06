@@ -101,7 +101,9 @@ export default function LearnPage() {
         </Card>
         <Card as={Link} href="/learn/flashcards" interactive className="block p-lg">
           <p className="text-lg font-semibold text-foreground">Flashcards</p>
-          <p className="mt-xs text-sm text-muted-foreground">Coming soon.</p>
+          <p className="mt-xs text-sm text-muted-foreground">
+            Spaced-repetition cards per lesson, official and your own.
+          </p>
         </Card>
         <Card as={Link} href="/learn/notebook" interactive className="block p-lg">
           <p className="text-lg font-semibold text-foreground">Notebook</p>
