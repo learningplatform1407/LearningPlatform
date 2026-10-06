@@ -171,6 +171,9 @@ export const flashcardResponseSchema = z.object({
   status: flashcardStatusSchema,
   order_index: z.number(),
   is_mine: z.boolean(),
+  /** Taken out of *this* learner's rotation. Per-user, so a shared official
+   * card suspended by one person stays in everyone else's deck. */
+  suspended: z.boolean(),
 });
 
 /** A card as the deck runner receives it. Carries `back_text` up front:
@@ -209,12 +212,18 @@ export const flashcardRatingRequestSchema = z.object({
   rating: reviewRatingSchema,
 });
 
+/** Set, not toggled, so a retry or double-tap can't flip the card back in. */
+export const flashcardSuspensionRequestSchema = z.object({
+  suspended: z.boolean(),
+});
+
 export const flashcardReviewStateResponseSchema = z.object({
   id: z.string(),
   flashcard_id: z.string(),
   ease_factor: z.number(),
   interval_days: z.number(),
   repetitions: z.number(),
+  suspended: z.boolean(),
   due_at: z.string(),
   last_reviewed_at: z.string().nullable(),
 });

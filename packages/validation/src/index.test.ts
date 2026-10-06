@@ -18,6 +18,7 @@ import {
   flashcardCardSchema,
   flashcardResponseSchema,
   flashcardReviewStateResponseSchema,
+  flashcardSuspensionRequestSchema,
   reviewRatingSchema,
   questionImportRequestSchema,
   questionImportResultSchema,
@@ -535,6 +536,7 @@ describe("flashcardResponseSchema", () => {
       status: "published",
       order_index: 0,
       is_mine: false,
+      suspended: false,
     };
 
     expect(flashcardResponseSchema.safeParse(payload).success).toBe(true);
@@ -550,6 +552,7 @@ describe("flashcardResponseSchema", () => {
       status: "published",
       order_index: 0,
       is_mine: false,
+      suspended: false,
     };
 
     expect(flashcardResponseSchema.safeParse(payload).success).toBe(false);
@@ -596,11 +599,21 @@ describe("flashcardReviewStateResponseSchema", () => {
       ease_factor: 2.5,
       interval_days: 1,
       repetitions: 1,
+      suspended: false,
       due_at: "2026-10-07T10:00:00Z",
       last_reviewed_at: "2026-10-06T10:00:00Z",
     };
 
     expect(flashcardReviewStateResponseSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("flashcardSuspensionRequestSchema", () => {
+  test("accepts both directions and rejects a missing flag", () => {
+    expect(flashcardSuspensionRequestSchema.safeParse({ suspended: true }).success).toBe(true);
+    expect(flashcardSuspensionRequestSchema.safeParse({ suspended: false }).success).toBe(true);
+    // Set, not toggled — an empty body must not mean "flip it".
+    expect(flashcardSuspensionRequestSchema.safeParse({}).success).toBe(false);
   });
 });
 

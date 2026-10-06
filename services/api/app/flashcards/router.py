@@ -26,6 +26,7 @@ from app.flashcards.schemas import (
     FlashcardResponse,
     FlashcardReviewStateResponse,
     FlashcardSummaryResponse,
+    FlashcardSuspensionRequest,
     FlashcardUpdateRequest,
 )
 from app.flashcards.service import (
@@ -35,6 +36,7 @@ from app.flashcards.service import (
     get_flashcard_summary,
     import_official_cards,
     list_lesson_cards,
+    set_suspended,
     submit_flashcard_review,
     update_personal_card,
 )
@@ -50,7 +52,9 @@ document_router = APIRouter(prefix="/v1/documents/{document_id}/flashcards", tag
 router = APIRouter(prefix="/v1/flashcards", tags=["flashcards"])
 
 
-def _to_response(card: Flashcard, user_id: UUID) -> FlashcardResponse:
+def _to_response(
+    card: Flashcard, user_id: UUID, state: FlashcardReviewState | None = None
+) -> FlashcardResponse:
     return FlashcardResponse(
         id=card.id,
         document_id=card.document_id,
@@ -60,6 +64,9 @@ def _to_response(card: Flashcard, user_id: UUID) -> FlashcardResponse:
         status=FlashcardStatus(card.status),
         order_index=card.order_index,
         is_mine=card.created_by == user_id,
+        # No state row means the card has never been touched by this user,
+        # which includes never having been suspended.
+        suspended=state is not None and state.suspended,
     )
 
 
@@ -78,8 +85,8 @@ def read_flashcards(
     _require_document(db, document_id)
     profile = get_or_create_profile(db, user)
     return [
-        _to_response(card, profile.id)
-        for card in list_lesson_cards(db, profile.id, document_id, scope)
+        _to_response(card, profile.id, state)
+        for card, state in list_lesson_cards(db, profile.id, document_id, scope)
     ]
 
 
@@ -161,6 +168,24 @@ def submit_flashcard_review_route(
 ) -> FlashcardReviewStateResponse:
     profile = get_or_create_profile(db, user)
     state: FlashcardReviewState = submit_flashcard_review(db, profile.id, flashcard_id, data.rating)
+    return FlashcardReviewStateResponse.model_validate(state)
+
+
+@router.put("/{flashcard_id}/suspension", response_model=FlashcardReviewStateResponse)
+def set_flashcard_suspension(
+    flashcard_id: UUID,
+    data: FlashcardSuspensionRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FlashcardReviewStateResponse:
+    """Takes a card out of the caller's rotation, or puts it back.
+
+    PUT rather than POST, and a field rather than a toggle, so retrying is
+    harmless. Not owner-gated: this writes the caller's own review state, not
+    the card, so it applies to official cards too.
+    """
+    profile = get_or_create_profile(db, user)
+    state = set_suspended(db, profile.id, flashcard_id, data.suspended)
     return FlashcardReviewStateResponse.model_validate(state)
 
 

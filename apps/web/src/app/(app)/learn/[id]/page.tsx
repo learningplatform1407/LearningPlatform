@@ -345,7 +345,7 @@ function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: 
   );
 }
 
-function MyFlashcardRow({ card, onChanged }: { card: Flashcard; onChanged: () => void }) {
+function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => void }) {
   const [editing, setEditing] = useState(false);
   const [front, setFront] = useState(card.front_text);
   const [back, setBack] = useState(card.back_text);
@@ -360,6 +360,10 @@ function MyFlashcardRow({ card, onChanged }: { card: Flashcard; onChanged: () =>
   });
   const remove = useMutation({
     mutationFn: () => getBrowserApiClient().deleteFlashcard(card.id),
+    onSuccess: onChanged,
+  });
+  const suspension = useMutation({
+    mutationFn: () => getBrowserApiClient().setFlashcardSuspension(card.id, !card.suspended),
     onSuccess: onChanged,
   });
 
@@ -392,28 +396,54 @@ function MyFlashcardRow({ card, onChanged }: { card: Flashcard; onChanged: () =>
   }
 
   return (
-    <li className="flex items-start justify-between gap-sm rounded-md border border-border px-md py-sm">
+    <li
+      className={`flex items-start justify-between gap-sm rounded-md border border-border px-md py-sm ${
+        card.suspended ? "opacity-60" : ""
+      }`}
+    >
       <div className="min-w-0">
         <p className="text-sm text-foreground">{card.front_text}</p>
         <p className="text-xs text-muted-foreground">{card.back_text}</p>
       </div>
-      <div className="flex shrink-0 gap-xs">
+      <div className="flex shrink-0 items-center gap-xs">
         <ScopeBadge scope={card.scope} />
+        {card.suspended && (
+          <span className="rounded-md border border-border px-xs py-[0.0625rem] text-xs text-muted-foreground">
+            Not in rotation
+          </span>
+        )}
+        {/* Offered on every visible card, official included — suspension is
+            the caller's own review state, not a change to shared content.
+            This row is the only place a suspended card is still listed, so
+            it is the only way back into the rotation. */}
         <button
           type="button"
-          onClick={() => setEditing(true)}
+          aria-pressed={!card.suspended}
+          disabled={suspension.isPending}
+          onClick={() => suspension.mutate()}
           className="text-xs text-primary hover:underline"
         >
-          Edit
+          {card.suspended ? "Include in reviews" : "Exclude from reviews"}
         </button>
-        <button
-          type="button"
-          disabled={remove.isPending}
-          onClick={() => remove.mutate()}
-          className="text-xs text-danger hover:underline"
-        >
-          Delete
-        </button>
+        {card.is_mine && (
+          <>
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="text-xs text-primary hover:underline"
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              disabled={remove.isPending}
+              onClick={() => remove.mutate()}
+              className="text-xs text-danger hover:underline"
+            >
+              Delete
+            </button>
+          </>
+        )}
       </div>
     </li>
   );
@@ -431,9 +461,13 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
     queryKey: ["flashcards", "due", documentId, scope],
     queryFn: () => getBrowserApiClient().listDueFlashcards(documentId, { scope }),
   });
-  const mineQuery = useQuery({
-    queryKey: ["flashcards", "mine", documentId],
-    queryFn: () => getBrowserApiClient().listFlashcards(documentId, "personal"),
+  // Every visible card, not just the learner's own: this list is where a
+  // suspended card is re-included, and a suspended card is absent from the
+  // deck and from every count, so a personal-only list would leave an
+  // excluded official card with no way back in.
+  const cardsQuery = useQuery({
+    queryKey: ["flashcards", "lesson", documentId],
+    queryFn: () => getBrowserApiClient().listFlashcards(documentId),
   });
 
   function refresh() {
@@ -449,6 +483,19 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
       setFeedback(
         `Next review in ${state.interval_days} ${state.interval_days === 1 ? "day" : "days"}.`,
       );
+      refresh();
+    },
+  });
+
+  const excludeMutation = useMutation({
+    mutationFn: (cardId: string) => getBrowserApiClient().setFlashcardSuspension(cardId, true),
+    onSuccess: (_state, cardId) => {
+      // Reuses gradedIds: from the runner's point of view an excluded card
+      // is simply done with for this session, and the server has already
+      // dropped it from the deck.
+      setGradedIds((previous) => new Set(previous).add(cardId));
+      setRevealedCardId(null);
+      setFeedback("Excluded from reviews. You can include it again below.");
       refresh();
     },
   });
@@ -471,7 +518,8 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
     );
   }
 
-  const myCards = mineQuery.data ?? [];
+  const lessonCards = cardsQuery.data ?? [];
+  const excludedCount = lessonCards.filter((card) => card.suspended).length;
 
   return (
     <div className="flex flex-col items-center gap-md">
@@ -555,17 +603,38 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
               </Button>
             </div>
           )}
+
+          {revealed && (
+            // Offered at the moment you've just seen the answer and decided
+            // you're done with this card, rather than making you hunt for it
+            // in the list below.
+            <button
+              type="button"
+              disabled={excludeMutation.isPending}
+              onClick={() => excludeMutation.mutate(currentCard.id)}
+              className="text-xs text-muted-foreground hover:underline"
+            >
+              Exclude this card from reviews
+            </button>
+          )}
         </>
       )}
 
       {feedback && <p className="text-xs text-muted-foreground">{feedback}</p>}
 
-      {myCards.length > 0 && (
+      {lessonCards.length > 0 && (
         <section className="w-full max-w-[32rem]">
-          <h2 className="mb-xs text-sm font-medium text-foreground">Your cards</h2>
+          <h2 className="mb-xs text-sm font-medium text-foreground">
+            All cards in this lesson
+            {excludedCount > 0 && (
+              <span className="ml-xs font-normal text-muted-foreground">
+                · {excludedCount} excluded
+              </span>
+            )}
+          </h2>
           <ul className="flex flex-col gap-xs">
-            {myCards.map((card) => (
-              <MyFlashcardRow key={card.id} card={card} onChanged={refresh} />
+            {lessonCards.map((card) => (
+              <LessonCardRow key={card.id} card={card} onChanged={refresh} />
             ))}
           </ul>
         </section>

@@ -8,9 +8,11 @@ from app.srs.scheduler import ReviewRating
 
 
 class FlashcardResponse(BaseModel):
-    """A card as the management list shows it. `is_mine` is computed per
-    caller rather than stored, so the UI can offer edit/delete without
-    re-deriving ownership from created_by (which it never sees)."""
+    """A card as the management list shows it. `is_mine` and `suspended` are
+    both computed per caller rather than stored on the card: the first so the
+    UI can offer edit/delete without re-deriving ownership from created_by
+    (which it never sees), the second because suspension is one learner's
+    choice about a possibly-shared card."""
 
     id: UUID
     document_id: UUID
@@ -20,6 +22,7 @@ class FlashcardResponse(BaseModel):
     status: FlashcardStatus
     order_index: int
     is_mine: bool
+    suspended: bool
 
 
 class FlashcardCardResponse(BaseModel):
@@ -59,6 +62,13 @@ class FlashcardRatingRequest(BaseModel):
     rating: ReviewRating
 
 
+class FlashcardSuspensionRequest(BaseModel):
+    """One field, set rather than toggled, so the request is idempotent and a
+    double-tap or a retry can't flip the card back by accident."""
+
+    suspended: bool
+
+
 class FlashcardReviewStateResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -67,6 +77,7 @@ class FlashcardReviewStateResponse(BaseModel):
     ease_factor: float
     interval_days: int
     repetitions: int
+    suspended: bool
     due_at: datetime
     last_reviewed_at: datetime | None
 

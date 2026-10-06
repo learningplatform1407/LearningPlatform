@@ -68,11 +68,12 @@ exactly that triple; `(created_by, scope)` for "my cards".
 ### 4.2 `flashcard_review_states`
 
 Mirrors `cloze_review_states` column for column with `flashcard_id` in place of `cloze_card_id`:
-`ease_factor` (default 2.5), `interval_days` (0), `repetitions` (0), `due_at`, `last_reviewed_at`,
-unique on `(user_id, flashcard_id)`.
+`ease_factor` (default 2.5), `interval_days` (0), `repetitions` (0), `suspended` (false), `due_at`,
+`last_reviewed_at`, unique on `(user_id, flashcard_id)`.
 
-Rows are created **lazily on first grade**, never pre-seeded at import time, so **the absence of a
-row is exactly what "new" means**. One table covers official and personal cards alike, which is why
+Rows are created **lazily on first grade** (or on first suspension — §5.5), never pre-seeded at
+import time, so **"new" means no row _or_ a row that has never been graded**, which is why
+`last_reviewed_at IS NULL` and not just row-absence is the test. One table covers official and personal cards alike, which is why
 the All / Official / Mine toggle narrows the view without splitting the schedule.
 
 ### 4.3 What was dropped
@@ -127,17 +128,48 @@ success / failing / pending / average-score stats. `submit_flashcard_review` wri
 `flashcard_review_states` and nothing else, and there is a regression test asserting
 `question_progress` stays empty.
 
-### 5.4 Deletion is asymmetric
+### 5.4 Suspension is a per-user filter, not a reset
+
+A learner can take any card they can see out of their own rotation and put it back at any time.
+`flashcard_review_states.suspended` carries it, which gets three things right for free:
+
+- **Per-user.** One learner retiring a shared official card leaves everybody else's deck untouched.
+  The global lever for official content is `flashcards.status`, which is an admin's to pull.
+- **Applies to shared cards.** `PUT /v1/flashcards/{id}/suspension` writes _the caller's review
+  state_, not the card, so it is gated on visibility only — not on ownership, the way PATCH and
+  DELETE are. You can exclude an official card without being able to edit it.
+- **Non-destructive.** The schedule fields are left alone. A card parked at a 40-day interval comes
+  back at 40 days: the learner asked to stop seeing it, not to forget what they had earned.
+
+Excluded cards are absent from the deck draw **and from both hub counts** — an excluded card is not
+pending work, so counting it would make the hub nag about cards the learner has explicitly dismissed.
+
+The consequence worth stating: because a suspended card is invisible to the deck and to the counts,
+the per-lesson card list in the Flashcards tab is the **only** surface that still shows it, and is
+therefore the only route back into the rotation. It must keep listing suspended cards, and it must
+offer the toggle on official cards too, or the feature becomes one-way.
+
+Grading a suspended card is rejected with `409 card_suspended` rather than silently tolerated — the
+backend enforces what the runner merely hides, the same posture as the quiz runner refusing answers
+while a session is paused. It would also move a schedule the learner asked us to leave alone.
+
+### 5.5 Deletion is asymmetric
 
 A **personal** card is hard-deleted by its owner — it is the learner's own data and there is nothing
 to preserve. An **official** card is **archived** by an admin (`status='archived'`), matching
 `DELETE /v1/questions/{id}`, because other learners' review history points at it. Surprising enough
 to be worth the docstring it carries.
 
+Note this is a different axis from suspension (§5.4): archiving removes a card for _everyone_ and is
+an admin action on the card; suspending removes it for _one learner_ and is that learner's action on
+their own review state.
+
 ## 6. The draw
 
 `draw_lesson_deck(db, user_id, document_id, scope, limit)`:
 
+0. Suspended cards are dropped first, before the due/new split, so an excluded card cannot surface
+   as either.
 1. Cards with a state row and `due_at <= now()`, oldest deadline first.
 2. Then cards with no state row (or `last_reviewed_at IS NULL`), shuffled.
 3. Truncated to `limit` (default 20, max 100).
@@ -187,7 +219,15 @@ shows the back; four grade buttons follow, in this order and with these labels: 
 Good · Easy** — the same as the Review bar, so the two features don't teach different gestures. All
 four disable while the mutation is pending. An All / Official / Mine toggle drives `scope`, and your
 own cards get inline add / edit / delete. Provenance is shown as a word ("Official" / "Mine"), never
-colour alone (WCAG 1.4.1).
+colour alone (WCAG 1.4.1). The revealed card also offers "Exclude this card from reviews" — the
+moment you have just seen the answer and decided you are done with it is the moment to ask, rather
+than making the learner hunt for the card in the list.
+
+Below the runner, **All cards in this lesson** lists every visible card with its provenance and
+whether it is in the rotation, and carries the include/exclude toggle. Suspended rows are dimmed and
+labelled "Not in rotation", and the heading counts them. Per §5.4 this list is the only place a
+suspended card still appears, so it deliberately shows _all_ scopes rather than only the learner's
+own cards.
 
 The queue is derived by filtering graded ids out of the fetched deck rather than trusting the list to
 shrink, so a background refetch cannot move the card out from under the reader — the same reasoning

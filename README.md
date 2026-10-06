@@ -195,6 +195,7 @@ classDiagram
         +float ease_factor
         +int interval_days
         +int repetitions
+        +bool suspended
         +datetime due_at
         +datetime last_reviewed_at
     }

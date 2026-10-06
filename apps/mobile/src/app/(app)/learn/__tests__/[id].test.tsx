@@ -18,6 +18,7 @@ const mockCreateFlashcard = jest.fn();
 const mockUpdateFlashcard = jest.fn();
 const mockDeleteFlashcard = jest.fn();
 const mockSubmitFlashcardReview = jest.fn();
+const mockSetFlashcardSuspension = jest.fn();
 const mockListDueClozeCards = jest.fn();
 const mockSubmitClozeReview = jest.fn();
 const mockListNotebookEntries = jest.fn();
@@ -41,6 +42,7 @@ jest.mock("@/lib/api-client", () => ({
     updateFlashcard: mockUpdateFlashcard,
     deleteFlashcard: mockDeleteFlashcard,
     submitFlashcardReview: mockSubmitFlashcardReview,
+    setFlashcardSuspension: mockSetFlashcardSuspension,
     listDueClozeCards: mockListDueClozeCards,
     submitClozeReview: mockSubmitClozeReview,
     listNotebookEntries: mockListNotebookEntries,
@@ -125,6 +127,16 @@ beforeEach(() => {
   mockUpdateFlashcard.mockReset();
   mockDeleteFlashcard.mockReset().mockResolvedValue(undefined);
   mockSubmitFlashcardReview.mockReset();
+  mockSetFlashcardSuspension.mockReset().mockResolvedValue({
+    id: "s1",
+    flashcard_id: "f1",
+    suspended: true,
+    ease_factor: 2.5,
+    interval_days: 1,
+    repetitions: 1,
+    due_at: "2026-10-07T00:00:00Z",
+    last_reviewed_at: null,
+  });
   mockListDueClozeCards.mockReset().mockResolvedValue([]);
   mockSubmitClozeReview.mockReset();
   mockListNotebookEntries.mockReset().mockResolvedValue([]);
@@ -1009,4 +1021,73 @@ test("the eraser removes a highlight entirely with no remainder when fully erase
 
   await waitFor(() => expect(mockDeleteAnnotation).toHaveBeenCalledWith("d1", "a1"));
   expect(mockCreateAnnotation).not.toHaveBeenCalled();
+});
+
+function lessonCard(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "f1",
+    document_id: "d1",
+    front_text: "What is a CDN?",
+    back_text: "A content delivery network.",
+    scope: "official",
+    status: "published",
+    order_index: 0,
+    is_mine: false,
+    suspended: false,
+    ...overrides,
+  };
+}
+
+test("a card can be excluded from reviews straight from the runner", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListDueFlashcards.mockResolvedValue([officialCard()]);
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Flashcards"));
+  fireEvent.press(await screen.findByText("What is a CDN?"));
+  fireEvent.press(screen.getByText("Exclude this card from reviews"));
+
+  await waitFor(() => expect(mockSetFlashcardSuspension).toHaveBeenCalledWith("f1", true));
+  expect(
+    await screen.findByText("Excluded from reviews. You can include it again below."),
+  ).toBeTruthy();
+});
+
+test("an excluded card is still listed, and can be included again", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  // Excluded cards are absent from the deck — the server drops them — so the
+  // list is the only route back into the rotation.
+  mockListDueFlashcards.mockResolvedValue([]);
+  mockListFlashcards.mockResolvedValue([lessonCard({ suspended: true })]);
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Flashcards"));
+
+  expect(await screen.findByText("Not in rotation")).toBeTruthy();
+  expect(screen.getByText(/1 excluded/)).toBeTruthy();
+
+  fireEvent.press(screen.getByText("Include in reviews"));
+
+  await waitFor(() => expect(mockSetFlashcardSuspension).toHaveBeenCalledWith("f1", false));
+});
+
+test("the lesson list offers exclusion on official cards the learner cannot edit", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListDueFlashcards.mockResolvedValue([]);
+  mockListFlashcards.mockResolvedValue([lessonCard({ is_mine: false })]);
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Flashcards"));
+
+  // Suspension writes the caller's own review state, so it applies to shared
+  // content; editing and deleting do not.
+  expect(await screen.findByText("Exclude from reviews")).toBeTruthy();
+  expect(screen.queryByText("Edit")).toBeNull();
+  expect(screen.queryByText("Delete")).toBeNull();
 });

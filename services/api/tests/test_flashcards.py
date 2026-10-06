@@ -484,6 +484,179 @@ def test_grading_rejects_an_unknown_card(authed_client: TestClient, document_id:
     assert response.status_code == 404
 
 
+# --- suspension (opting a card out of the rotation) -------------------------
+
+
+def test_suspending_a_card_takes_it_out_of_the_deck_and_the_counts(
+    authed_client: TestClient,
+    document_id: str,
+    db_session: Session,
+    admin_user: AuthenticatedUser,
+) -> None:
+    card = _add_card(db_session, document_id, admin_user.id, front="Known already")
+    _add_card(db_session, document_id, admin_user.id, front="Still learning")
+
+    response = authed_client.put(f"/v1/flashcards/{card.id}/suspension", json={"suspended": True})
+    assert response.status_code == 200
+    assert response.json()["suspended"] is True
+
+    deck = authed_client.get(f"/v1/documents/{document_id}/flashcards/due").json()
+    assert [c["front_text"] for c in deck] == ["Still learning"]
+
+    # "Excluded shouldn't be taken into account" — not as due, not as new.
+    lessons = authed_client.get("/v1/me/flashcard-summary").json()["uncategorized_lessons"]
+    assert lessons[0]["due_count"] == 0
+    assert lessons[0]["new_count"] == 1
+
+
+def test_a_suspended_card_still_appears_in_the_lesson_list(
+    authed_client: TestClient,
+    document_id: str,
+    db_session: Session,
+    admin_user: AuthenticatedUser,
+) -> None:
+    """The one surface that shows suspended cards, and it has to be — if it
+    hid them there would be no way to put one back in the rotation."""
+    card = _add_card(db_session, document_id, admin_user.id, front="Parked")
+    authed_client.put(f"/v1/flashcards/{card.id}/suspension", json={"suspended": True})
+
+    listed = authed_client.get(f"/v1/documents/{document_id}/flashcards").json()
+    assert [(c["front_text"], c["suspended"]) for c in listed] == [("Parked", True)]
+
+
+def test_un_suspending_restores_the_card_with_its_schedule_intact(
+    authed_client: TestClient,
+    document_id: str,
+    db_session: Session,
+    admin_user: AuthenticatedUser,
+) -> None:
+    """Suspension is a filter, not a reset: a card parked at a long interval
+    comes back at that interval rather than starting over."""
+    card = _add_card(db_session, document_id, admin_user.id)
+    authed_client.post(f"/v1/flashcards/{card.id}/review", json={"rating": "easy"})
+    graded = db_session.scalar(
+        select(FlashcardReviewState).where(FlashcardReviewState.flashcard_id == card.id)
+    )
+    assert graded is not None
+    interval_before = graded.interval_days
+    reps_before = graded.repetitions
+    ease_before = graded.ease_factor
+
+    authed_client.put(f"/v1/flashcards/{card.id}/suspension", json={"suspended": True})
+    restored = authed_client.put(
+        f"/v1/flashcards/{card.id}/suspension", json={"suspended": False}
+    ).json()
+
+    assert restored["suspended"] is False
+    assert restored["interval_days"] == interval_before
+    assert restored["repetitions"] == reps_before
+    assert restored["ease_factor"] == pytest.approx(ease_before)
+
+
+def test_suspending_a_never_graded_card_leaves_it_new(
+    authed_client: TestClient,
+    document_id: str,
+    db_session: Session,
+    admin_user: AuthenticatedUser,
+) -> None:
+    """A state row created purely to carry the flag must not make the card
+    look reviewed — "new" means no row *or* never graded."""
+    card = _add_card(db_session, document_id, admin_user.id)
+    authed_client.put(f"/v1/flashcards/{card.id}/suspension", json={"suspended": True})
+    authed_client.put(f"/v1/flashcards/{card.id}/suspension", json={"suspended": False})
+
+    deck = authed_client.get(f"/v1/documents/{document_id}/flashcards/due").json()
+    assert len(deck) == 1
+    assert deck[0]["is_new"] is True
+    assert deck[0]["due_at"] is None
+
+
+def test_grading_a_suspended_card_is_rejected(
+    authed_client: TestClient,
+    document_id: str,
+    db_session: Session,
+    admin_user: AuthenticatedUser,
+) -> None:
+    """The backend enforces what the runner merely hides."""
+    card = _add_card(db_session, document_id, admin_user.id)
+    authed_client.put(f"/v1/flashcards/{card.id}/suspension", json={"suspended": True})
+
+    response = authed_client.post(f"/v1/flashcards/{card.id}/review", json={"rating": "good"})
+    assert response.status_code == 409
+    assert response.json()["code"] == "card_suspended"
+
+
+def test_suspension_is_per_user_on_a_shared_official_card(
+    client: TestClient,
+    document_id: str,
+    db_session: Session,
+    admin_user: AuthenticatedUser,
+    authenticated_user: AuthenticatedUser,
+    other_user: AuthenticatedUser,
+) -> None:
+    """One learner retiring a shared card must not remove it from anybody
+    else's deck. This is why the flag lives on the review state."""
+    card = _add_card(db_session, document_id, admin_user.id, front="Shared")
+    _profile(db_session, authenticated_user)
+    _profile(db_session, other_user)
+
+    app.dependency_overrides[get_current_user] = lambda: authenticated_user
+    try:
+        client.put(f"/v1/flashcards/{card.id}/suspension", json={"suspended": True})
+        assert client.get(f"/v1/documents/{document_id}/flashcards/due").json() == []
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    app.dependency_overrides[get_current_user] = lambda: other_user
+    try:
+        deck = client.get(f"/v1/documents/{document_id}/flashcards/due").json()
+        assert [c["front_text"] for c in deck] == ["Shared"]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_suspending_is_idempotent(
+    authed_client: TestClient,
+    document_id: str,
+    db_session: Session,
+    admin_user: AuthenticatedUser,
+) -> None:
+    """PUT with a field, not a toggle — a retry or a double-tap must not flip
+    the card back in."""
+    card = _add_card(db_session, document_id, admin_user.id)
+    for _ in range(2):
+        response = authed_client.put(
+            f"/v1/flashcards/{card.id}/suspension", json={"suspended": True}
+        )
+        assert response.json()["suspended"] is True
+
+    states = list(
+        db_session.scalars(
+            select(FlashcardReviewState).where(FlashcardReviewState.flashcard_id == card.id)
+        )
+    )
+    assert len(states) == 1
+
+
+def test_suspension_requires_auth(client: TestClient, document_id: str) -> None:
+    response = client.put(f"/v1/flashcards/{uuid.uuid4()}/suspension", json={"suspended": True})
+    assert response.status_code == 401
+
+
+def test_cannot_suspend_another_learners_personal_card(
+    authed_client: TestClient,
+    document_id: str,
+    db_session: Session,
+    other_user: AuthenticatedUser,
+) -> None:
+    _profile(db_session, other_user)
+    theirs = _add_card(
+        db_session, document_id, other_user.id, scope=FlashcardScope.PERSONAL, front="Theirs"
+    )
+    blocked = authed_client.put(f"/v1/flashcards/{theirs.id}/suspension", json={"suspended": True})
+    assert blocked.status_code == 404
+
+
 # --- admin import -----------------------------------------------------------
 
 

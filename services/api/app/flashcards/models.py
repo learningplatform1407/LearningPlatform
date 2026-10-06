@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -9,6 +10,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    false,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -86,6 +88,21 @@ class FlashcardReviewState(Base):
     ease_factor: Mapped[float] = mapped_column(Float, default=2.5)
     interval_days: Mapped[int] = mapped_column(Integer, default=0)
     repetitions: Mapped[int] = mapped_column(Integer, default=0)
+    # Taken out of the rotation by this user, reversibly. Purely a filter:
+    # the schedule fields above are left untouched while suspended, so
+    # re-including a card resumes it where it left off instead of throwing
+    # away the progress that earned its current interval.
+    #
+    # Per-user by construction, which is the point -- one learner retiring a
+    # card they already know must not remove it from anybody else's deck.
+    # The global lever for official content is `flashcards.status`.
+    #
+    # Note a row may now exist purely to carry this flag, with
+    # last_reviewed_at still NULL. That composes with "new" meaning
+    # "no row, or never graded" rather than "no row".
+    suspended: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

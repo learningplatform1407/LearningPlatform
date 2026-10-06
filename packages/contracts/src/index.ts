@@ -30,6 +30,7 @@ import type {
   flashcardScopeSchema,
   flashcardStatusSchema,
   flashcardSummaryResponseSchema,
+  flashcardSuspensionRequestSchema,
   flashcardUpdateRequestSchema,
   questionImportErrorSchema,
   questionImportRequestSchema,
@@ -92,6 +93,7 @@ export type FlashcardImportItem = z.infer<typeof flashcardImportItemSchema>;
 export type FlashcardImportRequest = z.infer<typeof flashcardImportRequestSchema>;
 export type FlashcardImportResult = z.infer<typeof flashcardImportResultSchema>;
 export type FlashcardSummaryResponse = z.infer<typeof flashcardSummaryResponseSchema>;
+export type FlashcardSuspensionRequest = z.infer<typeof flashcardSuspensionRequestSchema>;
 /** The four SM-2 grades, shared by Review and Flashcards. */
 export type ReviewRating = z.infer<typeof reviewRatingSchema>;
 export type ClozeRating = z.infer<typeof clozeRatingSchema>;

@@ -372,6 +372,30 @@ describe("createApiClient", () => {
     expect(JSON.parse(init.body as string)).toEqual({ rating: "good" });
   });
 
+  test("setFlashcardSuspension PUTs the flag to /v1/flashcards/{id}/suspension", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ id: "s1", flashcard_id: "f1", suspended: true, interval_days: 6 }),
+    );
+
+    await client().setFlashcardSuspension("f1", true);
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/flashcards/f1/suspension");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body as string)).toEqual({ suspended: true });
+  });
+
+  test("setFlashcardSuspension can put a card back in", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ id: "s1", flashcard_id: "f1", suspended: false, interval_days: 6 }),
+    );
+
+    await client().setFlashcardSuspension("f1", false);
+
+    const [, init] = lastCall(fetchMock);
+    expect(JSON.parse(init.body as string)).toEqual({ suspended: false });
+  });
+
   test("getFlashcardSummary hits GET /v1/me/flashcard-summary", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ books: [], uncategorized_lessons: [] }));
 

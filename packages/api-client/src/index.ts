@@ -511,6 +511,13 @@ export function createApiClient(config: ApiClientConfig) {
         method: "POST",
         body: JSON.stringify({ rating }),
       }),
+    /** Takes a card out of the caller's rotation, or puts it back. PUT with a
+     * field rather than a toggle, so retrying is harmless. */
+    setFlashcardSuspension: (flashcardId: string, suspended: boolean) =>
+      request<FlashcardReviewState>(`/v1/flashcards/${flashcardId}/suspension`, {
+        method: "PUT",
+        body: JSON.stringify({ suspended }),
+      }),
     getFlashcardSummary: () => request<FlashcardSummaryResponse>("/v1/me/flashcard-summary"),
     importFlashcards: (data: FlashcardImportRequest, dryRun: boolean) =>
       request<FlashcardImportResult>(`/v1/flashcards/import?dry_run=${dryRun}`, {

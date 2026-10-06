@@ -79,17 +79,38 @@ def apply_visible_filter[T: tuple[Any, ...]](
     )
 
 
+def _with_state(user_id: uuid.UUID) -> Select[tuple[Flashcard, FlashcardReviewState]]:
+    """Cards left-joined to *this* user's review state. The user filter rides
+    on the join condition rather than a WHERE clause, so a card with no state
+    for this user still comes back (with a NULL state) instead of dropping
+    out of the result."""
+    return select(Flashcard, FlashcardReviewState).outerjoin(
+        FlashcardReviewState,
+        and_(
+            FlashcardReviewState.flashcard_id == Flashcard.id,
+            FlashcardReviewState.user_id == user_id,
+        ),
+    )
+
+
 def list_lesson_cards(
     db: Session,
     user_id: uuid.UUID,
     document_id: uuid.UUID,
     scope: ScopeFilter = ScopeFilter.ALL,
-) -> list[Flashcard]:
-    """The management view: author order, not study order."""
+) -> list[tuple[Flashcard, FlashcardReviewState | None]]:
+    """The management view: author order, not study order.
+
+    Deliberately includes suspended cards, and is the only surface that does.
+    It has to be: a suspended card is absent from the deck and from every
+    count, so if it were missing here too there would be no way to put it
+    back into the rotation.
+    """
     query = apply_visible_filter(
-        select(Flashcard), user_id=user_id, document_ids=[document_id], scope=scope
+        _with_state(user_id), user_id=user_id, document_ids=[document_id], scope=scope
     )
-    return list(db.scalars(query.order_by(Flashcard.order_index, Flashcard.created_at)))
+    rows = db.execute(query.order_by(Flashcard.order_index, Flashcard.created_at)).all()
+    return [(card, state) for card, state in rows]
 
 
 def get_visible_card(db: Session, user_id: uuid.UUID, flashcard_id: uuid.UUID) -> Flashcard:
@@ -127,13 +148,7 @@ def draw_lesson_deck(
     """
     rows = db.execute(
         apply_visible_filter(
-            select(Flashcard, FlashcardReviewState).outerjoin(
-                FlashcardReviewState,
-                and_(
-                    FlashcardReviewState.flashcard_id == Flashcard.id,
-                    FlashcardReviewState.user_id == user_id,
-                ),
-            ),
+            _with_state(user_id),
             user_id=user_id,
             document_ids=[document_id],
             scope=scope,
@@ -144,6 +159,10 @@ def draw_lesson_deck(
     due: list[tuple[Flashcard, FlashcardReviewState | None]] = []
     fresh: list[tuple[Flashcard, FlashcardReviewState | None]] = []
     for card, state in rows:
+        if state is not None and state.suspended:
+            # Out of the rotation by this user's choice. Skipped before the
+            # due/new split so a suspended card can't surface as either.
+            continue
         if state is None or state.last_reviewed_at is None:
             fresh.append((card, state))
         elif _to_utc_naive(state.due_at) <= now:
@@ -237,6 +256,13 @@ def submit_flashcard_review(
             FlashcardReviewState.flashcard_id == flashcard_id,
         )
     )
+    if state is not None and state.suspended:
+        # The runner never offers a suspended card, but the backend enforces
+        # what the UI merely hides -- same posture as the quiz runner
+        # refusing answers while a session is paused. Grading one here would
+        # also silently move a schedule the learner asked us to leave alone.
+        raise ApiError(409, "card_suspended", "This flashcard is not in your rotation")
+
     current = SchedulerState(
         ease_factor=state.ease_factor if state else 2.5,
         interval_days=state.interval_days if state else 0,
@@ -253,6 +279,41 @@ def submit_flashcard_review(
     state.repetitions = result.repetitions
     state.due_at = result.due_at
     state.last_reviewed_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(state)
+    return state
+
+
+def set_suspended(
+    db: Session, user_id: uuid.UUID, flashcard_id: uuid.UUID, suspended: bool
+) -> FlashcardReviewState:
+    """Take a card out of this learner's rotation, or put it back.
+
+    Idempotent, and reversible at any time. Works on official cards as well
+    as personal ones because it writes *the caller's review state*, not the
+    card — so it is gated on visibility only, not ownership. One learner
+    suspending a shared card leaves everybody else's deck untouched.
+
+    The schedule fields are deliberately not reset. A card suspended at a
+    40-day interval comes back at 40 days, because the learner asked to stop
+    seeing it, not to forget what they had earned.
+    """
+    get_visible_card(db, user_id, flashcard_id)
+
+    state = db.scalar(
+        select(FlashcardReviewState).where(
+            FlashcardReviewState.user_id == user_id,
+            FlashcardReviewState.flashcard_id == flashcard_id,
+        )
+    )
+    if state is None:
+        # No row yet: the card was still new. Created carrying only the flag,
+        # with last_reviewed_at left NULL so it stays "new" and returns to
+        # the new pile rather than the due pile when re-included.
+        state = FlashcardReviewState(user_id=user_id, flashcard_id=flashcard_id)
+        db.add(state)
+
+    state.suspended = suspended
     db.commit()
     db.refresh(state)
     return state
@@ -362,6 +423,10 @@ def _deck_counts(db: Session, user_id: uuid.UUID) -> dict[uuid.UUID, tuple[int, 
     now = _to_utc_naive(datetime.now(UTC))
     counts: dict[uuid.UUID, tuple[int, int]] = defaultdict(lambda: (0, 0))
     for document_id, state in rows:
+        if state is not None and state.suspended:
+            # A card the learner took out of the rotation is not pending
+            # work, so it must not inflate either count on the hub.
+            continue
         due, fresh = counts[document_id]
         if state is None or state.last_reviewed_at is None:
             counts[document_id] = (due, fresh + 1)
