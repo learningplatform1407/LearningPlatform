@@ -244,11 +244,22 @@ authoring on a phone has no use, the same intentional parity break as the questi
 
 ## 10. Known follow-ups
 
-- **Three tree-walkers.** `get_flashcard_summary`, `cloze.service.get_review_summary` and
-  `progress/service.py`'s `BankTreeResponse` each walk Book → Chapter → Sub-chapter → Lesson
-  independently. A shared walk helper is the right fix; this feature deliberately did not refactor
-  the other two. (This one at least aggregates its counts in a single query rather than one per
-  lesson.)
+- ~~**Three tree-walkers.**~~ **Done.** All three — `get_flashcard_summary`,
+  `cloze.service.get_review_summary` and `progress/service.py`'s `get_bank_tree` — now share
+  `app/common/hierarchy.py:load_content_tree`, which loads each level once and assembles the tree
+  in Python. Each of them previously issued `1 + B + B·C + B·C·S` queries (306 for a
+  five-by-ten-by-five course) to render a page both platforms open on mount; the cost is now four
+  queries regardless of course size. `tests/conftest.py`'s `count_queries` fixture backs a guard on
+  two of the three endpoints that asserts the query count is **equal across two tree sizes** — a
+  magic number would churn on unrelated changes, whereas a reintroduced per-parent query is exactly
+  what makes the second count diverge.
+
+- **Review's per-lesson cost is unchanged and now dominates it.** `cloze._lesson_summary` calls
+  `ensure_cloze_cards` and reads that lesson's cards per document, which is roughly three queries a
+  lesson and cannot be batched while cloze generation stays lazy per document. Flashcards avoids
+  this entirely because `_deck_counts` is one grouped query, which is why the Flashcards hub got
+  the full win and Review only got the structural half. Batching Review's counts means reworking
+  lazy generation — a separate change with a real behavioural seam in it, not a refactor.
 - **`created_by` CASCADE.** All seven content tables (`questions`, `books`, `chapters`,
   `sub_chapters`, `documents`, and now `flashcards`) cascade `created_by` to `profiles`, so deleting
   one admin profile would take the content library with it. Tracked as its own `HARDEN` ticket

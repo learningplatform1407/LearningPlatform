@@ -1,5 +1,6 @@
 import uuid
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import pytest
@@ -84,3 +85,36 @@ def authed_client(
         yield client
     finally:
         app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.fixture
+def count_queries(db_engine: Engine) -> Callable[[], Any]:
+    """Counts statements issued inside a `with` block.
+
+    Lets a test assert on query *shape* — "this endpoint costs the same
+    whether the course has one book or twelve" — which is what actually pins
+    down the absence of an N+1. Asserting a magic number instead would just
+    churn every time an unrelated query moved.
+    """
+
+    @contextmanager
+    def _counter() -> Iterator[list[int]]:
+        total = [0]
+
+        def before(
+            conn: object,
+            cursor: object,
+            statement: str,
+            parameters: object,
+            context: object,
+            executemany: bool,
+        ) -> None:
+            total[0] += 1
+
+        event.listen(db_engine, "before_cursor_execute", before)
+        try:
+            yield total
+        finally:
+            event.remove(db_engine, "before_cursor_execute", before)
+
+    return _counter

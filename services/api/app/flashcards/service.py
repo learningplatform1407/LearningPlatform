@@ -7,11 +7,9 @@ from typing import Any
 from sqlalchemy import Select, and_, or_, select
 from sqlalchemy.orm import Session
 
-from app.books.service import list_books
-from app.chapters.service import list_chapters
 from app.common.errors import ApiError
+from app.common.hierarchy import load_content_tree
 from app.documents.models import Document
-from app.documents.service import list_documents
 from app.flashcards.constants import (
     DEFAULT_DECK_SIZE,
     MAX_IMPORT_FLASHCARDS,
@@ -37,7 +35,6 @@ from app.srs.scheduler import (
     compute_next_state,
     to_utc_naive,
 )
-from app.sub_chapters.service import list_sub_chapters
 
 
 def apply_visible_filter[T: tuple[Any, ...]](
@@ -446,33 +443,34 @@ def _lesson_summary(
 
 
 def get_flashcard_summary(db: Session, user_id: uuid.UUID) -> FlashcardSummaryResponse:
-    """Walks the same book -> chapter -> sub-chapter -> lesson hierarchy the
-    Library and Review dashboards read, overlaying each lesson with its due
-    and new counts and summing both upward.
+    """Overlays each lesson's due and new counts on the course tree, summing
+    both upward.
+
+    Two queries' worth of work plus the tree's four: `_deck_counts` batches
+    every card in one go, and `load_content_tree` batches the structure. It
+    used to walk the structure with nested per-parent queries, which was
+    1 + B + B*C + B*C*S round-trips -- 306 for a five-by-ten-by-five course,
+    on an endpoint both the web and mobile hubs call on mount.
 
     Every node is included, even at zero -- this is a "see the whole course"
     dashboard, not a filtered due-only view. Due and new are reported
-    separately so the hub can say "4 due · 12 new" instead of implying every
+    separately so the hub can say "4 due / 12 new" instead of implying every
     card nobody has opened yet is overdue.
     """
     counts = _deck_counts(db, user_id)
+    tree = load_content_tree(db)
 
     books = []
-    for book, _ in list_books(db):
+    for book_node in tree.books:
         chapters = []
-        for chapter, _ in list_chapters(db, book.id):
+        for chapter_node in book_node.chapters:
             sub_chapters = []
-            for sub_chapter, _ in list_sub_chapters(db, chapter.id):
-                lessons = [
-                    _lesson_summary(doc, counts)
-                    for doc in list_documents(
-                        db, sub_chapter_id=sub_chapter.id, filter_by_sub_chapter=True
-                    )
-                ]
+            for sub_node in chapter_node.sub_chapters:
+                lessons = [_lesson_summary(doc, counts) for doc in sub_node.documents]
                 sub_chapters.append(
                     FlashcardSummarySubChapter(
-                        id=sub_chapter.id,
-                        title=sub_chapter.title,
+                        id=sub_node.sub_chapter.id,
+                        title=sub_node.sub_chapter.title,
                         due_count=sum(lesson.due_count for lesson in lessons),
                         new_count=sum(lesson.new_count for lesson in lessons),
                         lessons=lessons,
@@ -480,8 +478,8 @@ def get_flashcard_summary(db: Session, user_id: uuid.UUID) -> FlashcardSummaryRe
                 )
             chapters.append(
                 FlashcardSummaryChapter(
-                    id=chapter.id,
-                    title=chapter.title,
+                    id=chapter_node.chapter.id,
+                    title=chapter_node.chapter.title,
                     due_count=sum(sc.due_count for sc in sub_chapters),
                     new_count=sum(sc.new_count for sc in sub_chapters),
                     sub_chapters=sub_chapters,
@@ -489,17 +487,14 @@ def get_flashcard_summary(db: Session, user_id: uuid.UUID) -> FlashcardSummaryRe
             )
         books.append(
             FlashcardSummaryBook(
-                id=book.id,
-                title=book.title,
+                id=book_node.book.id,
+                title=book_node.book.title,
                 due_count=sum(chapter.due_count for chapter in chapters),
                 new_count=sum(chapter.new_count for chapter in chapters),
                 chapters=chapters,
             )
         )
 
-    uncategorized_lessons = [
-        _lesson_summary(doc, counts)
-        for doc in list_documents(db, sub_chapter_id=None, filter_by_sub_chapter=True)
-    ]
+    uncategorized_lessons = [_lesson_summary(doc, counts) for doc in tree.uncategorized_documents]
 
     return FlashcardSummaryResponse(books=books, uncategorized_lessons=uncategorized_lessons)

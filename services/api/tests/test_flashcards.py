@@ -1,6 +1,6 @@
 import hashlib
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import patch
@@ -12,11 +12,15 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
+from app.books.models import Book
+from app.chapters.models import Chapter
+from app.documents.models import Document
 from app.flashcards.constants import FlashcardScope, FlashcardStatus
 from app.flashcards.models import Flashcard, FlashcardReviewState
 from app.main import app
 from app.progress.models import QuestionProgress
 from app.srs.scheduler import SchedulerState, compute_next_state
+from app.sub_chapters.models import SubChapter
 from app.users.models import AccountSettings, Profile
 
 
@@ -110,6 +114,72 @@ def _profile(db: Session, user: AuthenticatedUser) -> Profile:
         db.add(profile)
         db.commit()
     return profile
+
+
+def _grow_the_course(
+    db: Session, created_by: uuid.UUID, books: int, chapters: int, subs: int
+) -> None:
+    """Adds books x chapters x subs structure, one lesson per sub-chapter."""
+    for b in range(books):
+        book = Book(title=f"Book {b}", order_index=b, created_by=created_by)
+        db.add(book)
+        db.flush()
+        for c in range(chapters):
+            chapter = Chapter(
+                title=f"Chapter {b}.{c}", book_id=book.id, order_index=c, created_by=created_by
+            )
+            db.add(chapter)
+            db.flush()
+            for sc in range(subs):
+                sub = SubChapter(
+                    title=f"Sub {b}.{c}.{sc}",
+                    chapter_id=chapter.id,
+                    order_index=sc,
+                    created_by=created_by,
+                )
+                db.add(sub)
+                db.flush()
+                db.add(
+                    Document(
+                        title=f"Lesson {b}.{c}.{sc}",
+                        created_by=created_by,
+                        sub_chapter_id=sub.id,
+                        order_index=0,
+                    )
+                )
+    db.commit()
+
+
+def test_the_summary_issues_a_fixed_number_of_queries_however_big_the_course(
+    authed_client: TestClient,
+    db_session: Session,
+    count_queries: Callable[[], Any],
+    document_id: str,
+    admin_user: AuthenticatedUser,
+) -> None:
+    """The hub walked the tree with a query per parent -- 1 + B + B*C + B*C*S,
+    or 306 round-trips for a five-by-ten-by-five course -- on an endpoint both
+    hubs call on mount. `load_content_tree` batches each level instead, so the
+    cost is flat. Asserting *equality across two tree sizes* rather than a
+    magic number is what actually pins the absence of an N+1: a per-parent
+    query would make the second count jump."""
+    _grow_the_course(db_session, admin_user.id, books=1, chapters=1, subs=1)
+    # Warm-up, discarded: the first call also inserts the caller's profile
+    # (get_or_create_profile), which would otherwise inflate the baseline and
+    # mask the thing being measured.
+    authed_client.get("/v1/me/flashcard-summary")
+
+    with count_queries() as small:
+        assert authed_client.get("/v1/me/flashcard-summary").status_code == 200
+
+    _grow_the_course(db_session, admin_user.id, books=3, chapters=2, subs=2)
+    with count_queries() as large:
+        response = authed_client.get("/v1/me/flashcard-summary")
+    assert response.status_code == 200
+
+    # Sanity: the bigger tree really is bigger in the payload.
+    assert len(response.json()["books"]) == 4
+    assert large[0] == small[0]
 
 
 # --- auth -------------------------------------------------------------------
