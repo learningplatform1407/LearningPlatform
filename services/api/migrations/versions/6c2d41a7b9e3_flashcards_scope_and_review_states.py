@@ -62,10 +62,21 @@ def upgrade() -> None:
         sa.Column("ease_factor", sa.Float(), nullable=False),
         sa.Column("interval_days", sa.Integer(), nullable=False),
         sa.Column("repetitions", sa.Integer(), nullable=False),
-        sa.Column("due_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
+        # nullable=False matters even with a server_default: without it the
+        # column is created nullable in Postgres while the ORM declares it a
+        # non-optional Mapped[datetime], and the SQLite test suite can't catch
+        # the drift because it builds its schema from Base.metadata rather
+        # than by running migrations. Matches cloze_review_states.
+        sa.Column(
+            "due_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.Column("last_reviewed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.ForeignKeyConstraint(["user_id"], ["profiles.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["flashcard_id"], ["flashcards.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
@@ -88,8 +99,14 @@ def downgrade() -> None:
         sa.Column("document_id", sa.Uuid(), nullable=False),
         sa.Column("title", sa.String(), nullable=False),
         sa.Column("created_by", sa.Uuid(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
+        # Faithful to d59e08b4c331's original DDL, down to the NOT NULLs —
+        # a downgrade that silently relaxes the schema is worse than none.
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.ForeignKeyConstraint(["document_id"], ["documents.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["created_by"], ["profiles.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
