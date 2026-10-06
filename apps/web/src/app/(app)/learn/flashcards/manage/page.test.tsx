@@ -74,6 +74,23 @@ describe("ManageFlashcardsPage", () => {
     expect(await screen.findByText("Import committed")).toBeInTheDocument();
   });
 
+  test("editing the payload after a preview clears the stale dry-run panel", async () => {
+    renderPage();
+    const user = userEvent.setup();
+
+    const textarea = await screen.findByLabelText("Import payload (JSON)");
+    await user.click(textarea);
+    await user.paste(PAYLOAD);
+    await user.click(screen.getByRole("button", { name: "Preview (dry run)" }));
+    await screen.findByText("Dry run — nothing written yet");
+
+    await user.type(textarea, " ");
+
+    // The panel described the previous payload; leaving it up under new text
+    // reads as if the new batch had been checked.
+    expect(screen.queryByText("Dry run — nothing written yet")).not.toBeInTheDocument();
+  });
+
   test("editing the payload after a preview re-blocks Import", async () => {
     renderPage();
     const user = userEvent.setup();
@@ -114,7 +131,11 @@ describe("ManageFlashcardsPage", () => {
     await user.paste('{"flashcards": [{"external_id": "fc-1", "document_id": "d1"}]}');
     await user.click(screen.getByRole("button", { name: "Preview (dry run)" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid JSON");
+    // Reported as a shape problem, not a syntax one: this JSON parses fine,
+    // and calling it "invalid JSON" sends the admin hunting for a comma.
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "That JSON is valid but doesn't match the import format",
+    );
     expect(importFlashcards).not.toHaveBeenCalled();
   });
 });

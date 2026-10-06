@@ -17,6 +17,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 from app.flashcards.constants import FlashcardStatus
+from app.srs.scheduler import DEFAULT_EASE_FACTOR
 
 
 class Flashcard(Base):
@@ -85,7 +86,7 @@ class FlashcardReviewState(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("profiles.id", ondelete="CASCADE"))
     flashcard_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("flashcards.id", ondelete="CASCADE"))
-    ease_factor: Mapped[float] = mapped_column(Float, default=2.5)
+    ease_factor: Mapped[float] = mapped_column(Float, default=DEFAULT_EASE_FACTOR)
     interval_days: Mapped[int] = mapped_column(Integer, default=0)
     repetitions: Mapped[int] = mapped_column(Integer, default=0)
     # Taken out of the rotation by this user, reversibly. Purely a filter:

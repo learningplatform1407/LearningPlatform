@@ -13,6 +13,7 @@ from app.common.errors import ApiError
 from app.documents.models import Document
 from app.documents.service import list_documents
 from app.flashcards.constants import (
+    DEFAULT_DECK_SIZE,
     MAX_IMPORT_FLASHCARDS,
     FlashcardScope,
     FlashcardStatus,
@@ -29,17 +30,14 @@ from app.flashcards.schemas import (
     FlashcardSummarySubChapter,
     ImportErrorItem,
 )
-from app.srs.scheduler import ReviewRating, SchedulerState, compute_next_state
+from app.srs.scheduler import (
+    DEFAULT_EASE_FACTOR,
+    ReviewRating,
+    SchedulerState,
+    compute_next_state,
+    to_utc_naive,
+)
 from app.sub_chapters.service import list_sub_chapters
-
-
-def _to_utc_naive(value: datetime) -> datetime:
-    """Postgres (production) round-trips DateTime(timezone=True) columns as
-    tz-aware; SQLite (tests only) round-trips them as naive. Both represent
-    the same UTC instant, so normalizing away the tzinfo before comparing
-    keeps due-ness checks correct on either backend instead of crashing on
-    a naive-vs-aware comparison. Same helper as app/cloze/service.py."""
-    return value.replace(tzinfo=None) if value.tzinfo is not None else value
 
 
 def apply_visible_filter[T: tuple[Any, ...]](
@@ -113,6 +111,19 @@ def list_lesson_cards(
     return [(card, state) for card, state in rows]
 
 
+def get_review_state(
+    db: Session, user_id: uuid.UUID, flashcard_id: uuid.UUID
+) -> FlashcardReviewState | None:
+    """This user's SRS row for one card, or None if they have never graded or
+    suspended it. Extracted because three call sites had the same select."""
+    return db.scalar(
+        select(FlashcardReviewState).where(
+            FlashcardReviewState.user_id == user_id,
+            FlashcardReviewState.flashcard_id == flashcard_id,
+        )
+    )
+
+
 def get_visible_card(db: Session, user_id: uuid.UUID, flashcard_id: uuid.UUID) -> Flashcard:
     """404, never 403, when the card exists but isn't this learner's to see --
     matching `_get_owned_session` in app/quizzes/service.py. Probing for other
@@ -130,7 +141,7 @@ def draw_lesson_deck(
     user_id: uuid.UUID,
     document_id: uuid.UUID,
     scope: ScopeFilter = ScopeFilter.ALL,
-    limit: int = 20,
+    limit: int = DEFAULT_DECK_SIZE,
 ) -> list[tuple[Flashcard, FlashcardReviewState | None]]:
     """Due cards first (oldest deadline first), then new cards in random
     order, truncated to `limit`.
@@ -141,7 +152,7 @@ def draw_lesson_deck(
     be driven by the schedule and, past that, by chance.
 
     The partition happens in Python rather than as `ORDER BY random()` in SQL
-    because due-ness needs `_to_utc_naive` to stay correct on SQLite, which
+    because due-ness needs `to_utc_naive` to stay correct on SQLite, which
     means materialising the lesson's visible cards anyway. One lesson's cards
     are bounded by what an admin imports for one lecture, and
     `list_due_cloze_cards` already reads a lesson's cards the same way.
@@ -155,7 +166,7 @@ def draw_lesson_deck(
         )
     ).all()
 
-    now = _to_utc_naive(datetime.now(UTC))
+    now = to_utc_naive(datetime.now(UTC))
     due: list[tuple[Flashcard, FlashcardReviewState | None]] = []
     fresh: list[tuple[Flashcard, FlashcardReviewState | None]] = []
     for card, state in rows:
@@ -165,10 +176,10 @@ def draw_lesson_deck(
             continue
         if state is None or state.last_reviewed_at is None:
             fresh.append((card, state))
-        elif _to_utc_naive(state.due_at) <= now:
+        elif to_utc_naive(state.due_at) <= now:
             due.append((card, state))
 
-    due.sort(key=lambda row: _to_utc_naive(row[1].due_at) if row[1] else now)
+    due.sort(key=lambda row: to_utc_naive(row[1].due_at) if row[1] else now)
     random.shuffle(fresh)
     return (due + fresh)[:limit]
 
@@ -250,12 +261,7 @@ def submit_flashcard_review(
     counting it would corrupt the question bank's success/failure stats."""
     get_visible_card(db, user_id, flashcard_id)
 
-    state = db.scalar(
-        select(FlashcardReviewState).where(
-            FlashcardReviewState.user_id == user_id,
-            FlashcardReviewState.flashcard_id == flashcard_id,
-        )
-    )
+    state = get_review_state(db, user_id, flashcard_id)
     if state is not None and state.suspended:
         # The runner never offers a suspended card, but the backend enforces
         # what the UI merely hides -- same posture as the quiz runner
@@ -264,7 +270,7 @@ def submit_flashcard_review(
         raise ApiError(409, "card_suspended", "This flashcard is not in your rotation")
 
     current = SchedulerState(
-        ease_factor=state.ease_factor if state else 2.5,
+        ease_factor=state.ease_factor if state else DEFAULT_EASE_FACTOR,
         interval_days=state.interval_days if state else 0,
         repetitions=state.repetitions if state else 0,
     )
@@ -300,12 +306,7 @@ def set_suspended(
     """
     get_visible_card(db, user_id, flashcard_id)
 
-    state = db.scalar(
-        select(FlashcardReviewState).where(
-            FlashcardReviewState.user_id == user_id,
-            FlashcardReviewState.flashcard_id == flashcard_id,
-        )
-    )
+    state = get_review_state(db, user_id, flashcard_id)
     if state is None:
         # No row yet: the card was still new. Created carrying only the flag,
         # with last_reviewed_at left NULL so it stays "new" and returns to
@@ -420,7 +421,7 @@ def _deck_counts(db: Session, user_id: uuid.UUID) -> dict[uuid.UUID, tuple[int, 
         )
     ).all()
 
-    now = _to_utc_naive(datetime.now(UTC))
+    now = to_utc_naive(datetime.now(UTC))
     counts: dict[uuid.UUID, tuple[int, int]] = defaultdict(lambda: (0, 0))
     for document_id, state in rows:
         if state is not None and state.suspended:
@@ -430,7 +431,7 @@ def _deck_counts(db: Session, user_id: uuid.UUID) -> dict[uuid.UUID, tuple[int, 
         due, fresh = counts[document_id]
         if state is None or state.last_reviewed_at is None:
             counts[document_id] = (due, fresh + 1)
-        elif _to_utc_naive(state.due_at) <= now:
+        elif to_utc_naive(state.due_at) <= now:
             counts[document_id] = (due + 1, fresh)
     return counts
 

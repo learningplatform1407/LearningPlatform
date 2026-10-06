@@ -349,22 +349,41 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
   const [editing, setEditing] = useState(false);
   const [front, setFront] = useState(card.front_text);
   const [back, setBack] = useState(card.back_text);
+  const [error, setError] = useState<string | null>(null);
+
+  // Reseeds the draft from the card every time the row opens, so Cancel
+  // genuinely discards. Without it the state survives the close (the row is
+  // keyed by card.id and never remounts) and the next Save would commit an
+  // edit the learner had explicitly cancelled.
+  function openEditor() {
+    setFront(card.front_text);
+    setBack(card.back_text);
+    setError(null);
+    setEditing(true);
+  }
 
   const update = useMutation({
     mutationFn: () =>
       getBrowserApiClient().updateFlashcard(card.id, { front_text: front, back_text: back }),
     onSuccess: () => {
       setEditing(false);
+      setError(null);
       onChanged();
     },
+    onError: () => setError("Could not save that card."),
   });
   const remove = useMutation({
     mutationFn: () => getBrowserApiClient().deleteFlashcard(card.id),
     onSuccess: onChanged,
+    onError: () => setError("Could not delete that card."),
   });
   const suspension = useMutation({
     mutationFn: () => getBrowserApiClient().setFlashcardSuspension(card.id, !card.suspended),
     onSuccess: onChanged,
+    // This toggle is the only route back into the rotation, so a silent
+    // failure would leave the learner unable to tell the card is still out.
+    onError: () =>
+      setError(card.suspended ? "Could not include that card." : "Could not exclude that card."),
   });
 
   if (editing) {
@@ -383,8 +402,16 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
           rows={2}
           className="w-full rounded-md border border-border bg-background px-sm py-xs text-sm"
         />
+        {error && (
+          <p role="alert" className="text-xs text-danger">
+            {error}
+          </p>
+        )}
         <div className="flex gap-xs">
-          <Button disabled={update.isPending} onClick={() => update.mutate()}>
+          <Button
+            disabled={!front.trim() || !back.trim() || update.isPending}
+            onClick={() => update.mutate()}
+          >
             Save
           </Button>
           <Button variant="secondary" onClick={() => setEditing(false)}>
@@ -404,6 +431,11 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
       <div className="min-w-0">
         <p className="text-sm text-foreground">{card.front_text}</p>
         <p className="text-xs text-muted-foreground">{card.back_text}</p>
+        {error && (
+          <p role="alert" className="text-xs text-danger">
+            {error}
+          </p>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-xs">
         <ScopeBadge scope={card.scope} />
@@ -429,7 +461,7 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
           <>
             <button
               type="button"
-              onClick={() => setEditing(true)}
+              onClick={openEditor}
               className="text-xs text-primary hover:underline"
             >
               Edit
@@ -532,7 +564,19 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
   return (
     <div className="flex flex-col items-center gap-md">
       <div className="flex w-full max-w-[32rem] items-center justify-between gap-sm">
-        <ScopeToggle scope={scope} onChange={setScope} />
+        <ScopeToggle
+          scope={scope}
+          onChange={(next) => {
+            // The deck is re-keyed by scope, so the session state derived
+            // from it has to go too — otherwise "Card 4 of 5" carries over
+            // from the previous scope onto a shorter deck.
+            setScope(next);
+            setGradedIds(new Set());
+            setRevealedCardId(null);
+            setFeedback(null);
+            setActionError(null);
+          }}
+        />
         {!adding && (
           <Button variant="secondary" onClick={() => setAdding(true)}>
             Add a card
@@ -552,7 +596,10 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
 
       {!currentCard && (
         <p className="text-sm text-muted-foreground">
-          {(deckQuery.data ?? []).length === 0 && gradedIds.size === 0
+          {/* Tests the lesson's cards, not the deck: with every card
+              excluded the deck is empty while the lesson is not, and the
+              "no flashcards yet" copy would contradict the list below. */}
+          {lessonCards.length === 0 && cardsQuery.isSuccess && gradedIds.size === 0
             ? "No flashcards for this lesson yet. Add your own, or check back for official ones."
             : "You're all caught up — nothing to review right now."}
         </p>
@@ -632,6 +679,12 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
       {actionError && (
         <p role="alert" className="text-xs text-danger">
           {actionError}
+        </p>
+      )}
+
+      {cardsQuery.isError && (
+        <p role="alert" className="text-sm text-danger">
+          Failed to load this lesson&apos;s cards, so excluded ones can&apos;t be managed right now.
         </p>
       )}
 

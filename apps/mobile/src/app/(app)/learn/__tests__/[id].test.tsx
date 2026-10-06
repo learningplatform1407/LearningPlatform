@@ -1108,3 +1108,87 @@ test("a failed grade is reported rather than silently doing nothing", async () =
   // The card must stay in the queue — it was never actually graded.
   expect(screen.getByText("What is a CDN?")).toBeTruthy();
 });
+
+test("cancelling an edit discards the draft instead of committing it later", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListDueFlashcards.mockResolvedValue([]);
+  mockListFlashcards.mockResolvedValue([lessonCard({ is_mine: true, front_text: "Mitral valve" })]);
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Flashcards"));
+  fireEvent.press(await screen.findByText("Edit"));
+
+  fireEvent.changeText(screen.getByLabelText("Front"), "xxx");
+  fireEvent.press(screen.getByText("Cancel"));
+
+  // Reopening must show the stored text, not the abandoned draft — otherwise
+  // Save would commit an edit the learner cancelled.
+  fireEvent.press(await screen.findByText("Edit"));
+  expect(screen.getByLabelText("Front").props.value).toBe("Mitral valve");
+});
+
+test("a failed include/exclude toggle is reported, not swallowed", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListDueFlashcards.mockResolvedValue([]);
+  mockListFlashcards.mockResolvedValue([lessonCard({ suspended: true })]);
+  mockSetFlashcardSuspension.mockRejectedValue(new Error("offline"));
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Flashcards"));
+  fireEvent.press(await screen.findByText("Include in reviews"));
+
+  // This toggle is the only route back into the rotation, so silence would
+  // leave the learner unable to tell the card is still excluded.
+  expect(await screen.findByText("Could not include that card.")).toBeTruthy();
+});
+
+test("a lesson whose every card is excluded does not claim to have none", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  // The server filters suspended cards out of the deck, so an all-excluded
+  // lesson has an empty deck but is not an empty lesson.
+  mockListDueFlashcards.mockResolvedValue([]);
+  mockListFlashcards.mockResolvedValue([lessonCard({ suspended: true })]);
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Flashcards"));
+
+  await screen.findByText("Not in rotation");
+  expect(screen.queryByText(/No flashcards for this lesson yet/)).toBeNull();
+  expect(screen.getByText("You're all caught up — nothing to review right now.")).toBeTruthy();
+});
+
+test("switching scope resets the session counter", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListDueFlashcards.mockResolvedValue([officialCard()]);
+  mockSubmitFlashcardReview.mockResolvedValue({
+    id: "s1",
+    flashcard_id: "f1",
+    suspended: false,
+    ease_factor: 2.5,
+    interval_days: 1,
+    repetitions: 1,
+    due_at: "2026-10-07T00:00:00Z",
+    last_reviewed_at: "2026-10-06T00:00:00Z",
+  });
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  fireEvent.press(screen.getByText("Flashcards"));
+  fireEvent.press(await screen.findByText("What is a CDN?"));
+  fireEvent.press(screen.getByText("Good"));
+  await screen.findByText("Next review in 1 day.");
+
+  fireEvent.press(screen.getByText("Official"));
+
+  // The deck is re-keyed by scope, so a counter carried over from the
+  // previous scope would report a position the new deck doesn't have.
+  expect(await screen.findByText("Card 1 of 1")).toBeTruthy();
+  expect(screen.queryByText("Next review in 1 day.")).toBeNull();
+});

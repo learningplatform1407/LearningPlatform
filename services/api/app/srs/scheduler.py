@@ -17,11 +17,30 @@ from typing import Literal
 
 ReviewRating = Literal["again", "hard", "good", "easy"]
 
+# SM-2's starting ease. Lives here rather than being repeated as a literal in
+# each feature's "if state else 2.5" seed and each state table's column
+# default -- four places that have to agree and nothing to make them.
+DEFAULT_EASE_FACTOR = 2.5
+
 # SM-2's ease floor -- a card can get progressively harder to schedule
 # further apart, but never below a 130% multiplier, matching Anki.
 _MIN_EASE = 1.3
 _EASY_BONUS = 1.3
 _HARD_FACTOR = 1.2
+
+
+def to_utc_naive(value: datetime) -> datetime:
+    """Postgres (production) round-trips DateTime(timezone=True) columns as
+    tz-aware; SQLite (tests only) round-trips them as naive. Both represent
+    the same UTC instant, so normalizing away the tzinfo before comparing
+    keeps due-ness checks correct on either backend instead of crashing on a
+    naive-vs-aware comparison.
+
+    Shared rather than copied: every due-ness comparison in both cloze Review
+    and Flashcards depends on this one rule, and a correction to it has to
+    land in one place.
+    """
+    return value.replace(tzinfo=None) if value.tzinfo is not None else value
 
 
 @dataclass(frozen=True)

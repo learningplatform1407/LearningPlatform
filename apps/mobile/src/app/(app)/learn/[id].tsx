@@ -340,22 +340,41 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
   const [editing, setEditing] = useState(false);
   const [front, setFront] = useState(card.front_text);
   const [back, setBack] = useState(card.back_text);
+  const [error, setError] = useState<string | null>(null);
+
+  // Reseeds the draft from the card every time the row opens, so Cancel
+  // genuinely discards. Without it the state survives the close (the row is
+  // keyed by card.id and never remounts) and the next Save would commit an
+  // edit the learner had explicitly cancelled.
+  function openEditor() {
+    setFront(card.front_text);
+    setBack(card.back_text);
+    setError(null);
+    setEditing(true);
+  }
 
   const update = useMutation({
     mutationFn: () =>
       getApiClient().updateFlashcard(card.id, { front_text: front, back_text: back }),
     onSuccess: () => {
       setEditing(false);
+      setError(null);
       onChanged();
     },
+    onError: () => setError("Could not save that card."),
   });
   const remove = useMutation({
     mutationFn: () => getApiClient().deleteFlashcard(card.id),
     onSuccess: onChanged,
+    onError: () => setError("Could not delete that card."),
   });
   const suspension = useMutation({
     mutationFn: () => getApiClient().setFlashcardSuspension(card.id, !card.suspended),
     onSuccess: onChanged,
+    // This toggle is the only route back into the rotation, so a silent
+    // failure would leave the learner unable to tell the card is still out.
+    onError: () =>
+      setError(card.suspended ? "Could not include that card." : "Could not exclude that card."),
   });
 
   if (editing) {
@@ -374,9 +393,10 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
           multiline
           style={[styles.formInput, styles.formInputMultiline]}
         />
+        {error && <Text style={styles.errorText}>{error}</Text>}
         <View style={styles.formActions}>
           <Pressable
-            disabled={update.isPending}
+            disabled={!front.trim() || !back.trim() || update.isPending}
             onPress={() => update.mutate()}
             accessibilityRole="button"
             style={styles.primaryButton}
@@ -400,6 +420,7 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
       <View style={styles.myCardText}>
         <Text style={styles.rowTitle}>{card.front_text}</Text>
         <Text style={styles.hint}>{card.back_text}</Text>
+        {error && <Text style={styles.errorText}>{error}</Text>}
       </View>
       <View style={styles.myCardActions}>
         <ScopeBadge scope={card.scope} />
@@ -424,7 +445,7 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
         </Pressable>
         {card.is_mine && (
           <>
-            <Pressable onPress={() => setEditing(true)} accessibilityRole="button">
+            <Pressable onPress={openEditor} accessibilityRole="button">
               <Text style={styles.linkText}>Edit</Text>
             </Pressable>
             <Pressable
@@ -520,7 +541,19 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
   return (
     <View style={styles.flashcardsTab}>
       <View style={styles.flashcardsHeader}>
-        <ScopeToggle scope={scope} onChange={setScope} />
+        <ScopeToggle
+          scope={scope}
+          onChange={(next) => {
+            // The deck is re-keyed by scope, so the session state derived
+            // from it has to go too — otherwise "Card 4 of 5" carries over
+            // from the previous scope onto a shorter deck.
+            setScope(next);
+            setGradedIds(new Set());
+            setRevealedCardId(null);
+            setFeedback(null);
+            setActionError(null);
+          }}
+        />
         {!adding && (
           <Pressable
             onPress={() => setAdding(true)}
@@ -544,7 +577,10 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
 
       {!currentCard && (
         <Text style={styles.hint}>
-          {(deckQuery.data ?? []).length === 0 && gradedIds.size === 0
+          {/* Tests the lesson's cards, not the deck: with every card
+              excluded the deck is empty while the lesson is not, and the
+              "no flashcards yet" copy would contradict the list below. */}
+          {lessonCards.length === 0 && cardsQuery.isSuccess && gradedIds.size === 0
             ? "No flashcards for this lesson yet. Add your own, or check back for official ones."
             : "You're all caught up — nothing to review right now."}
         </Text>
@@ -624,6 +660,12 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
 
       {feedback && <Text style={styles.hint}>{feedback}</Text>}
       {actionError && <Text style={styles.errorText}>{actionError}</Text>}
+
+      {cardsQuery.isError && (
+        <Text style={styles.errorText}>
+          Failed to load this lesson&apos;s cards, so excluded ones can&apos;t be managed right now.
+        </Text>
+      )}
 
       {lessonCards.length > 0 && (
         <View style={styles.myCardsSection}>

@@ -5,6 +5,7 @@ from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConst
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.srs.scheduler import DEFAULT_EASE_FACTOR
 
 
 class ClozeCard(Base):
@@ -39,7 +40,7 @@ class ClozeReviewState(Base):
     cloze_card_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("cloze_cards.id", ondelete="CASCADE")
     )
-    ease_factor: Mapped[float] = mapped_column(Float, default=2.5)
+    ease_factor: Mapped[float] = mapped_column(Float, default=DEFAULT_EASE_FACTOR)
     interval_days: Mapped[int] = mapped_column(Integer, default=0)
     repetitions: Mapped[int] = mapped_column(Integer, default=0)
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

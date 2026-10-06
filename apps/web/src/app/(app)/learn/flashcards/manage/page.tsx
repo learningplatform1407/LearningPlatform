@@ -60,7 +60,11 @@ function ImportResultSummary({
 
 function ImportForm() {
   const [jsonText, setJsonText] = useState("");
-  const [parseError, setParseError] = useState<string | null>(null);
+  // Syntax and shape are reported separately: telling an admin their
+  // well-formed JSON is "invalid JSON" sends them hunting for a comma that
+  // isn't missing, when the real problem is a field.
+  const [syntaxError, setSyntaxError] = useState<string | null>(null);
+  const [schemaError, setSchemaError] = useState<string | null>(null);
   const [previewedText, setPreviewedText] = useState<string | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
 
@@ -93,20 +97,21 @@ function ImportForm() {
   }
 
   function parsePayload(): FlashcardImportRequest | null {
-    setParseError(null);
+    setSyntaxError(null);
+    setSchemaError(null);
     setRequestError(null);
 
     let raw: unknown;
     try {
       raw = JSON.parse(jsonText);
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : "Invalid JSON");
+      setSyntaxError(err instanceof Error ? err.message : "Invalid JSON");
       return null;
     }
 
     const result = flashcardImportRequestSchema.safeParse(raw);
     if (!result.success) {
-      setParseError(
+      setSchemaError(
         result.error.issues
           .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
           .join("; "),
@@ -133,13 +138,18 @@ function ImportForm() {
     setPreviewedText(null);
     // Clear stale feedback: an error from the previous payload sitting
     // under freshly-edited text reads as if the new text were rejected.
-    setParseError(null);
+    setSyntaxError(null);
+    setSchemaError(null);
     setRequestError(null);
     // Otherwise a second batch pasted after a successful commit finds
     // commitMutation.isSuccess still true from the FIRST batch, which
     // permanently disables Import (canCommit checks !isSuccess) and hides
     // any new preview behind the stale "Import committed" summary.
     commitMutation.reset();
+    // And the preview's own result has to go with it, or the previous
+    // payload's "Dry run — Created 1" panel renders underneath the new text
+    // as though it described that.
+    previewMutation.reset();
   }
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -149,7 +159,7 @@ function ImportForm() {
     try {
       handleTextChange(await readFileAsText(file));
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : "Could not read that file.");
+      setSyntaxError(err instanceof Error ? err.message : "Could not read that file.");
     }
   }
 
@@ -187,9 +197,14 @@ function ImportForm() {
         />
       </label>
 
-      {parseError && (
+      {syntaxError && (
         <p role="alert" className="text-sm text-danger">
-          Invalid JSON: {parseError}
+          Invalid JSON: {syntaxError}
+        </p>
+      )}
+      {schemaError && (
+        <p role="alert" className="text-sm text-danger">
+          That JSON is valid but doesn&apos;t match the import format: {schemaError}
         </p>
       )}
       {requestError && (

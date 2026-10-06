@@ -2,10 +2,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState } from "react";
 
 import type { FlashcardSummaryResponse } from "@lp/contracts";
 
+import { ExpandableRow } from "@/components/expandable-row";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 // Derived from the response type rather than exporting four more schemas
@@ -49,46 +49,11 @@ function LessonRow({ lesson }: { lesson: SummaryLesson }) {
   );
 }
 
-// Same accordion as the Review dashboard: the whole tree arrives in one
-// eager fetch (the counts require walking every lesson anyway), so
-// expanding never triggers another request.
-function ExpandableRow({
-  title,
-  dueCount,
-  newCount,
-  children,
-}: {
-  title: string;
-  dueCount: number;
-  newCount: number;
-  children: React.ReactNode;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <li className="rounded-md border border-border">
-      <button
-        type="button"
-        onClick={() => setExpanded((e) => !e)}
-        aria-expanded={expanded}
-        className="flex w-full items-center justify-between gap-sm px-md py-sm text-left hover:bg-muted"
-      >
-        <span className="text-sm font-medium text-foreground">{title}</span>
-        <span className="flex items-center gap-sm">
-          <CountBadges dueCount={dueCount} newCount={newCount} />
-          <span className="text-xs text-muted-foreground">{expanded ? "▲" : "▼"}</span>
-        </span>
-      </button>
-      {expanded && <div className="border-t border-border px-md py-md">{children}</div>}
-    </li>
-  );
-}
-
 function SubChapterRow({ subChapter }: { subChapter: SummarySubChapter }) {
   return (
     <ExpandableRow
       title={subChapter.title}
-      dueCount={subChapter.due_count}
-      newCount={subChapter.new_count}
+      badge={<CountBadges dueCount={subChapter.due_count} newCount={subChapter.new_count} />}
     >
       {subChapter.lessons.length === 0 ? (
         <p className="text-sm text-muted-foreground">No lessons.</p>
@@ -105,7 +70,10 @@ function SubChapterRow({ subChapter }: { subChapter: SummarySubChapter }) {
 
 function ChapterRow({ chapter }: { chapter: SummaryChapter }) {
   return (
-    <ExpandableRow title={chapter.title} dueCount={chapter.due_count} newCount={chapter.new_count}>
+    <ExpandableRow
+      title={chapter.title}
+      badge={<CountBadges dueCount={chapter.due_count} newCount={chapter.new_count} />}
+    >
       {chapter.sub_chapters.length === 0 ? (
         <p className="text-sm text-muted-foreground">No sub-chapters.</p>
       ) : (
@@ -121,7 +89,10 @@ function ChapterRow({ chapter }: { chapter: SummaryChapter }) {
 
 function BookRow({ book }: { book: SummaryBook }) {
   return (
-    <ExpandableRow title={book.title} dueCount={book.due_count} newCount={book.new_count}>
+    <ExpandableRow
+      title={book.title}
+      badge={<CountBadges dueCount={book.due_count} newCount={book.new_count} />}
+    >
       {book.chapters.length === 0 ? (
         <p className="text-sm text-muted-foreground">No chapters.</p>
       ) : (
@@ -197,8 +168,7 @@ export default function FlashcardsPage() {
           {data.uncategorized_lessons.length > 0 && (
             <ExpandableRow
               title="Uncategorized"
-              dueCount={uncategorizedDue}
-              newCount={uncategorizedNew}
+              badge={<CountBadges dueCount={uncategorizedDue} newCount={uncategorizedNew} />}
             >
               <ul className="flex flex-col gap-xs">
                 {data.uncategorized_lessons.map((lesson) => (

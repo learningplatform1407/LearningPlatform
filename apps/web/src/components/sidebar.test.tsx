@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -56,10 +56,16 @@ describe("Sidebar", () => {
   test("has no Admin entry for a learner", async () => {
     renderSidebar();
 
-    // Waits for the role query to settle, so this cannot pass merely because
-    // the nav rendered before getMe resolved.
-    await screen.findByRole("link", { name: "Learn" });
+    // "Learn" is a static NAV_ITEMS entry that renders before getMe
+    // resolves, so awaiting it proved nothing — the Admin assertion ran
+    // while me.data was still undefined and would have passed even with the
+    // gate inverted. Wait for the role to actually arrive instead.
+    await waitFor(() => expect(getMe).toHaveBeenCalled());
+    await act(async () => {});
+
     expect(screen.queryByRole("link", { name: "Admin" })).not.toBeInTheDocument();
+    // Sanity check that the gate is live at all, not just that nothing rendered.
+    expect(screen.getByRole("link", { name: "Learn" })).toBeInTheDocument();
   });
 
   test("shows the Admin entry for an admin", async () => {

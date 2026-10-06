@@ -18,17 +18,14 @@ from app.cloze.schemas import (
 from app.common.errors import ApiError
 from app.documents.models import Document
 from app.documents.service import list_documents
-from app.srs.scheduler import ReviewRating, SchedulerState, compute_next_state
+from app.srs.scheduler import (
+    DEFAULT_EASE_FACTOR,
+    ReviewRating,
+    SchedulerState,
+    compute_next_state,
+    to_utc_naive,
+)
 from app.sub_chapters.service import list_sub_chapters
-
-
-def _to_utc_naive(value: datetime) -> datetime:
-    """Postgres (production) round-trips DateTime(timezone=True) columns as
-    tz-aware; SQLite (tests only) round-trips them as naive. Both represent
-    the same UTC instant, so normalizing away the tzinfo before comparing
-    keeps due-ness checks correct on either backend instead of crashing on
-    a naive-vs-aware comparison."""
-    return value.replace(tzinfo=None) if value.tzinfo is not None else value
 
 
 def ensure_cloze_cards(db: Session, document: Document) -> None:
@@ -72,11 +69,11 @@ def list_due_cloze_cards(db: Session, document: Document, user_id: uuid.UUID) ->
             )
         )
     }
-    now = _to_utc_naive(datetime.now(UTC))
+    now = to_utc_naive(datetime.now(UTC))
     return [
         card
         for card in cards
-        if (state := states.get(card.id)) is None or _to_utc_naive(state.due_at) <= now
+        if (state := states.get(card.id)) is None or to_utc_naive(state.due_at) <= now
     ]
 
 
@@ -94,7 +91,7 @@ def submit_cloze_review(
         )
     )
     current = SchedulerState(
-        ease_factor=state.ease_factor if state else 2.5,
+        ease_factor=state.ease_factor if state else DEFAULT_EASE_FACTOR,
         interval_days=state.interval_days if state else 0,
         repetitions=state.repetitions if state else 0,
     )

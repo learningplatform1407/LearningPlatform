@@ -34,6 +34,7 @@ from app.flashcards.service import (
     delete_card,
     draw_lesson_deck,
     get_flashcard_summary,
+    get_review_state,
     import_official_cards,
     list_lesson_cards,
     set_suspended,
@@ -142,7 +143,10 @@ def update_flashcard(
 ) -> FlashcardResponse:
     profile = get_or_create_profile(db, user)
     card = update_personal_card(db, profile.id, flashcard_id, data.front_text, data.back_text)
-    return _to_response(card, profile.id)
+    # Passing the state matters: `suspended` is documented as computed per
+    # caller, and omitting it would report every edited card as back in the
+    # rotation regardless of whether the learner had excluded it.
+    return _to_response(card, profile.id, get_review_state(db, profile.id, card.id))
 
 
 @router.delete("/{flashcard_id}", status_code=204)

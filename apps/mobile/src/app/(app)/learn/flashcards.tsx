@@ -1,10 +1,10 @@
 import type { FlashcardSummaryResponse } from "@lp/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
+import { ExpandableRow } from "@/lib/expandable-row";
 import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
 
 // Derived from the response type rather than exporting four more schemas
@@ -46,46 +46,11 @@ function LessonRow({ lesson }: { lesson: SummaryLesson }) {
   );
 }
 
-// Same accordion as the Review screen: the whole tree arrives in one eager
-// fetch (the counts require walking every lesson anyway), so expanding
-// never triggers another request, and several nodes may stay open at once.
-function ExpandableRow({
-  title,
-  dueCount,
-  newCount,
-  children,
-}: {
-  title: string;
-  dueCount: number;
-  newCount: number;
-  children: React.ReactNode;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <View style={styles.expandableCard}>
-      <Pressable
-        style={styles.expandableHeader}
-        onPress={() => setExpanded((e) => !e)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded }}
-      >
-        <Text style={styles.rowTitle}>{title}</Text>
-        <View style={styles.expandableHeaderRight}>
-          <CountBadges dueCount={dueCount} newCount={newCount} />
-          <Text style={styles.expandArrow}>{expanded ? "▲" : "▼"}</Text>
-        </View>
-      </Pressable>
-      {expanded && <View style={styles.expandableBody}>{children}</View>}
-    </View>
-  );
-}
-
 function SubChapterRow({ subChapter }: { subChapter: SummarySubChapter }) {
   return (
     <ExpandableRow
       title={subChapter.title}
-      dueCount={subChapter.due_count}
-      newCount={subChapter.new_count}
+      badge={<CountBadges dueCount={subChapter.due_count} newCount={subChapter.new_count} />}
     >
       {subChapter.lessons.length === 0 ? (
         <Text style={styles.hint}>No lessons.</Text>
@@ -102,7 +67,10 @@ function SubChapterRow({ subChapter }: { subChapter: SummarySubChapter }) {
 
 function ChapterRow({ chapter }: { chapter: SummaryChapter }) {
   return (
-    <ExpandableRow title={chapter.title} dueCount={chapter.due_count} newCount={chapter.new_count}>
+    <ExpandableRow
+      title={chapter.title}
+      badge={<CountBadges dueCount={chapter.due_count} newCount={chapter.new_count} />}
+    >
       {chapter.sub_chapters.length === 0 ? (
         <Text style={styles.hint}>No sub-chapters.</Text>
       ) : (
@@ -118,7 +86,10 @@ function ChapterRow({ chapter }: { chapter: SummaryChapter }) {
 
 function BookRow({ book }: { book: SummaryBook }) {
   return (
-    <ExpandableRow title={book.title} dueCount={book.due_count} newCount={book.new_count}>
+    <ExpandableRow
+      title={book.title}
+      badge={<CountBadges dueCount={book.due_count} newCount={book.new_count} />}
+    >
       {book.chapters.length === 0 ? (
         <Text style={styles.hint}>No chapters.</Text>
       ) : (
@@ -191,8 +162,7 @@ export default function FlashcardsScreen() {
           {data.uncategorized_lessons.length > 0 && (
             <ExpandableRow
               title="Uncategorized"
-              dueCount={uncategorizedDue}
-              newCount={uncategorizedNew}
+              badge={<CountBadges dueCount={uncategorizedDue} newCount={uncategorizedNew} />}
             >
               <View style={styles.list}>
                 {data.uncategorized_lessons.map((lesson) => (
@@ -241,33 +211,6 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     fontWeight: fontWeights.medium,
     color: colors.foreground,
-  },
-  expandableCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-  },
-  expandableHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
-  expandableHeaderRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  expandArrow: {
-    fontSize: fontSizes.xs,
-    color: colors.mutedForeground,
-  },
-  expandableBody: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    padding: spacing.md,
   },
   badges: {
     flexDirection: "row",

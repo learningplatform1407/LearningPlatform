@@ -484,6 +484,23 @@ def test_grading_rejects_an_unknown_card(authed_client: TestClient, document_id:
     assert response.status_code == 404
 
 
+def test_editing_a_suspended_card_still_reports_it_as_suspended(
+    authed_client: TestClient, document_id: str
+) -> None:
+    """`suspended` is documented as computed per caller, so every response
+    carrying a card has to supply it. PATCH used to omit the review state and
+    report every edited card as back in the rotation."""
+    created = authed_client.post(
+        f"/v1/documents/{document_id}/flashcards", json={"front_text": "Q", "back_text": "A"}
+    ).json()
+    authed_client.put(f"/v1/flashcards/{created['id']}/suspension", json={"suspended": True})
+
+    edited = authed_client.patch(f"/v1/flashcards/{created['id']}", json={"back_text": "A2"})
+
+    assert edited.status_code == 200
+    assert edited.json()["suspended"] is True
+
+
 # --- suspension (opting a card out of the rotation) -------------------------
 
 
