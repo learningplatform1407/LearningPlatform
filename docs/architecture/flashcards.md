@@ -82,6 +82,51 @@ the All / Official / Mine toggle narrows the view without splitting the schedule
 pre-question-bank design; it lost its last reader when the mobile lesson tab moved to the question
 bank, and a lesson's questions are reached through `questions.document_id`.
 
+### 4.4 The two lifecycles
+
+A card has two independent state machines, and most of the feature's subtlety
+comes from them being orthogonal. `flashcards.status` is global and admin-owned;
+`flashcard_review_states` is one row per (learner, card) and owned by that
+learner. An admin archiving a card makes every learner's review state moot; a
+learner suspending one changes nothing for anybody else.
+
+```mermaid
+stateDiagram-v2
+    state "Card status (global, admin-owned)" as G {
+        [*] --> draft : import with status=draft
+        draft --> published : re-import as published
+        published --> archived : admin Retire
+        archived --> published : re-import only
+    }
+
+    state "Review state (per learner)" as L {
+        [*] --> new : no row, or never graded
+        new --> scheduled : graded, min 1 day out
+        scheduled --> due : due_at elapses
+        due --> scheduled : graded
+        new --> suspended : Exclude
+        due --> suspended : Exclude
+        scheduled --> suspended : Exclude
+        suspended --> new : Include, never graded
+        suspended --> scheduled : Include, schedule intact
+    }
+```
+
+Reading it:
+
+- **The deck draws from `new` and `due` only.** `scheduled` is the whole point
+  of the scheduler; `suspended` is the learner opting out.
+- **`suspended` keeps its schedule**, which is why it returns to `scheduled`
+  rather than restarting at `new` — unless it had never been graded.
+- **Only `published` cards have a meaningful review state.** `draft` and
+  `archived` are invisible to `apply_visible_filter`, so the right-hand machine
+  stops mattering for them.
+- **`archived -> published` has no UI.** Re-importing the same `external_id`
+  with `status: published` is the only route back, and an archived card is
+  listed nowhere, so its `external_id` is undiscoverable through the product.
+  Tracked as a follow-up in §10 — the same reversibility reasoning as §5.4,
+  which suspension got and this did not.
+
 ## 5. Invariants
 
 ### 5.1 `apply_visible_filter` is the only visibility rule
@@ -301,6 +346,16 @@ permanently due.
   two of the three endpoints that asserts the query count is **equal across two tree sizes** — a
   magic number would churn on unrelated changes, whereas a reintroduced per-parent query is exactly
   what makes the second count diverge.
+
+- **Retiring an official card is one-way through the UI.** `delete_card` sets
+  `status='archived'`, every read path filters on `status='published'`, and
+  nothing exposes a status write or an admin listing of archived cards — so the
+  only route back is re-importing the same `external_id`, whose value is not
+  discoverable in the product. The sibling domain already does this properly:
+  `GET /v1/questions` is admin-only and takes a `status` filter. The fix is the
+  same shape — an admin-only list that can filter by status, plus
+  `PUT /v1/flashcards/{id}/status` — which would also let an admin promote a
+  `draft` without re-importing. Same gap for `draft` cards today.
 
 - **Review's per-lesson cost is unchanged and now dominates it.** `cloze._lesson_summary` calls
   `ensure_cloze_cards` and reads that lesson's cards per document, which is roughly three queries a
