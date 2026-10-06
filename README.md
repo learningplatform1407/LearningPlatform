@@ -177,15 +177,26 @@ classDiagram
         +UUID document_id
         +datetime last_viewed_at
     }
-    class Quiz {
-        +UUID id
-        +UUID document_id
-    }
     class Flashcard {
         +UUID id
         +UUID document_id
+        +string external_id
+        +string scope
+        +string status
         +string front_text
         +string back_text
+        +int order_index
+        +UUID created_by
+    }
+    class FlashcardReviewState {
+        +UUID id
+        +UUID user_id
+        +UUID flashcard_id
+        +float ease_factor
+        +int interval_days
+        +int repetitions
+        +datetime due_at
+        +datetime last_reviewed_at
     }
     class NotebookEntry {
         +UUID id
@@ -254,12 +265,14 @@ classDiagram
     Document "1" -- "1" DocumentVersion : current_version
     DocumentVersion "1" -- "*" DocumentAnnotation
     Document "1" -- "*" LessonView
-    Document "1" -- "*" Quiz
     Document "1" -- "*" Flashcard
     Document "0..1" -- "*" NotebookEntry : source_document_id
 
     Profile "1" -- "*" LessonView
     Profile "1" -- "*" DocumentAnnotation
+    Profile "1" -- "*" Flashcard : created_by
+    Flashcard "1" -- "*" FlashcardReviewState
+    Profile "1" -- "*" FlashcardReviewState : one row per card
 
     Document "0..1" -- "*" Question : provenance
     Profile "1" -- "*" Question : created_by
