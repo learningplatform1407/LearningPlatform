@@ -111,7 +111,9 @@ export default function LearnScreen() {
           accessibilityRole="button"
         >
           <Text style={styles.navCardTitle}>Flashcards</Text>
-          <Text style={styles.navCardSubtitle}>Coming soon.</Text>
+          <Text style={styles.navCardSubtitle}>
+            Spaced-repetition cards per lesson, official and your own.
+          </Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.navCard, pressed && styles.cardPressed]}

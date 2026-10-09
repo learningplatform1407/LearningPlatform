@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from app.cloze.scheduler import ClozeRating
+from app.srs.scheduler import ReviewRating
 
 
 class ClozeCardResponse(BaseModel):
@@ -18,7 +18,7 @@ class ClozeCardResponse(BaseModel):
 
 
 class ClozeRatingRequest(BaseModel):
-    rating: ClozeRating
+    rating: ReviewRating
 
 
 class ClozeReviewStateResponse(BaseModel):

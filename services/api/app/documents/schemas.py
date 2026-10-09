@@ -82,20 +82,6 @@ class RecentLessonResponse(BaseModel):
     last_viewed_at: datetime
 
 
-class QuizResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    document_id: UUID
-    title: str
-    created_at: datetime
-
-
-class FlashcardResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    document_id: UUID
-    front_text: str
-    back_text: str
-    order_index: int
+# QuizResponse is gone with the `quizzes` table. FlashcardResponse moved to
+# app/flashcards/schemas.py, where it carries the scope/status/is_mine fields
+# the real feature needs.

@@ -13,6 +13,14 @@ import type {
   DocumentSummaryResponse,
   EntitlementResponse,
   Flashcard,
+  FlashcardCard,
+  FlashcardCreateRequest,
+  FlashcardImportRequest,
+  FlashcardImportResult,
+  FlashcardReviewState,
+  FlashcardScopeFilter,
+  FlashcardSummaryResponse,
+  FlashcardUpdateRequest,
   QuestionImportRequest,
   QuestionImportResult,
   MeResponse,
@@ -23,8 +31,8 @@ import type {
   Question,
   QuestionCreateRequest,
   QuestionUpdateRequest,
-  Quiz,
   RecentLesson,
+  ReviewRating,
   ReviewSummaryResponse,
   SubChapter,
   SubChapterCreateRequest,
@@ -405,7 +413,6 @@ export function createApiClient(config: ApiClientConfig) {
         method: "POST",
         body: JSON.stringify(data),
       }),
-    listQuizzes: (documentId: string) => request<Quiz[]>(`/v1/documents/${documentId}/quizzes`),
     listQuestions: (params?: {
       status?: string;
       tagId?: string;
@@ -473,8 +480,50 @@ export function createApiClient(config: ApiClientConfig) {
     submitQuizSession: (id: string) =>
       request<QuizSession>(`/v1/quiz-sessions/${id}/submit`, { method: "POST" }),
     getQuizResults: (id: string) => request<QuizSessionResults>(`/v1/quiz-sessions/${id}/results`),
-    listFlashcards: (documentId: string) =>
-      request<Flashcard[]>(`/v1/documents/${documentId}/flashcards`),
+    listFlashcards: (documentId: string, scope?: FlashcardScopeFilter) =>
+      request<Flashcard[]>(
+        `/v1/documents/${documentId}/flashcards${scope ? `?scope=${scope}` : ""}`,
+      ),
+    listDueFlashcards: (
+      documentId: string,
+      params?: { scope?: FlashcardScopeFilter; limit?: number },
+    ) => {
+      const query = new URLSearchParams();
+      if (params?.scope) query.set("scope", params.scope);
+      if (params?.limit !== undefined) query.set("limit", String(params.limit));
+      const suffix = query.toString() ? `?${query}` : "";
+      return request<FlashcardCard[]>(`/v1/documents/${documentId}/flashcards/due${suffix}`);
+    },
+    createFlashcard: (documentId: string, data: FlashcardCreateRequest) =>
+      request<Flashcard>(`/v1/documents/${documentId}/flashcards`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    updateFlashcard: (flashcardId: string, data: FlashcardUpdateRequest) =>
+      request<Flashcard>(`/v1/flashcards/${flashcardId}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    deleteFlashcard: (flashcardId: string) =>
+      request<void>(`/v1/flashcards/${flashcardId}`, { method: "DELETE" }),
+    submitFlashcardReview: (flashcardId: string, rating: ReviewRating) =>
+      request<FlashcardReviewState>(`/v1/flashcards/${flashcardId}/review`, {
+        method: "POST",
+        body: JSON.stringify({ rating }),
+      }),
+    /** Takes a card out of the caller's rotation, or puts it back. PUT with a
+     * field rather than a toggle, so retrying is harmless. */
+    setFlashcardSuspension: (flashcardId: string, suspended: boolean) =>
+      request<FlashcardReviewState>(`/v1/flashcards/${flashcardId}/suspension`, {
+        method: "PUT",
+        body: JSON.stringify({ suspended }),
+      }),
+    getFlashcardSummary: () => request<FlashcardSummaryResponse>("/v1/me/flashcard-summary"),
+    importFlashcards: (data: FlashcardImportRequest, dryRun: boolean) =>
+      request<FlashcardImportResult>(`/v1/flashcards/import?dry_run=${dryRun}`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
     listClozeCards: (documentId: string) =>
       request<ClozeCard[]>(`/v1/documents/${documentId}/cloze-cards`),
     listDueClozeCards: (documentId: string) =>

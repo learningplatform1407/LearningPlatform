@@ -23,7 +23,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --if-present lint
       - run: pnpm -r --if-present typecheck
-      - run: pnpm -r --if-present test
+      # One workspace's tests at a time. `pnpm -r` is parallel by default, and
+      # web (vitest) and mobile (jest) each spawn a worker per core, so on a
+      # two-core runner they oversubscribe it badly. Jest's testTimeout is wall
+      # clock, so a starved worker fails tests that are not slow: the one that
+      # tripped this took 172ms in isolation and still blew a 15s budget here.
+      # Lint and typecheck stay parallel — they assert nothing about timing.
+      - run: pnpm -r --workspace-concurrency=1 --if-present test
       - run: pnpm --filter web exec playwright install --with-deps chromium
       - run: pnpm --filter web test:e2e
 

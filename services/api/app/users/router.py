@@ -8,6 +8,8 @@ from app.cloze.service import get_review_summary
 from app.db.session import get_db
 from app.documents.schemas import RecentLessonResponse
 from app.documents.service import list_recent_lessons
+from app.flashcards.router import read_flashcard_summary
+from app.flashcards.schemas import FlashcardSummaryResponse
 from app.users.models import Profile
 from app.users.schemas import AccountSettingsResponse, MeResponse, ProfileUpdateRequest
 from app.users.service import get_or_create_profile, update_profile
@@ -74,3 +76,10 @@ def read_review_summary(
     db: Session = Depends(get_db),
 ) -> ReviewSummaryResponse:
     return get_review_summary(db, user.id)
+
+
+# Flashcards keep their own summary rather than folding into the one above:
+# the two features have separate queues by design, and this one reports new
+# counts alongside due counts. Registered here, not on the flashcards router,
+# because it describes the caller rather than any one lesson.
+router.get("/me/flashcard-summary", response_model=FlashcardSummaryResponse)(read_flashcard_summary)

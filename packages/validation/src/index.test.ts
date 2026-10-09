@@ -14,7 +14,12 @@ import {
   reviewSummaryResponseSchema,
   documentResponseSchema,
   documentSummaryResponseSchema,
+  clozeRatingSchema,
+  flashcardCardSchema,
   flashcardResponseSchema,
+  flashcardReviewStateResponseSchema,
+  flashcardSuspensionRequestSchema,
+  reviewRatingSchema,
   questionImportRequestSchema,
   questionImportResultSchema,
   meResponseSchema,
@@ -24,7 +29,6 @@ import {
   questionCreateRequestSchema,
   questionResponseSchema,
   questionUpdateRequestSchema,
-  quizResponseSchema,
   recentLessonResponseSchema,
   subChapterCreateRequestSchema,
   subChapterResponseSchema,
@@ -521,19 +525,6 @@ describe("notebookEntryUpdateRequestSchema", () => {
   });
 });
 
-describe("quizResponseSchema", () => {
-  test("accepts a real backend-shaped payload", () => {
-    const payload = {
-      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
-      document_id: "2879a273-236d-429e-985b-db6c43672a1b",
-      title: "Chapter 1 Quiz",
-      created_at: "2026-09-08T22:10:05.372022Z",
-    };
-
-    expect(quizResponseSchema.safeParse(payload).success).toBe(true);
-  });
-});
-
 describe("flashcardResponseSchema", () => {
   test("accepts a real backend-shaped payload", () => {
     const payload = {
@@ -541,10 +532,105 @@ describe("flashcardResponseSchema", () => {
       document_id: "2879a273-236d-429e-985b-db6c43672a1b",
       front_text: "What is a CDN?",
       back_text: "A content delivery network.",
+      scope: "official",
+      status: "published",
       order_index: 0,
+      is_mine: false,
+      suspended: false,
+      can_edit: false,
+      can_delete: false,
     };
 
     expect(flashcardResponseSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("rejects a scope the backend would never send", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      document_id: "2879a273-236d-429e-985b-db6c43672a1b",
+      front_text: "What is a CDN?",
+      back_text: "A content delivery network.",
+      scope: "shared",
+      status: "published",
+      order_index: 0,
+      is_mine: false,
+      suspended: false,
+      can_edit: false,
+      can_delete: false,
+    };
+
+    expect(flashcardResponseSchema.safeParse(payload).success).toBe(false);
+  });
+});
+
+describe("flashcardCardSchema", () => {
+  test("accepts a due card", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      document_id: "2879a273-236d-429e-985b-db6c43672a1b",
+      front_text: "What is a CDN?",
+      back_text: "A content delivery network.",
+      scope: "personal",
+      is_mine: true,
+      due_at: "2026-10-06T10:00:00Z",
+      is_new: false,
+    };
+
+    expect(flashcardCardSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("accepts a new card, whose due_at is null", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      document_id: "2879a273-236d-429e-985b-db6c43672a1b",
+      front_text: "What is a CDN?",
+      back_text: "A content delivery network.",
+      scope: "official",
+      is_mine: false,
+      due_at: null,
+      is_new: true,
+    };
+
+    expect(flashcardCardSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("flashcardReviewStateResponseSchema", () => {
+  test("accepts a real backend-shaped payload", () => {
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      flashcard_id: "2879a273-236d-429e-985b-db6c43672a1b",
+      ease_factor: 2.5,
+      interval_days: 1,
+      repetitions: 1,
+      suspended: false,
+      due_at: "2026-10-07T10:00:00Z",
+      last_reviewed_at: "2026-10-06T10:00:00Z",
+    };
+
+    expect(flashcardReviewStateResponseSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("flashcardSuspensionRequestSchema", () => {
+  test("accepts both directions and rejects a missing flag", () => {
+    expect(flashcardSuspensionRequestSchema.safeParse({ suspended: true }).success).toBe(true);
+    expect(flashcardSuspensionRequestSchema.safeParse({ suspended: false }).success).toBe(true);
+    // Set, not toggled — an empty body must not mean "flip it".
+    expect(flashcardSuspensionRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("reviewRatingSchema", () => {
+  test("accepts the four SM-2 grades and nothing else", () => {
+    for (const rating of ["again", "hard", "good", "easy"]) {
+      expect(reviewRatingSchema.safeParse(rating).success).toBe(true);
+    }
+    expect(reviewRatingSchema.safeParse("medium").success).toBe(false);
+  });
+
+  test("clozeRatingSchema is the same enum, so the two queues cannot drift", () => {
+    expect(clozeRatingSchema.options).toEqual(reviewRatingSchema.options);
   });
 });
 

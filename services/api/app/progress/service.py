@@ -15,10 +15,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.books.service import list_books
-from app.chapters.service import list_chapters
+from app.common.hierarchy import load_content_tree
 from app.documents.models import Document
-from app.documents.service import list_documents
 from app.progress.constants import LESSON_COMPLETION_THRESHOLD
 from app.progress.models import QuestionProgress
 from app.progress.schemas import (
@@ -32,7 +30,6 @@ from app.progress.schemas import (
 from app.questions.constants import QuestionStatus
 from app.questions.grading import grade_answer
 from app.questions.models import Question
-from app.sub_chapters.service import list_sub_chapters
 
 
 def _record_attempt(
@@ -282,18 +279,20 @@ def get_bank_tree(db: Session, user_id: uuid.UUID) -> BankTreeResponse:
             completed_lesson_count=completed,
         )
 
+    # One batched load of the structure instead of a query per parent, which
+    # was 1 + B + B*C + B*C*S round-trips for a page both hubs open on mount.
+    # The per-lesson counts above are already batched, so this was the only
+    # N+1 left here.
+    tree = load_content_tree(db)
+
     books: list[BankTreeBook] = []
-    for book, _ in list_books(db):
+    for book_node in tree.books:
         chapters: list[BankTreeChapter] = []
-        for chapter, _ in list_chapters(db, book.id):
+        for chapter_node in book_node.chapters:
             sub_chapters: list[BankTreeSubChapter] = []
-            for sub_chapter, _ in list_sub_chapters(db, chapter.id):
-                lessons = [
-                    lesson_node(document)
-                    for document in list_documents(
-                        db, sub_chapter_id=sub_chapter.id, filter_by_sub_chapter=True
-                    )
-                ]
+            for sub_node in chapter_node.sub_chapters:
+                sub_chapter = sub_node.sub_chapter
+                lessons = [lesson_node(document) for document in sub_node.documents]
                 sub_chapters.append(
                     BankTreeSubChapter(
                         id=sub_chapter.id,
@@ -314,6 +313,7 @@ def get_bank_tree(db: Session, user_id: uuid.UUID) -> BankTreeResponse:
                         lessons=lessons,
                     )
                 )
+            chapter = chapter_node.chapter
             chapters.append(
                 BankTreeChapter(
                     id=chapter.id,
@@ -332,6 +332,7 @@ def get_bank_tree(db: Session, user_id: uuid.UUID) -> BankTreeResponse:
                     sub_chapters=sub_chapters,
                 )
             )
+        book = book_node.book
         books.append(
             BankTreeBook(
                 id=book.id,
@@ -349,10 +350,7 @@ def get_bank_tree(db: Session, user_id: uuid.UUID) -> BankTreeResponse:
             )
         )
 
-    uncategorized = [
-        lesson_node(document)
-        for document in list_documents(db, sub_chapter_id=None, filter_by_sub_chapter=True)
-    ]
+    uncategorized = [lesson_node(document) for document in tree.uncategorized_documents]
     unassigned = _unassigned_counts(db, user_id)
     return BankTreeResponse(
         books=books,

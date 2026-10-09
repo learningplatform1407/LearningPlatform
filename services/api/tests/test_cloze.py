@@ -10,9 +10,9 @@ from app.auth.schemas import AuthenticatedUser
 from app.books.models import Book
 from app.chapters.models import Chapter
 from app.cloze.generation import generate_cloze_spans
-from app.cloze.scheduler import SchedulerState, compute_next_state
 from app.documents.models import Document, DocumentVersion
 from app.main import app
+from app.srs.scheduler import MAX_INTERVAL_DAYS, SchedulerState, compute_next_state
 from app.sub_chapters.models import SubChapter
 from app.users.models import AccountSettings, Profile
 
@@ -132,6 +132,35 @@ def test_easy_applies_the_bonus_and_raises_ease() -> None:
     assert result.interval_days == 20  # round(round(6 * 2.5) * 1.3) = round(19.5) = 20
     assert result.ease_factor == pytest.approx(2.65)
     assert result.repetitions == 3
+
+
+def test_repeated_easy_grades_cannot_overflow_the_due_date() -> None:
+    """Intervals compound by ease, and ease itself grows on `easy`, so this
+    reached ~2,500 years by the tenth grade and raised OverflowError on the
+    eleventh -- an unhandled 500. Reachable because neither review endpoint
+    requires the card to be due, so a client can post repeatedly."""
+    state = SchedulerState(ease_factor=2.5, interval_days=0, repetitions=0)
+    for _ in range(40):
+        result = compute_next_state("easy", state)
+        assert result.interval_days <= MAX_INTERVAL_DAYS
+        # The point of the cap: computing due_at must never raise.
+        assert result.due_at is not None
+        state = SchedulerState(result.ease_factor, result.interval_days, result.repetitions)
+
+    assert state.interval_days == MAX_INTERVAL_DAYS
+
+
+def test_no_rating_can_schedule_a_card_in_the_past_or_today() -> None:
+    """The floor of one day is what makes "due" mean "due on a later day".
+    It also closes a hole: `good` on repetitions>=2 with interval 0 computed
+    round(0 * ease) == 0, which would have left the card permanently due."""
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    for interval in (0, 1, 6, 30):
+        for reps in (0, 1, 2, 5):
+            for rating in ("again", "hard", "good", "easy"):
+                result = compute_next_state(rating, SchedulerState(1.3, interval, reps), now=now)
+                assert result.interval_days >= 1
+                assert result.due_at > now
 
 
 # --- HTTP endpoints ---------------------------------------------------------

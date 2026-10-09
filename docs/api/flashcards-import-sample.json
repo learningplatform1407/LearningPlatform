@@ -1,0 +1,48 @@
+{
+  "flashcards": [
+    {
+      "external_id": "cardio-fc-001",
+      "document_id": "648089c1-837b-41e9-83bf-e87adcd25607",
+      "front_text": "Preload",
+      "back_text": "The ventricular wall tension at end-diastole — in practice, the volume of blood in the ventricle just before it contracts. Raised by volume loading, lowered by nitrates and by venodilation.",
+      "order_index": 0
+    },
+    {
+      "external_id": "cardio-fc-002",
+      "document_id": "648089c1-837b-41e9-83bf-e87adcd25607",
+      "front_text": "Afterload",
+      "back_text": "The resistance the ventricle must overcome to eject. Approximated clinically by systemic vascular resistance; lowered by arteriodilators such as hydralazine.",
+      "order_index": 1
+    },
+    {
+      "external_id": "cardio-fc-003",
+      "document_id": "648089c1-837b-41e9-83bf-e87adcd25607",
+      "front_text": "Why does nitroglycerin relieve angina?",
+      "back_text": "Chiefly by venodilation, which drops preload and therefore myocardial oxygen demand. Coronary vasodilation contributes but is not the main mechanism.",
+      "order_index": 2
+    },
+    {
+      "external_id": "cardio-fc-004",
+      "document_id": "648089c1-837b-41e9-83bf-e87adcd25607",
+      "front_text": "Mnemonic — causes of a raised JVP",
+      "back_text": "PQRST: Pericardial effusion, Quantity of fluid raised, Right heart failure, Superior vena cava obstruction, Tricuspid regurgitation.",
+      "order_index": 3
+    },
+    {
+      "external_id": "cardio-fc-005",
+      "document_id": "648089c1-837b-41e9-83bf-e87adcd25607",
+      "front_text": "Frank–Starling relationship, in one sentence",
+      "back_text": "Stroke volume rises with end-diastolic volume, up to the point where further stretch begins to reduce contractile efficiency.",
+      "order_index": 4,
+      "status": "published"
+    },
+    {
+      "external_id": "cardio-fc-006-draft",
+      "document_id": "648089c1-837b-41e9-83bf-e87adcd25607",
+      "front_text": "This card is staged, not released",
+      "back_text": "Imported with status 'draft', so it must not appear in anyone's deck, in the lesson's card list, or in the hub's due/new counts. Flip it to 'published' by re-importing the same external_id with the status changed — that is the upsert working.",
+      "order_index": 5,
+      "status": "draft"
+    }
+  ]
+}

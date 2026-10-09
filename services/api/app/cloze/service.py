@@ -4,11 +4,8 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.books.service import list_books
-from app.chapters.service import list_chapters
 from app.cloze.generation import generate_cloze_spans
 from app.cloze.models import ClozeCard, ClozeReviewState
-from app.cloze.scheduler import ClozeRating, SchedulerState, compute_next_state
 from app.cloze.schemas import (
     ReviewSummaryBook,
     ReviewSummaryChapter,
@@ -17,18 +14,15 @@ from app.cloze.schemas import (
     ReviewSummarySubChapter,
 )
 from app.common.errors import ApiError
+from app.common.hierarchy import load_content_tree
 from app.documents.models import Document
-from app.documents.service import list_documents
-from app.sub_chapters.service import list_sub_chapters
-
-
-def _to_utc_naive(value: datetime) -> datetime:
-    """Postgres (production) round-trips DateTime(timezone=True) columns as
-    tz-aware; SQLite (tests only) round-trips them as naive. Both represent
-    the same UTC instant, so normalizing away the tzinfo before comparing
-    keeps due-ness checks correct on either backend instead of crashing on
-    a naive-vs-aware comparison."""
-    return value.replace(tzinfo=None) if value.tzinfo is not None else value
+from app.srs.scheduler import (
+    DEFAULT_EASE_FACTOR,
+    ReviewRating,
+    SchedulerState,
+    compute_next_state,
+    to_utc_naive,
+)
 
 
 def ensure_cloze_cards(db: Session, document: Document) -> None:
@@ -72,16 +66,16 @@ def list_due_cloze_cards(db: Session, document: Document, user_id: uuid.UUID) ->
             )
         )
     }
-    now = _to_utc_naive(datetime.now(UTC))
+    now = to_utc_naive(datetime.now(UTC))
     return [
         card
         for card in cards
-        if (state := states.get(card.id)) is None or _to_utc_naive(state.due_at) <= now
+        if (state := states.get(card.id)) is None or to_utc_naive(state.due_at) <= now
     ]
 
 
 def submit_cloze_review(
-    db: Session, cloze_card_id: uuid.UUID, user_id: uuid.UUID, rating: ClozeRating
+    db: Session, cloze_card_id: uuid.UUID, user_id: uuid.UUID, rating: ReviewRating
 ) -> ClozeReviewState:
     card = db.get(ClozeCard, cloze_card_id)
     if card is None:
@@ -94,7 +88,7 @@ def submit_cloze_review(
         )
     )
     current = SchedulerState(
-        ease_factor=state.ease_factor if state else 2.5,
+        ease_factor=state.ease_factor if state else DEFAULT_EASE_FACTOR,
         interval_days=state.interval_days if state else 0,
         repetitions=state.repetitions if state else 0,
     )
@@ -121,54 +115,53 @@ def _lesson_summary(db: Session, document: Document, user_id: uuid.UUID) -> Revi
 
 
 def get_review_summary(db: Session, user_id: uuid.UUID) -> ReviewSummaryResponse:
-    """Walks the same book -> chapter -> sub-chapter -> lesson hierarchy the
-    Library page already reads (app/books/service.py, app/chapters/service.py,
-    app/sub_chapters/service.py, app/documents/service.py), overlaying each
-    lesson with its due-today cloze count and summing that count upward at
-    every level. Every node is included, even at due_count 0 -- this powers
-    a "see the whole course structure" dashboard, not a filtered due-only
-    view. Walks the whole tree eagerly on every call rather than paginating
-    or caching -- an accepted tradeoff for this app's scale."""
+    """Overlays each lesson's due cloze count on the course tree, summing
+    upward. Every node is included, even at due_count 0 -- this powers a
+    "see the whole course structure" dashboard, not a filtered due-only view.
+
+    The structure comes from `load_content_tree` in four queries rather than
+    the nested per-parent walk this used to do. Note the per-lesson cost
+    below is unchanged and still dominates: `_lesson_summary` generates and
+    reads that lesson's cloze cards, which cannot be batched while generation
+    is lazy per document. Flashcards avoids it by batching its counts into
+    one query; doing the same here is a separate change.
+    """
+    tree = load_content_tree(db)
+
     books = []
-    for book, _ in list_books(db):
+    for book_node in tree.books:
         chapters = []
-        for chapter, _ in list_chapters(db, book.id):
+        for chapter_node in book_node.chapters:
             sub_chapters = []
-            for sub_chapter, _ in list_sub_chapters(db, chapter.id):
-                lessons = [
-                    _lesson_summary(db, doc, user_id)
-                    for doc in list_documents(
-                        db, sub_chapter_id=sub_chapter.id, filter_by_sub_chapter=True
-                    )
-                ]
+            for sub_node in chapter_node.sub_chapters:
+                lessons = [_lesson_summary(db, doc, user_id) for doc in sub_node.documents]
                 sub_chapters.append(
                     ReviewSummarySubChapter(
-                        id=sub_chapter.id,
-                        title=sub_chapter.title,
+                        id=sub_node.sub_chapter.id,
+                        title=sub_node.sub_chapter.title,
                         due_count=sum(lesson.due_count for lesson in lessons),
                         lessons=lessons,
                     )
                 )
             chapters.append(
                 ReviewSummaryChapter(
-                    id=chapter.id,
-                    title=chapter.title,
+                    id=chapter_node.chapter.id,
+                    title=chapter_node.chapter.title,
                     due_count=sum(sc.due_count for sc in sub_chapters),
                     sub_chapters=sub_chapters,
                 )
             )
         books.append(
             ReviewSummaryBook(
-                id=book.id,
-                title=book.title,
+                id=book_node.book.id,
+                title=book_node.book.title,
                 due_count=sum(chapter.due_count for chapter in chapters),
                 chapters=chapters,
             )
         )
 
     uncategorized_lessons = [
-        _lesson_summary(db, doc, user_id)
-        for doc in list_documents(db, sub_chapter_id=None, filter_by_sub_chapter=True)
+        _lesson_summary(db, doc, user_id) for doc in tree.uncategorized_documents
     ]
 
     return ReviewSummaryResponse(books=books, uncategorized_lessons=uncategorized_lessons)

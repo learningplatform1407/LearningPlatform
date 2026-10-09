@@ -10,10 +10,15 @@ const createSignedUrl = vi.fn();
 const listAnnotations = vi.fn();
 const createAnnotation = vi.fn();
 const deleteAnnotation = vi.fn();
-const listQuizzes = vi.fn();
 const listQuestionBank = vi.fn();
 const getQuizAvailableCount = vi.fn();
 const listFlashcards = vi.fn();
+const listDueFlashcards = vi.fn();
+const createFlashcard = vi.fn();
+const updateFlashcard = vi.fn();
+const deleteFlashcard = vi.fn();
+const submitFlashcardReview = vi.fn();
+const setFlashcardSuspension = vi.fn();
 const listDueClozeCards = vi.fn();
 const submitClozeReview = vi.fn();
 const listNotebookEntries = vi.fn();
@@ -28,10 +33,15 @@ vi.mock("@/lib/api-client.browser", () => ({
     listAnnotations,
     createAnnotation,
     deleteAnnotation,
-    listQuizzes,
     listQuestionBank,
     getQuizAvailableCount,
     listFlashcards,
+    listDueFlashcards,
+    createFlashcard,
+    updateFlashcard,
+    deleteFlashcard,
+    submitFlashcardReview,
+    setFlashcardSuspension,
     listDueClozeCards,
     submitClozeReview,
     listNotebookEntries,
@@ -108,7 +118,21 @@ beforeEach(() => {
   listAnnotations.mockReset().mockResolvedValue([]);
   createAnnotation.mockReset().mockResolvedValue({});
   deleteAnnotation.mockReset().mockResolvedValue(undefined);
-  listQuizzes.mockReset().mockResolvedValue([]);
+  listDueFlashcards.mockReset().mockResolvedValue([]);
+  createFlashcard.mockReset();
+  updateFlashcard.mockReset();
+  deleteFlashcard.mockReset().mockResolvedValue(undefined);
+  submitFlashcardReview.mockReset();
+  setFlashcardSuspension.mockReset().mockResolvedValue({
+    id: "s1",
+    flashcard_id: "f1",
+    suspended: true,
+    ease_factor: 2.5,
+    interval_days: 1,
+    repetitions: 1,
+    due_at: "2026-10-07T00:00:00Z",
+    last_reviewed_at: null,
+  });
   listQuestionBank.mockReset().mockResolvedValue([]);
   getQuizAvailableCount.mockReset().mockResolvedValue({ available: 0 });
   listFlashcards.mockReset().mockResolvedValue([]);
@@ -738,16 +762,460 @@ describe("LecturePage", () => {
     expect(await screen.findByText("No questions for this lesson yet.")).toBeInTheDocument();
   });
 
-  test("switching to the Flashcards tab shows a Coming soon placeholder", async () => {
+  function officialCard(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "f1",
+      document_id: "d1",
+      front_text: "What is a CDN?",
+      back_text: "A content delivery network.",
+      scope: "official",
+      is_mine: false,
+      due_at: null,
+      is_new: true,
+      ...overrides,
+    };
+  }
+
+  function lessonCard(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "f1",
+      document_id: "d1",
+      front_text: "What is a CDN?",
+      back_text: "A content delivery network.",
+      scope: "official",
+      status: "published",
+      order_index: 0,
+      is_mine: false,
+      suspended: false,
+      can_edit: false,
+      can_delete: false,
+      ...overrides,
+    };
+  }
+
+  test("a card can be excluded from reviews straight from the runner", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([officialCard()]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await user.click(await screen.findByText("What is a CDN?"));
+    await user.click(screen.getByRole("button", { name: "Exclude this card from reviews" }));
+
+    expect(setFlashcardSuspension).toHaveBeenCalledWith("f1", true);
+    expect(
+      await screen.findByText("Excluded from reviews. You can include it again below."),
+    ).toBeInTheDocument();
+  });
+
+  test("an excluded card is still listed, and can be included again", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    // Excluded cards are absent from the deck — the server drops them — so
+    // the list is the only route back into the rotation.
+    listDueFlashcards.mockResolvedValue([]);
+    listFlashcards.mockResolvedValue([lessonCard({ suspended: true })]);
+    setFlashcardSuspension.mockResolvedValue({
+      id: "s1",
+      flashcard_id: "f1",
+      suspended: false,
+      ease_factor: 2.5,
+      interval_days: 6,
+      repetitions: 2,
+      due_at: "2026-10-12T00:00:00Z",
+      last_reviewed_at: "2026-10-06T00:00:00Z",
+    });
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+
+    expect(await screen.findByText("Not in rotation")).toBeInTheDocument();
+    expect(screen.getByText(/1 excluded/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Include in reviews" }));
+
+    expect(setFlashcardSuspension).toHaveBeenCalledWith("f1", false);
+  });
+
+  test("cancelling an edit discards the draft instead of committing it later", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([]);
+    listFlashcards.mockResolvedValue([
+      lessonCard({ can_edit: true, can_delete: true, front_text: "Mitral valve" }),
+    ]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+
+    const front = screen.getByLabelText("Front");
+    await user.clear(front);
+    await user.type(front, "xxx");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    // Reopening must show the stored text, not the abandoned draft —
+    // otherwise Save would commit an edit the learner cancelled.
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByLabelText("Front")).toHaveValue("Mitral valve");
+  });
+
+  test("Save is blocked while a field is empty", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([]);
+    listFlashcards.mockResolvedValue([lessonCard({ can_edit: true, can_delete: true })]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.clear(screen.getByLabelText("Front"));
+
+    // The server rejects an empty field with a 422; stopping here avoids a
+    // round-trip that would surface as an unexplained non-response.
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(updateFlashcard).not.toHaveBeenCalled();
+  });
+
+  test("a failed include/exclude toggle is reported, not swallowed", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([]);
+    listFlashcards.mockResolvedValue([lessonCard({ suspended: true })]);
+    setFlashcardSuspension.mockRejectedValue(new Error("offline"));
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await user.click(await screen.findByRole("button", { name: "Include in reviews" }));
+
+    // This toggle is the only route back into the rotation, so silence would
+    // leave the learner unable to tell the card is still excluded.
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not include that card.");
+  });
+
+  test("a lesson whose every card is excluded does not claim to have none", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    // The server filters suspended cards out of the deck, so an all-excluded
+    // lesson has an empty deck but is not an empty lesson.
+    listDueFlashcards.mockResolvedValue([]);
+    listFlashcards.mockResolvedValue([lessonCard({ suspended: true })]);
 
     renderPage();
     await screen.findByText("Hello world");
 
     await userEvent.setup().click(screen.getByRole("button", { name: "Flashcards" }));
 
-    expect(await screen.findByText("Coming soon.")).toBeInTheDocument();
-    expect(listFlashcards).toHaveBeenCalledWith("d1");
+    await screen.findByText("Not in rotation");
+    expect(screen.queryByText(/No flashcards for this lesson yet/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("You're all caught up — nothing to review right now."),
+    ).toBeInTheDocument();
+  });
+
+  test("switching scope resets the session counter", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([officialCard()]);
+    submitFlashcardReview.mockResolvedValue({
+      id: "s1",
+      flashcard_id: "f1",
+      suspended: false,
+      ease_factor: 2.5,
+      interval_days: 1,
+      repetitions: 1,
+      due_at: "2026-10-07T00:00:00Z",
+      last_reviewed_at: "2026-10-06T00:00:00Z",
+    });
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await user.click(await screen.findByText("What is a CDN?"));
+    await user.click(screen.getByRole("button", { name: "Good" }));
+    await screen.findByText("Next review in 1 day.");
+
+    await user.click(screen.getByRole("button", { name: "Official" }));
+
+    // The deck is re-keyed by scope, so a counter carried over from the
+    // previous scope would report a position the new deck doesn't have.
+    expect(await screen.findByText("Card 1 of 1")).toBeInTheDocument();
+    expect(screen.queryByText("Next review in 1 day.")).not.toBeInTheDocument();
+  });
+
+  test("the lesson list offers exclusion on official cards the learner cannot edit", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([]);
+    listFlashcards.mockResolvedValue([lessonCard({ is_mine: false })]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Flashcards" }));
+
+    // Suspension writes the caller's own review state, so it applies to
+    // shared content; editing and deleting do not.
+    expect(await screen.findByRole("button", { name: "Exclude from reviews" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+  });
+
+  test("the Flashcards tab shows the front only until the card is tapped", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([officialCard()]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+
+    expect(await screen.findByText("What is a CDN?")).toBeInTheDocument();
+    // The back ships with the deck but must not be rendered before the tap —
+    // that reveal-on-demand is the whole interaction.
+    expect(screen.queryByText("A content delivery network.")).not.toBeInTheDocument();
+    expect(screen.getByText("Tap to reveal")).toBeInTheDocument();
+
+    await user.click(screen.getByText("What is a CDN?"));
+
+    expect(await screen.findByText("A content delivery network.")).toBeInTheDocument();
+    for (const label of ["Again", "Hard", "Good", "Easy"]) {
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    }
+  });
+
+  test("grading a flashcard submits the rating and reports the next interval", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([officialCard()]);
+    submitFlashcardReview.mockResolvedValue({
+      id: "s1",
+      flashcard_id: "f1",
+      ease_factor: 2.5,
+      interval_days: 1,
+      repetitions: 1,
+      due_at: "2026-10-07T00:00:00Z",
+      last_reviewed_at: "2026-10-06T00:00:00Z",
+    });
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await user.click(await screen.findByText("What is a CDN?"));
+    await user.click(screen.getByRole("button", { name: "Good" }));
+
+    expect(submitFlashcardReview).toHaveBeenCalledWith("f1", "good");
+    expect(await screen.findByText("Next review in 1 day.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("You're all caught up — nothing to review right now."),
+    ).toBeInTheDocument();
+  });
+
+  test("Again brings the card back later in the same session", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([
+      officialCard(),
+      officialCard({ id: "f2", front_text: "What is TTL?" }),
+    ]);
+    submitFlashcardReview.mockResolvedValue({
+      id: "s1",
+      flashcard_id: "f1",
+      suspended: false,
+      ease_factor: 2.3,
+      interval_days: 1,
+      repetitions: 0,
+      due_at: "2026-10-08T00:00:00Z",
+      last_reviewed_at: "2026-10-07T00:00:00Z",
+    });
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await user.click(await screen.findByText("What is a CDN?"));
+    await user.click(screen.getByRole("button", { name: "Again" }));
+
+    // The server scheduled it for tomorrow — its floor is a whole day — so
+    // holding it client-side is what makes "Again" mean "again now".
+    expect(
+      await screen.findByText("You'll see this one again before you finish."),
+    ).toBeInTheDocument();
+    // Appended, not re-shown immediately: the next card is the other one.
+    expect(await screen.findByText("What is TTL?")).toBeInTheDocument();
+    // Two cards still to do, and nothing counted as finished.
+    expect(screen.getByText("Card 1 of 2")).toBeInTheDocument();
+  });
+
+  test("a card rated Again and then Good is finished and does not return", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([officialCard()]);
+    submitFlashcardReview.mockResolvedValue({
+      id: "s1",
+      flashcard_id: "f1",
+      suspended: false,
+      ease_factor: 2.3,
+      interval_days: 1,
+      repetitions: 0,
+      due_at: "2026-10-08T00:00:00Z",
+      last_reviewed_at: "2026-10-07T00:00:00Z",
+    });
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await user.click(await screen.findByText("What is a CDN?"));
+    await user.click(screen.getByRole("button", { name: "Again" }));
+
+    // It came back as the only card left.
+    await user.click(await screen.findByText("What is a CDN?"));
+    await user.click(screen.getByRole("button", { name: "Good" }));
+
+    expect(
+      await screen.findByText("You're all caught up — nothing to review right now."),
+    ).toBeInTheDocument();
+  });
+
+  test("an official card offers Retire to an admin, never Edit", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([]);
+    // What the importing admin actually gets back: they created it, so
+    // is_mine is true, but an official card is not editable.
+    listFlashcards.mockResolvedValue([
+      lessonCard({ is_mine: true, can_edit: false, can_delete: true, scope: "official" }),
+    ]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Flashcards" }));
+
+    expect(await screen.findByRole("button", { name: "Retire" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+  });
+
+  test("a failed grade is reported rather than silently doing nothing", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([officialCard()]);
+    submitFlashcardReview.mockRejectedValue(new Error("offline"));
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await user.click(await screen.findByText("What is a CDN?"));
+    await user.click(screen.getByRole("button", { name: "Good" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not save that rating.");
+    // The card must stay in the queue — it was never actually graded.
+    expect(screen.getByText("What is a CDN?")).toBeInTheDocument();
+  });
+
+  test("the Flashcards tab says so when the lesson has no cards at all", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Flashcards" }));
+
+    expect(
+      await screen.findByText(
+        "No flashcards for this lesson yet. Add your own, or check back for official ones.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  test("the scope toggle narrows the deck to the learner's own cards", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([officialCard()]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await screen.findByText("What is a CDN?");
+
+    await user.click(screen.getByRole("button", { name: "Mine" }));
+
+    expect(listDueFlashcards).toHaveBeenCalledWith("d1", { scope: "personal" });
+  });
+
+  test("a learner can add their own card to the lesson", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([]);
+    createFlashcard.mockResolvedValue({
+      id: "f2",
+      document_id: "d1",
+      front_text: "Mnemonic?",
+      back_text: "Remember it like this.",
+      scope: "personal",
+      status: "published",
+      order_index: 0,
+      is_mine: true,
+    });
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Flashcards" }));
+    await user.click(await screen.findByRole("button", { name: "Add a card" }));
+
+    await user.type(screen.getByLabelText("Front"), "Mnemonic?");
+    await user.type(screen.getByLabelText("Back"), "Remember it like this.");
+    await user.click(screen.getByRole("button", { name: "Save card" }));
+
+    expect(createFlashcard).toHaveBeenCalledWith("d1", {
+      front_text: "Mnemonic?",
+      back_text: "Remember it like this.",
+    });
+  });
+
+  test("a card carries its provenance as a word, not just a colour", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([officialCard({ scope: "personal", is_mine: true })]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Flashcards" }));
+
+    // Queried through the card rather than by bare text: the scope filter
+    // offers a button labelled "Mine" too, so a global text match is
+    // ambiguous. Provenance is always a word, never colour alone (WCAG 1.4.1).
+    const card = await screen.findByRole("button", { name: /What is a CDN\?/ });
+    expect(card).toHaveTextContent("Mine");
+  });
+
+  test("an official card is badged as official", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([officialCard()]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Flashcards" }));
+
+    const card = await screen.findByRole("button", { name: /What is a CDN\?/ });
+    expect(card).toHaveTextContent("Official");
   });
 
   test("the Review tab shows the whole lesson with the due word blanked, then reveals it on demand", async () => {

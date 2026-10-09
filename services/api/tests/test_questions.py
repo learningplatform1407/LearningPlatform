@@ -1,4 +1,6 @@
-from uuid import UUID
+from collections.abc import Callable
+from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -6,7 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
+from app.books.models import Book
+from app.chapters.models import Chapter
+from app.documents.models import Document
 from app.main import app
+from app.sub_chapters.models import SubChapter
 from app.users.models import AccountSettings, Profile
 
 
@@ -555,3 +561,67 @@ def test_multi_5_per_option_worked_table(selected: frozenset[str], expected_poin
     all_options = frozenset({"a", "b", "c", "d", "e"})
     correct_key = frozenset({"a", "c"})
     assert scheme.grade(selected, correct_key, all_options) == expected_points
+
+
+def test_the_bank_tree_issues_a_fixed_number_of_queries_however_big_the_course(
+    authed_client: TestClient,
+    db_session: Session,
+    count_queries: Callable[[], Any],
+) -> None:
+    """The Question Bank tree walked the structure with a query per parent,
+    the same N+1 the Flashcards hub had: 1 + B + B*C + B*C*S round-trips on a
+    page both platforms open on mount. Its per-lesson counts were already
+    batched, so the structure was the only offender.
+
+    Asserts equality across two tree sizes rather than a magic number -- a
+    per-parent query is exactly what makes the second count jump, and a
+    fixed number would churn whenever an unrelated query moved.
+    """
+    owner = uuid4()
+    db_session.add(Profile(id=owner, settings=AccountSettings(user_id=owner)))
+    db_session.commit()
+
+    def grow(books: int, chapters: int, subs: int) -> None:
+        for b in range(books):
+            book = Book(title=f"B{b}-{uuid4()}", order_index=b, created_by=owner)
+            db_session.add(book)
+            db_session.flush()
+            for c in range(chapters):
+                chapter = Chapter(
+                    title=f"C{b}.{c}", book_id=book.id, order_index=c, created_by=owner
+                )
+                db_session.add(chapter)
+                db_session.flush()
+                for sc in range(subs):
+                    sub = SubChapter(
+                        title=f"S{b}.{c}.{sc}",
+                        chapter_id=chapter.id,
+                        order_index=sc,
+                        created_by=owner,
+                    )
+                    db_session.add(sub)
+                    db_session.flush()
+                    db_session.add(
+                        Document(
+                            title=f"L{b}.{c}.{sc}",
+                            created_by=owner,
+                            sub_chapter_id=sub.id,
+                            order_index=0,
+                        )
+                    )
+        db_session.commit()
+
+    grow(1, 1, 1)
+    # Warm-up, discarded: the first call also inserts the caller's profile.
+    authed_client.get("/v1/question-bank/tree")
+
+    with count_queries() as small:
+        assert authed_client.get("/v1/question-bank/tree").status_code == 200
+
+    grow(3, 2, 2)
+    with count_queries() as large:
+        response = authed_client.get("/v1/question-bank/tree")
+    assert response.status_code == 200
+
+    assert len(response.json()["books"]) == 4
+    assert large[0] == small[0]
