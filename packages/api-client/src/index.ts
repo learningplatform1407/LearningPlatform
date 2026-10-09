@@ -12,6 +12,11 @@ import type {
   DocumentResponse,
   DocumentSummaryResponse,
   EntitlementResponse,
+  FeedImageUploadUrlRequest,
+  FeedImageUploadUrlResponse,
+  FeedPost,
+  FeedPostCreateRequest,
+  FeedPostUpdateRequest,
   Flashcard,
   FlashcardCard,
   FlashcardCreateRequest,
@@ -410,6 +415,33 @@ export function createApiClient(config: ApiClientConfig) {
       request<SubChapter[]>(`/v1/chapters/${chapterId}/sub-chapters`),
     createSubChapter: (chapterId: string, data: SubChapterCreateRequest) =>
       request<SubChapter>(`/v1/chapters/${chapterId}/sub-chapters`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    /** Newest first. `limit`/`offset` exist so paging is additive later; the
+     * UI fetches one page today, which is why it has no offset skew to
+     * handle. See docs/architecture/feed.md. */
+    listFeed: (params?: { limit?: number; offset?: number }) => {
+      const query = new URLSearchParams();
+      if (params?.limit !== undefined) query.set("limit", String(params.limit));
+      if (params?.offset !== undefined) query.set("offset", String(params.offset));
+      const qs = query.toString();
+      return request<FeedPost[]>(`/v1/feed${qs ? `?${qs}` : ""}`);
+    },
+    createFeedPost: (data: FeedPostCreateRequest) =>
+      request<FeedPost>("/v1/feed", { method: "POST", body: JSON.stringify(data) }),
+    updateFeedPost: (postId: string, data: FeedPostUpdateRequest) =>
+      request<FeedPost>(`/v1/feed/${postId}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    deleteFeedPost: (postId: string) => request<void>(`/v1/feed/${postId}`, { method: "DELETE" }),
+    /** Step one of three: mint a key and a signed upload token, then
+     * `uploadToSignedUrl` into `feed-images`, then create the post with the
+     * returned `storage_path`. The bucket has no client write policy, so this
+     * admin-gated call is the only way in. */
+    requestFeedImageUploadUrl: (data: FeedImageUploadUrlRequest) =>
+      request<FeedImageUploadUrlResponse>("/v1/feed/image-upload-url", {
         method: "POST",
         body: JSON.stringify(data),
       }),

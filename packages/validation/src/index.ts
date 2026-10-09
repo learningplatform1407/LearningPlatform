@@ -485,3 +485,68 @@ export const questionImportResultSchema = z.object({
   skipped: z.number(),
   errors: z.array(questionImportErrorSchema),
 });
+
+/** `news` is an announcement that stands on its own; `media` is one carrying
+ * a livestream, Instagram or other social URL in its body. Narrower than the
+ * original FEED epic's news/exam/livestream: there is no separate link field,
+ * because a URL belongs in the text the author is already writing, and an
+ * *embedded* player is deliberately out of scope. */
+export const feedCategorySchema = z.enum(["news", "media"]);
+
+export const feedAuthorSchema = z.object({
+  id: z.string(),
+  display_name: z.string().nullable(),
+  avatar_url: z.string().nullable(),
+});
+
+export const feedPostResponseSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  body: z.string(),
+  category: feedCategorySchema,
+  /** A storage key in the public `feed-images` bucket, not a URL — resolve it
+   * with `getPublicUrl()`, which is a synchronous string concat. Deliberately
+   * unlike `profiles.avatar_url`, which stores a full URL because the client
+   * builds it there. See docs/architecture/feed.md. */
+  image_path: z.string().nullable(),
+  /** Null once the authoring admin's profile is deleted: `author_id` is SET
+   * NULL, so the announcement outlives its author. A normal state, not an
+   * error — both clients fall back to a generic byline. */
+  author: feedAuthorSchema.nullable(),
+  published_at: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  /** Computed server-side and, unlike the flashcard fields of the same name,
+   * role-based rather than ownership-based: any admin may edit or delete any
+   * post. Gate the buttons on these, never on the caller's own role — that
+   * re-derivation is the bug ad08d02 fixed. */
+  can_edit: z.boolean(),
+  can_delete: z.boolean(),
+});
+
+export const feedPostCreateRequestSchema = z.object({
+  title: z.string().min(1),
+  body: z.string().min(1),
+  category: feedCategorySchema,
+  image_path: z.string().nullable().optional(),
+});
+
+/** Every field optional, and `image_path: null` is meaningful — it clears the
+ * picture, which the server distinguishes from omitting the field. `title` and
+ * `body` keep min(1) so an edit cannot blank them. */
+export const feedPostUpdateRequestSchema = z.object({
+  title: z.string().min(1).optional(),
+  body: z.string().min(1).optional(),
+  category: feedCategorySchema.optional(),
+  image_path: z.string().nullable().optional(),
+});
+
+export const feedImageUploadUrlRequestSchema = z.object({
+  mime_type: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  size_bytes: z.number(),
+});
+
+export const feedImageUploadUrlResponseSchema = z.object({
+  storage_path: z.string(),
+  token: z.string(),
+});
