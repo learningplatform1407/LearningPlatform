@@ -1,4 +1,5 @@
 import type { MeResponse } from "@lp/contracts";
+import { formatMonthYear } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
@@ -18,10 +19,6 @@ import { supabase } from "@/lib/supabase";
 import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
-
-function formatJoined(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", { month: "long", year: "numeric" });
-}
 
 export default function ProfileScreen() {
   const queryClient = useQueryClient();
@@ -154,7 +151,7 @@ export default function ProfileScreen() {
             </View>
           )}
         </Pressable>
-        <Text style={styles.joined}>Joined {formatJoined(data.created_at)}</Text>
+        <Text style={styles.joined}>Joined {formatMonthYear(data.created_at)}</Text>
       </View>
       {avatarError && <Text style={styles.error}>{avatarError}</Text>}
 
