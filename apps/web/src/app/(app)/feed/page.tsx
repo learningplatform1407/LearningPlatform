@@ -1,7 +1,15 @@
 "use client";
 
 import type { FeedCategory, FeedPost } from "@lp/contracts";
-import { formatPostDate } from "@lp/ui";
+import {
+  ALLOWED_FEED_IMAGE_TYPES,
+  FEED_CATEGORY_LABELS,
+  isAllowedFeedImageType,
+  FEED_IMAGES_BUCKET,
+  MAX_FEED_IMAGE_BYTES,
+  formatPostDate,
+  splitLinkifiedBody,
+} from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
@@ -10,46 +18,30 @@ import { Card } from "@/components/card";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { createClient } from "@/lib/supabase/client";
 
-const FEED_IMAGES_BUCKET = "feed-images";
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
-
-const CATEGORY_LABELS: Record<FeedCategory, string> = {
-  news: "News",
-  media: "Media",
-};
-
-// Only an absolute http(s) URL becomes a link. Deliberately narrow: the body
-// is free text, so a looser matcher is how `javascript:` ends up in an href.
-const URL_PATTERN = /(https?:\/\/[^\s<]+)/g;
-
 /** Renders the body with bare URLs turned into links.
  *
  * There is no `link_url` column -- a URL belongs in the text the author is
  * already writing -- so this is what makes a pasted livestream or Instagram
- * link usable. Trailing punctuation is trimmed off the href so "see
- * https://example.com." doesn't link the full stop. */
+ * link usable. What counts as a link is decided by `splitLinkifiedBody` in
+ * @lp/ui, shared with mobile so the http(s)-only rule has one home. */
 function LinkifiedBody({ body }: { body: string }) {
   return (
     <p className="mt-sm whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-      {body.split(URL_PATTERN).map((part, index) => {
-        if (!/^https?:\/\//.test(part)) return <Fragment key={index}>{part}</Fragment>;
-        const trailing = part.match(/[.,;:!?)\]]+$/)?.[0] ?? "";
-        const href = part.slice(0, part.length - trailing.length);
-        return (
-          <Fragment key={index}>
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary underline underline-offset-2"
-            >
-              {href}
-            </a>
-            {trailing}
-          </Fragment>
-        );
-      })}
+      {splitLinkifiedBody(body).map((segment, index) =>
+        segment.href === undefined ? (
+          <Fragment key={index}>{segment.text}</Fragment>
+        ) : (
+          <a
+            key={index}
+            href={segment.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline underline-offset-2"
+          >
+            {segment.text}
+          </a>
+        ),
+      )}
     </p>
   );
 }
@@ -63,7 +55,7 @@ function imageUrl(imagePath: string): string {
 function CategoryChip({ category }: { category: FeedCategory }) {
   return (
     <span className="rounded-full bg-muted px-sm py-0.5 text-xs font-medium text-muted-foreground">
-      {CATEGORY_LABELS[category]}
+      {FEED_CATEGORY_LABELS[category]}
     </span>
   );
 }
@@ -98,8 +90,14 @@ function Byline({ post }: { post: FeedPost }) {
  * largest source of orphaned objects in a public bucket. The preview comes
  * from a local object URL so the UX doesn't suffer for it. */
 async function uploadImage(file: File): Promise<string> {
+  // Checked rather than cast: ImageField already refuses anything else, but a
+  // cast here would let a future caller past the endpoint's Literal and into
+  // an opaque 422.
+  if (!isAllowedFeedImageType(file.type)) {
+    throw new Error("Pick a JPEG, PNG or WebP image.");
+  }
   const { storage_path, token } = await getBrowserApiClient().requestFeedImageUploadUrl({
-    mime_type: file.type as "image/jpeg" | "image/png" | "image/webp",
+    mime_type: file.type,
     size_bytes: file.size,
   });
   const { error } = await createClient()
@@ -154,7 +152,7 @@ function ImageField({
         ref={inputRef}
         id="feed-image"
         type="file"
-        accept={ALLOWED_IMAGE_TYPES.join(",")}
+        accept={ALLOWED_FEED_IMAGE_TYPES.join(",")}
         disabled={disabled}
         className="mt-xs block w-full text-sm text-muted-foreground"
         onChange={(event) => {
@@ -166,12 +164,12 @@ function ImageField({
           }
           // Mirrors the server's checks so the admin hears about it before
           // waiting on an upload. The bucket enforces both for real.
-          if (!ALLOWED_IMAGE_TYPES.includes(picked.type)) {
+          if (!isAllowedFeedImageType(picked.type)) {
             setError("Pick a JPEG, PNG or WebP image.");
             onPick(null);
             return;
           }
-          if (picked.size > MAX_IMAGE_BYTES) {
+          if (picked.size > MAX_FEED_IMAGE_BYTES) {
             setError("Image must be under 5MB.");
             onPick(null);
             return;

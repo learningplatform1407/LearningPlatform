@@ -25,10 +25,20 @@ free text, and a looser matcher is how `javascript:` reaches an `href` or
 `openBrowserAsync`. Mobile opens matches through `expo-web-browser` rather than
 `Linking.openURL`, so an unexpected target cannot hand off to another app.
 
-Both platforms have a test that fails if the matcher widens. The first mobile
-version of that test pressed the body text and proved nothing — a plain RN
-`Text` has no `onPress`, so the press never reached anything. It asserts on the
-link role now.
+That rule lives in **one place**: `splitLinkifiedBody` in
+`packages/ui/src/feed/`, which returns `{text, href?}` segments so each
+platform renders them its own way (an `<a>` on web, a pressable `Text` handing
+the href to `expo-web-browser` on mobile) while the decision about what counts
+as a link is made once. It started out copy-pasted into both screens, which
+made this paragraph a promise with two implementations — fine until someone
+tightens one of them. `packages/ui/src/feed/index.test.ts` covers
+`javascript:`, `data:`, `mailto:`, `file:` and `intent://`, and all five fail
+if the pattern widens.
+
+Each platform still has its own test that a URL in a body is actually
+tappable. The first mobile version of that pressed the body text and proved
+nothing — a plain RN `Text` has no `onPress`, so the press never reached
+anything; it asserts on the link role now.
 
 **There is no draft or archived status.** A post is published when created, so
 `published_at` comes from its `server_default` and deleting is a hard delete.

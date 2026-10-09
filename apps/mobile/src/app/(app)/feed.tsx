@@ -1,5 +1,12 @@
 import type { FeedCategory, FeedPost } from "@lp/contracts";
-import { formatPostDate } from "@lp/ui";
+import {
+  FEED_CATEGORY_LABELS,
+  FEED_IMAGES_BUCKET,
+  MAX_FEED_IMAGE_BYTES,
+  formatPostDate,
+  isAllowedFeedImageType,
+  splitLinkifiedBody,
+} from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -20,26 +27,6 @@ import { getApiClient } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
 import { colors, fontSizes, fontWeights, lineHeight, radii, spacing } from "@/lib/theme";
 
-const FEED_IMAGES_BUCKET = "feed-images";
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-
-type AllowedMimeType = (typeof ALLOWED_IMAGE_TYPES)[number];
-
-function isAllowedMimeType(value: string | undefined): value is AllowedMimeType {
-  return value !== undefined && (ALLOWED_IMAGE_TYPES as readonly string[]).includes(value);
-}
-
-const CATEGORY_LABELS: Record<FeedCategory, string> = {
-  news: "News",
-  media: "Media",
-};
-
-// Only an absolute http(s) URL becomes a link, matching web. Deliberately
-// narrow: the body is free text, and a looser matcher is how a custom scheme
-// reaches openBrowserAsync.
-const URL_PATTERN = /(https?:\/\/[^\s<]+)/g;
-
 function imageUrl(imagePath: string): string {
   // A synchronous string concat against a public bucket -- no network call
   // and no expiry, unlike the signed URLs the documents bucket needs.
@@ -50,30 +37,29 @@ function imageUrl(imagePath: string): string {
  *
  * There is no `link_url` column -- a URL belongs in the text the author is
  * already writing -- so this is what makes a pasted livestream or Instagram
- * link usable. Opened in the in-app browser rather than handed to
- * Linking.openURL, so an unexpected target cannot hand off to another app. */
+ * link usable. What counts as a link is decided by `splitLinkifiedBody` in
+ * @lp/ui, shared with web so the http(s)-only rule has one home. Opened in
+ * the in-app browser rather than handed to Linking.openURL, so an unexpected
+ * target cannot hand off to another app. */
 function LinkifiedBody({ body }: { body: string }) {
   return (
     <Text style={styles.body}>
-      {body.split(URL_PATTERN).map((part, index) => {
-        if (!/^https?:\/\//.test(part)) return <Fragment key={index}>{part}</Fragment>;
-        const trailing = part.match(/[.,;:!?)\]]+$/)?.[0] ?? "";
-        const href = part.slice(0, part.length - trailing.length);
-        return (
-          <Fragment key={index}>
-            <Text
-              style={styles.link}
-              accessibilityRole="link"
-              onPress={() => {
-                void WebBrowser.openBrowserAsync(href);
-              }}
-            >
-              {href}
-            </Text>
-            {trailing}
-          </Fragment>
-        );
-      })}
+      {splitLinkifiedBody(body).map((segment, index) =>
+        segment.href === undefined ? (
+          <Fragment key={index}>{segment.text}</Fragment>
+        ) : (
+          <Text
+            key={index}
+            style={styles.link}
+            accessibilityRole="link"
+            onPress={() => {
+              void WebBrowser.openBrowserAsync(segment.href!);
+            }}
+          >
+            {segment.text}
+          </Text>
+        ),
+      )}
     </Text>
   );
 }
@@ -86,7 +72,7 @@ async function uploadImage(asset: ImagePicker.ImagePickerAsset): Promise<string>
   // surfacing as "API request failed with status 422" after the user has
   // already waited on the fetch below. The bucket's allowed_mime_types would
   // refuse it too.
-  if (!isAllowedMimeType(asset.mimeType)) {
+  if (!isAllowedFeedImageType(asset.mimeType)) {
     throw new Error("Pick a JPEG, PNG or WebP image.");
   }
   const mimeType = asset.mimeType;
@@ -100,7 +86,7 @@ async function uploadImage(asset: ImagePicker.ImagePickerAsset): Promise<string>
   // and on Android fileSize is frequently undefined, which also made the
   // pick-time guard a no-op. Measuring the bytes we are about to send is what
   // makes this error match the bucket's hard file_size_limit.
-  if (blob.size > MAX_IMAGE_BYTES) {
+  if (blob.size > MAX_FEED_IMAGE_BYTES) {
     throw new Error("Image must be under 5MB.");
   }
 
@@ -168,11 +154,11 @@ function Composer() {
     // the pre-re-encode file when present. uploadImage re-checks blob.size,
     // which is the number that actually matters -- this just saves the user a
     // round trip when the picker does tell us.
-    if (picked.fileSize && picked.fileSize > MAX_IMAGE_BYTES) {
+    if (picked.fileSize && picked.fileSize > MAX_FEED_IMAGE_BYTES) {
       setError("Image must be under 5MB.");
       return;
     }
-    if (!isAllowedMimeType(picked.mimeType)) {
+    if (!isAllowedFeedImageType(picked.mimeType)) {
       setError("Pick a JPEG, PNG or WebP image.");
       return;
     }
@@ -223,7 +209,7 @@ function Composer() {
               style={[styles.segment, selected && styles.segmentSelected]}
             >
               <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>
-                {CATEGORY_LABELS[value]}
+                {FEED_CATEGORY_LABELS[value]}
               </Text>
             </Pressable>
           );
@@ -393,7 +379,7 @@ function PostCard({ post }: { post: FeedPost }) {
           <Text style={styles.bylineMeta}>· edited</Text>
         ) : null}
         <View style={styles.chip}>
-          <Text style={styles.chipText}>{CATEGORY_LABELS[post.category]}</Text>
+          <Text style={styles.chipText}>{FEED_CATEGORY_LABELS[post.category]}</Text>
         </View>
       </View>
 
