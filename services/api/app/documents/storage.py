@@ -28,12 +28,18 @@ def _headers() -> dict[str, str]:
     }
 
 
-def create_signed_upload_url(path: str) -> str:
-    """Returns the upload token for `path` in the documents bucket."""
+def create_signed_upload_url(path: str, bucket: str = DOCUMENTS_BUCKET) -> str:
+    """Returns the upload token for `path` in `bucket`.
+
+    `bucket` is a trailing keyword-defaulted parameter so existing document
+    call sites are unchanged. The feed passes FEED_IMAGES_BUCKET -- which has
+    no INSERT policy at all, exactly like documents, so a token minted here
+    behind require_admin is the only way to write to it.
+    """
     if not settings.supabase_url:
         raise RuntimeError("SUPABASE_URL is not configured")
 
-    url = f"{settings.supabase_url}/storage/v1/object/upload/sign/{DOCUMENTS_BUCKET}/{path}"
+    url = f"{settings.supabase_url}/storage/v1/object/upload/sign/{bucket}/{path}"
     response = httpx.post(url, headers=_headers(), json={})
     if response.is_error:
         raise StorageError(f"Failed to create signed upload URL: {response.text}")
@@ -59,15 +65,30 @@ def download_object(path: str) -> bytes:
     return response.content
 
 
-def upload_object(path: str, data: bytes, content_type: str) -> None:
+def upload_object(
+    path: str, data: bytes, content_type: str, bucket: str = DOCUMENTS_BUCKET
+) -> None:
     """Backend-initiated upload (e.g. an image extracted during processing) —
     uses the service_role key directly rather than a signed URL, since this
     isn't a client-initiated write that needs separate admin-gating."""
     if not settings.supabase_url:
         raise RuntimeError("SUPABASE_URL is not configured")
 
-    url = f"{settings.supabase_url}/storage/v1/object/{DOCUMENTS_BUCKET}/{path}"
+    url = f"{settings.supabase_url}/storage/v1/object/{bucket}/{path}"
     headers = {**_headers(), "Content-Type": content_type, "x-upsert": "true"}
     response = httpx.post(url, headers=headers, content=data)
     if response.is_error:
         raise StorageError(f"Failed to upload object: {response.text}")
+
+
+def delete_object(path: str, bucket: str = DOCUMENTS_BUCKET) -> None:
+    """Removes one object. Callers treat failure as non-fatal: an orphaned
+    object is benign, whereas failing a request the database already committed
+    would leave the user staring at an error for work that succeeded."""
+    if not settings.supabase_url:
+        raise RuntimeError("SUPABASE_URL is not configured")
+
+    url = f"{settings.supabase_url}/storage/v1/object/{bucket}/{path}"
+    response = httpx.delete(url, headers=_headers())
+    if response.is_error:
+        raise StorageError(f"Failed to delete object: {response.text}")

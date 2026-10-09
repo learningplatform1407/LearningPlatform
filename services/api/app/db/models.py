@@ -11,6 +11,7 @@ from app.chapters.models import Chapter
 from app.cloze.models import ClozeCard, ClozeReviewState
 from app.db.external import auth_users
 from app.documents.models import Document, DocumentVersion, LessonView
+from app.feed.models import FeedPost
 from app.flashcards.models import Flashcard, FlashcardReviewState
 from app.notebook.models import NotebookEntry
 from app.plans.models import Subscription
@@ -30,6 +31,7 @@ __all__ = [
     "Document",
     "DocumentAnnotation",
     "DocumentVersion",
+    "FeedPost",
     "Flashcard",
     "FlashcardReviewState",
     "LessonView",

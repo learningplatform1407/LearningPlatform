@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.logging import configure_logging
 from app.db import models as _db_models  # noqa: F401 -- registers all tables on Base.metadata
 from app.documents.router import router as documents_router
+from app.feed.router import router as feed_router
 from app.flashcards.router import document_router as flashcards_document_router
 from app.flashcards.router import router as flashcards_router
 from app.notebook.router import router as notebook_router
@@ -54,6 +55,7 @@ app.include_router(questions_router)
 app.include_router(tags_router)
 app.include_router(bank_router)
 app.include_router(quiz_sessions_router)
+app.include_router(feed_router)
 
 
 @app.exception_handler(ApiError)
