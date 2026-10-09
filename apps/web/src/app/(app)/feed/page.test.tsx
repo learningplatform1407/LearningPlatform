@@ -211,8 +211,8 @@ describe("FeedPage", () => {
       expect(createFeedPost).toHaveBeenCalledWith(
         expect.objectContaining({ image_path: "feed/3f2a1b0c-0000-4000-8000-000000000000.jpg" }),
       );
-      expect(uploadToSignedUrl.mock.invocationCallOrder[0]).toBeLessThan(
-        createFeedPost.mock.invocationCallOrder[0],
+      expect(uploadToSignedUrl.mock.invocationCallOrder[0]!).toBeLessThan(
+        createFeedPost.mock.invocationCallOrder[0]!,
       );
     });
 

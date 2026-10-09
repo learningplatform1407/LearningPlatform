@@ -209,7 +209,7 @@ test("an admin posts a picture through upload-url then uploadToSignedUrl", async
   mockUploadToSignedUrl.mockResolvedValue({ error: null });
   mockCreateFeedPost.mockResolvedValue(post());
   // The picker returns a uri, never bytes, so every upload fetches it first.
-  global.fetch = jest.fn().mockResolvedValue({ blob: async () => ({ size: 2048 }) }) as never;
+  globalThis.fetch = jest.fn().mockResolvedValue({ blob: async () => ({ size: 2048 }) }) as never;
 
   renderScreen();
   await fillComposer();
@@ -250,7 +250,7 @@ test("a failed upload shows an error and never creates the post", async () => {
   });
   mockRequestFeedImageUploadUrl.mockResolvedValue({ storage_path: "feed/x.jpg", token: "t" });
   mockUploadToSignedUrl.mockResolvedValue({ error: new Error("upload exploded") });
-  global.fetch = jest.fn().mockResolvedValue({ blob: async () => ({ size: 10 }) }) as never;
+  globalThis.fetch = jest.fn().mockResolvedValue({ blob: async () => ({ size: 10 }) }) as never;
 
   renderScreen();
   await fillComposer();
