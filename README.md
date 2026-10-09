@@ -199,6 +199,15 @@ classDiagram
         +datetime due_at
         +datetime last_reviewed_at
     }
+    class FeedPost {
+        +UUID id
+        +string title
+        +string body
+        +string category
+        +string image_path
+        +UUID author_id
+        +datetime published_at
+    }
     class NotebookEntry {
         +UUID id
         +UUID user_id
@@ -279,6 +288,8 @@ classDiagram
     Profile "1" -- "*" Question : created_by
     Question "1" -- "*" QuestionTag
     Tag "1" -- "*" QuestionTag
+
+    Profile "0..1" -- "*" FeedPost : author, SET NULL
 
     Profile "1" -- "*" QuizSession : one OPEN at a time
     QuizSession "1" -- "*" QuizSessionQuestion : frozen at start

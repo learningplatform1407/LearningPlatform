@@ -13,6 +13,11 @@ the system grows.
 - [`flashcards.md`](./flashcards.md) — per-lesson spaced-repetition cards, the
   official/personal provenance axis, and why a flashcard owns its own text
   rather than pointing at a question from the exam pool.
+- [`feed.md`](./feed.md) — admin-authored announcements. Records the two places
+  the feed deliberately diverges from flashcards (edit/delete is role-based,
+  not ownership-based; `author_id` is `SET NULL`, not `CASCADE`), why there is
+  no `link_url` column, and the public-read/no-client-write shape of the
+  `feed-images` bucket.
 
 ## Where admin authoring lives
 
@@ -25,6 +30,11 @@ mobile at parity, since it has the same inline affordances.
 The two exceptions are the bulk JSON importers (`/question-bank/manage`,
 `/learn/flashcards/manage`), because a dry-run-then-commit workflow does not
 fit inline, and they are web-only by design.
+
+The feed composer on `/feed` **is** the contextual-inline rule rather than a
+third exception: it sits directly above the list it writes into, on both
+platforms, and is gated on `me.data?.role === "admin"` like every other inline
+admin form.
 
 `/admin` is a **directory, not a console**: it links to those tools and
 re-implements none of them. It exists for discoverability — each tool used to

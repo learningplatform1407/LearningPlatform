@@ -191,15 +191,21 @@ One branch, `feat/flashcards`. Design doc: [`docs/architecture/flashcards.md`](.
 
 ## Epic: FEED (renamed from News)
 
-| Key           | Summary                                        | Depends on     | Notes                                                                           |
-| ------------- | ---------------------------------------------- | -------------- | ------------------------------------------------------------------------------- |
-| **FEED-1**    | `feed_posts` table + migration                 | —              | `title`, `body`, `category` (news/exam/livestream), `link_url`, `published_at`. |
-| **FEED-2** 🔗 | Feed post schema, shared                       | —              | Joint.                                                                          |
-| **FEED-3**    | `GET /v1/feed` API (paginated, published only) | FEED-1, FEED-2 |                                                                                 |
-| **FEED-4**    | Feed UI — web                                  | FEED-3, NAV-5  |                                                                                 |
-| **FEED-5**    | Feed UI — mobile                               | FEED-3, NAV-6  |                                                                                 |
+Design doc: [`docs/architecture/feed.md`](./docs/architecture/feed.md).
 
-Not addressed yet: who authors feed posts. No admin/CMS UI planned — direct DB inserts are fine until that's actually a pain point.
+This epic was **rewritten when the feature was built**. The original FEED-1 predated any decision about who authors a post, and said so: _"Not addressed yet: who authors feed posts. No admin/CMS UI planned — direct DB inserts are fine until that's actually a pain point."_ That is now answered by a composer on both platforms. FEED-1's column list also changed: `category` narrowed from news/exam/livestream to **news/media**, `link_url` was dropped (a URL belongs in the body text, which both clients linkify), and `author_id` plus `image_path` were added. `title` survived.
+
+| Key           | Summary                                                 | Depends on            | Notes                                                                                                                                                                                                                                                                                                                                       |
+| ------------- | ------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **FEED-1**    | `feed_posts` table + migration                          | —                     | ✅ `title` (required), `body`, `category` (`news`\|`media`), `image_path`, `author_id`, `published_at`. `author_id` is **`SET NULL`**, not the CASCADE the seven other authored tables use — an announcement outlives the account that wrote it. See HARDEN-8.                                                                              |
+| **FEED-2** 🔗 | Feed post schema, shared                                | —                     | ✅ Full four-layer chain: zod → contracts → api-client.                                                                                                                                                                                                                                                                                     |
+| **FEED-3**    | `GET /v1/feed` (limit/offset, newest first)             | FEED-1, FEED-2        | ✅ Ordered `published_at DESC, id DESC` — the id tiebreak makes the order total, which matters once paging exists. Filters `published_at <= now()`, a no-op today but the seam for scheduling. "Published only" in the original wording is moot: there is no draft state.                                                                   |
+| **FEED-4**    | Admin write endpoints (POST / PATCH / DELETE)           | FEED-1                | ✅ New scope. **Any admin may edit or delete any post**, deliberately _not_ the flashcard ownership model — an announcement is institutional speech. Still computed server-side as `can_edit`/`can_delete`, per `ad08d02`. Hard delete, no archive tier.                                                                                    |
+| **FEED-5**    | `feed-images` bucket + `POST /v1/feed/image-upload-url` | FEED-4                | ✅ Public read (so the URL never expires on a long-lived screen — neither client refreshes a signed URL), no client write policy at all, `require_admin` as the real gate. First bucket to set `file_size_limit`/`allowed_mime_types`, since unlike `documents` there is no checksum step to catch a bad upload.                            |
+| **FEED-6**    | Feed UI — web (list + admin composer)                   | FEED-3, FEED-4, NAV-5 | ✅ Composer above the list. Upload-on-submit, so an abandoned composer uploads nothing.                                                                                                                                                                                                                                                     |
+| **FEED-7**    | Feed UI — mobile                                        | FEED-3, FEED-4, NAV-6 | ✅ Same, via `expo-image-picker`. Body links open through `expo-web-browser`. Display uses `expo-image` (already a dependency, until now unused) for its disk cache.                                                                                                                                                                        |
+| **FEED-8**    | Shared date formatter in `@lp/ui`                       | —                     | ✅ `formatMonthYear` + `formatPostDate`, with both profile pages migrated off their duplicated `formatJoined`. Locale pinned, or the same post reads differently per device and the tests follow the runner.                                                                                                                                |
+| **FEED-9**    | Deferred follow-ups                                     | FEED-6, FEED-7        | "Load more" paging (needs dedupe-by-id when flattening pages, and a reset after the composer posts); a reaper for images orphaned by a crash mid-upload (list the bucket, anti-join `feed_posts.image_path`); the embedded livestream player; migrating `ExtractedImage` to `expo-image` so mobile has one image component rather than two. |
 
 ## Epic: ROADMAP (placeholder only)
 
@@ -245,6 +251,8 @@ Options: `SET NULL` (content outlives its author); reassign to a system profile;
 
 Unaffected either way: `flashcard_review_states.user_id` and `cloze_review_states.user_id` stay CASCADE. Deleting an account should delete that person's SRS progress — that's personal progress, not shared content.
 
+**`feed_posts` already answered this for itself.** It is the eighth authored table but is deliberately **not** in the list above: `author_id` is nullable with `ondelete="SET NULL"`, so an announcement survives its author's account and the byline falls back to "Staff". There was no migration cost in choosing that on a new table, and being consistent with a pattern already identified as wrong isn't worth much. It is therefore the worked example of the `SET NULL` option — including the consequence that every read path has to **outer**-join `profiles`, which is the kind of thing that only shows up once a row actually has a null there. Whether the other seven should follow is still the open product question.
+
 ## Suggested sequencing
 
 1. **NAV** first — everything else lives inside this shell, and it's a real restructuring of routes that already exist. ✅ Done.
@@ -255,7 +263,7 @@ Unaffected either way: `flashcard_review_states.user_id` and `cloze_review_state
 6. **LECTURES-9** (mobile text-selection spike) ✅ Done — came back uncertain, mobile v1 scoped to margin notes only (see notes above).
 7. **LECTURES-10/11/12/13** (annotations schema + highlight/margin-note UI) ✅ Done, live-verified on both platforms including cross-platform annotation visibility and per-user scoping.
 8. **LECTURES-14/15/16/17/18/19/20** (Chapters → Lessons + Learn hub, nav rename) ✅ Done, live-verified on both platforms including cross-platform "continue where you left off"/"recently opened" visibility.
-9. **PROFILE** and **FEED** are both small and independent of Learn — good filler work or a second parallel track. PROFILE is done; FEED is still open.
+9. **PROFILE** and **FEED** are both small and independent of Learn — good filler work or a second parallel track. Both are now done, bar FEED-9's deferred follow-ups.
 10. **ROADMAP-1** is trivial, do it whenever.
 11. **QUIZ** is now unblocked (the product conversation it was waiting on is done — see `docs/architecture/quizzes.md`). QUIZ-1→5 (`feat/question-bank`) then QUIZ-6→11 (`feat/quiz-sessions`); the two branches share a migration chain, so don't autogenerate both at once.
 12. **FLASH** (`feat/flashcards`) is done, and sits after QUIZ because FLASH-0 finishes QUIZ-11's UI half and FLASH-2's migration chains off QUIZ-12's. QUIZ-13→15 (progress UI) are still open and don't depend on it.
