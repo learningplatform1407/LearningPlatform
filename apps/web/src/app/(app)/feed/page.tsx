@@ -3,7 +3,7 @@
 import type { FeedCategory, FeedPost } from "@lp/contracts";
 import { formatPostDate } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/button";
 import { Card } from "@/components/card";
@@ -109,18 +109,41 @@ async function uploadImage(file: File): Promise<string> {
   return storage_path;
 }
 
+/** A local preview URL for `file`, released when it changes or unmounts.
+ *
+ * createObjectURL in the render body would mint a fresh URL on every keystroke
+ * in the composer -- each one pinning the whole selected file until the page
+ * goes away, and re-fetching the <img> src each time. */
+function usePreviewUrl(file: File | null): string | null {
+  const url = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+  useEffect(() => {
+    if (url === null) return;
+    return () => URL.revokeObjectURL(url);
+  }, [url]);
+  return url;
+}
+
 function ImageField({
   file,
   onPick,
-  onClear,
   disabled,
 }: {
   file: File | null;
   onPick: (file: File | null) => void;
-  onClear: () => void;
   disabled: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const previewUrl = usePreviewUrl(file);
+
+  /** A file input holds its own value, so clearing React state is not enough
+   * to let the same file be re-picked. profile/page.tsx resets it the same
+   * way. */
+  function clear() {
+    if (inputRef.current) inputRef.current.value = "";
+    setError(null);
+    onPick(null);
+  }
 
   return (
     <div>
@@ -128,6 +151,7 @@ function ImageField({
         Picture (optional)
       </label>
       <input
+        ref={inputRef}
         id="feed-image"
         type="file"
         accept={ALLOWED_IMAGE_TYPES.join(",")}
@@ -160,15 +184,11 @@ function ImageField({
           {error}
         </p>
       ) : null}
-      {file ? (
+      {previewUrl ? (
         <div className="mt-sm flex items-start gap-sm">
           {/* eslint-disable-next-line @next/next/no-img-element -- local object URL for a pre-upload preview */}
-          <img
-            src={URL.createObjectURL(file)}
-            alt=""
-            className="max-h-40 rounded-md object-cover"
-          />
-          <Button variant="secondary" onClick={onClear} disabled={disabled}>
+          <img src={previewUrl} alt="" className="max-h-40 rounded-md object-cover" />
+          <Button variant="secondary" onClick={clear} disabled={disabled}>
             Remove picture
           </Button>
         </div>
@@ -183,7 +203,11 @@ function Composer() {
   const [body, setBody] = useState("");
   const [category, setCategory] = useState<FeedCategory>("news");
   const [file, setFile] = useState<File | null>(null);
-  const [imageKey, setImageKey] = useState(0);
+  // Bumped only on a successful post, to hand the whole composer a fresh
+  // ImageField. Remounting also drops its local validation error, which is
+  // what we want here: the form is empty again. Clearing the picture without
+  // posting does not need this -- ImageField resets its own input.
+  const [resetKey, setResetKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const createMutation = useMutation({
@@ -201,7 +225,7 @@ function Composer() {
       setBody("");
       setCategory("news");
       setFile(null);
-      setImageKey((key) => key + 1);
+      setResetKey((key) => key + 1);
       setError(null);
       queryClient.invalidateQueries({ queryKey: ["feed"] });
     },
@@ -258,16 +282,10 @@ function Composer() {
             <option value="media">Media — a livestream or social link</option>
           </select>
         </div>
-        {/* Keyed so a successful post resets the native file input, which
-            holds its own value outside React state. */}
         <ImageField
-          key={imageKey}
+          key={resetKey}
           file={file}
           onPick={setFile}
-          onClear={() => {
-            setFile(null);
-            setImageKey((key) => key + 1);
-          }}
           disabled={createMutation.isPending}
         />
         {error ? (
@@ -294,6 +312,25 @@ function PostCard({ post }: { post: FeedPost }) {
   const [title, setTitle] = useState(post.title);
   const [body, setBody] = useState(post.body);
   const [error, setError] = useState<string | null>(null);
+
+  // Re-seed the form from refetched data, the same identity-checked
+  // setState-during-render pattern profile/page.tsx uses. Without this the
+  // card keeps whatever the post said when it first mounted -- and since
+  // every admin can edit every post, opening Edit after someone else's
+  // correction landed would show the pre-correction text and Save would
+  // quietly overwrite them.
+  //
+  // Skipped while editing, so a background refetch cannot yank text out from
+  // under someone mid-sentence. That leaves the narrower race -- two admins
+  // with the form open at once -- where the second Save still wins; fixing
+  // that properly needs optimistic concurrency (send updated_at, 409 on
+  // mismatch) and is noted in FEED-9 rather than bolted on here.
+  const [syncedFrom, setSyncedFrom] = useState<FeedPost>(post);
+  if (post !== syncedFrom && !isEditing) {
+    setTitle(post.title);
+    setBody(post.body);
+    setSyncedFrom(post);
+  }
 
   const updateMutation = useMutation({
     mutationFn: () =>
@@ -432,6 +469,20 @@ export default function FeedPage() {
       <main className="p-xl">
         <p role="alert" className="text-sm text-danger">
           Failed to load the feed: {(feed.error as Error).message}
+        </p>
+      </main>
+    );
+  }
+
+  // Handled explicitly rather than falling through to `me.data?.role`, which
+  // would be undefined and silently render an admin the read-only view -- no
+  // composer, no Edit, no Delete and no hint that anything failed, which reads
+  // exactly like losing your permissions.
+  if (me.isError) {
+    return (
+      <main className="p-xl">
+        <p role="alert" className="text-sm text-danger">
+          Failed to load your profile: {(me.error as Error).message}
         </p>
       </main>
     );

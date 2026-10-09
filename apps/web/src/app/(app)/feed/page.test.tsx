@@ -71,11 +71,14 @@ function post(overrides: Record<string, unknown> = {}) {
 
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <FeedPage />
-    </QueryClientProvider>,
-  );
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <FeedPage />
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 describe("FeedPage", () => {
@@ -143,6 +146,17 @@ describe("FeedPage", () => {
     renderPage();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Failed to load the feed: boom");
+  });
+
+  test("surfaces a failure to load the caller's own profile", async () => {
+    // Without this branch an admin whose /v1/me call failed silently renders
+    // the learner view -- no composer, no actions, no explanation.
+    getMe.mockRejectedValue(new Error("me exploded"));
+    renderPage();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Failed to load your profile: me exploded",
+    );
   });
 
   describe("as an admin", () => {
@@ -297,6 +311,47 @@ describe("FeedPage", () => {
       await user.click(await screen.findByRole("button", { name: "Delete" }));
 
       expect(deleteFeedPost).not.toHaveBeenCalled();
+    });
+
+    test("Edit shows another admin's correction rather than the stale text", async () => {
+      // The lost-update bug: the card seeds its form from props once. After a
+      // refetch brings someone else's correction, opening Edit must not offer
+      // the pre-correction text -- Saving that would quietly overwrite them.
+      listFeed.mockResolvedValue([post({ can_edit: true, can_delete: true })]);
+      updateFeedPost.mockResolvedValue(post());
+      const { queryClient } = renderPage();
+      const user = userEvent.setup();
+
+      await screen.findByText("January timetable is up");
+
+      listFeed.mockResolvedValue([
+        post({ title: "Corrected by someone else", can_edit: true, can_delete: true }),
+      ]);
+      await queryClient.invalidateQueries({ queryKey: ["feed"] });
+      await screen.findByText("Corrected by someone else");
+
+      await user.click(screen.getByRole("button", { name: "Edit" }));
+      expect(openPost().getByLabelText("Title")).toHaveValue("Corrected by someone else");
+    });
+
+    test("a background refetch does not overwrite what is being typed", async () => {
+      // The other half of the same trade-off: the resync is skipped while the
+      // form is open, so a refetch cannot yank text out mid-sentence.
+      listFeed.mockResolvedValue([post({ can_edit: true, can_delete: true })]);
+      const { queryClient } = renderPage();
+      const user = userEvent.setup();
+
+      await user.click(await screen.findByRole("button", { name: "Edit" }));
+      const titleField = openPost().getByLabelText("Title");
+      await user.clear(titleField);
+      await user.type(titleField, "Half-written thou");
+
+      listFeed.mockResolvedValue([
+        post({ title: "Something else entirely", can_edit: true, can_delete: true }),
+      ]);
+      await queryClient.invalidateQueries({ queryKey: ["feed"] });
+
+      expect(openPost().getByLabelText("Title")).toHaveValue("Half-written thou");
     });
 
     test("hides Edit when the server says the caller may not edit", async () => {

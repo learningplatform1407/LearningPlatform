@@ -22,6 +22,13 @@ import { colors, fontSizes, fontWeights, lineHeight, radii, spacing } from "@/li
 
 const FEED_IMAGES_BUCKET = "feed-images";
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+
+type AllowedMimeType = (typeof ALLOWED_IMAGE_TYPES)[number];
+
+function isAllowedMimeType(value: string | undefined): value is AllowedMimeType {
+  return value !== undefined && (ALLOWED_IMAGE_TYPES as readonly string[]).includes(value);
+}
 
 const CATEGORY_LABELS: Record<FeedCategory, string> = {
   news: "News",
@@ -74,13 +81,32 @@ function LinkifiedBody({ body }: { body: string }) {
 /** Upload-on-submit, not upload-on-pick: abandoning the composer uploads
  * nothing, which removes the largest source of orphaned objects. */
 async function uploadImage(asset: ImagePicker.ImagePickerAsset): Promise<string> {
-  const mimeType = (asset.mimeType ?? "image/jpeg") as "image/jpeg" | "image/png" | "image/webp";
+  // Checked, not cast. iOS commonly hands back image/heic, and a cast would
+  // hide that from the type checker only for FastAPI's Literal to reject it --
+  // surfacing as "API request failed with status 422" after the user has
+  // already waited on the fetch below. The bucket's allowed_mime_types would
+  // refuse it too.
+  if (!isAllowedMimeType(asset.mimeType)) {
+    throw new Error("Pick a JPEG, PNG or WebP image.");
+  }
+  const mimeType = asset.mimeType;
+
   // The picker hands back a uri, never bytes -- same step every upload in
   // this app takes (see profile.tsx).
   const blob = await (await fetch(asset.uri)).blob();
+
+  // blob.size, not asset.fileSize: the latter describes the original file
+  // while `quality: 0.8` means we upload a re-encode, so the two disagree --
+  // and on Android fileSize is frequently undefined, which also made the
+  // pick-time guard a no-op. Measuring the bytes we are about to send is what
+  // makes this error match the bucket's hard file_size_limit.
+  if (blob.size > MAX_IMAGE_BYTES) {
+    throw new Error("Image must be under 5MB.");
+  }
+
   const { storage_path, token } = await getApiClient().requestFeedImageUploadUrl({
     mime_type: mimeType,
-    size_bytes: asset.fileSize ?? blob.size,
+    size_bytes: blob.size,
   });
   const { error } = await supabase.storage
     .from(FEED_IMAGES_BUCKET)
@@ -138,8 +164,16 @@ function Composer() {
 
     const picked = result.assets[0];
     if (!picked) return;
+    // Optimistic only: fileSize is often undefined on Android, and describes
+    // the pre-re-encode file when present. uploadImage re-checks blob.size,
+    // which is the number that actually matters -- this just saves the user a
+    // round trip when the picker does tell us.
     if (picked.fileSize && picked.fileSize > MAX_IMAGE_BYTES) {
       setError("Image must be under 5MB.");
+      return;
+    }
+    if (!isAllowedMimeType(picked.mimeType)) {
+      setError("Pick a JPEG, PNG or WebP image.");
       return;
     }
     setAsset(picked);
@@ -247,6 +281,18 @@ function PostCard({ post }: { post: FeedPost }) {
   const [title, setTitle] = useState(post.title);
   const [body, setBody] = useState(post.body);
   const [error, setError] = useState<string | null>(null);
+
+  // Re-seed the form from refetched data (same pattern as profile.tsx and the
+  // web card). Without this the card keeps whatever the post said when it
+  // mounted, so opening Edit after another admin's correction landed would
+  // offer the pre-correction text and Save would quietly overwrite them.
+  // Skipped while editing, so a refetch cannot yank text out mid-sentence.
+  const [syncedFrom, setSyncedFrom] = useState<FeedPost>(post);
+  if (post !== syncedFrom && !isEditing) {
+    setTitle(post.title);
+    setBody(post.body);
+    setSyncedFrom(post);
+  }
 
   const updateMutation = useMutation({
     mutationFn: () =>
@@ -422,6 +468,19 @@ export default function FeedScreen() {
       <View style={styles.centered}>
         <Text accessibilityRole="alert" style={styles.error}>
           Failed to load the feed: {(feed.error as Error).message}
+        </Text>
+      </View>
+    );
+  }
+
+  // Handled explicitly rather than falling through to `me.data?.role`, which
+  // would be undefined and silently render an admin the read-only view -- no
+  // composer, no actions and no explanation.
+  if (me.isError) {
+    return (
+      <View style={styles.centered}>
+        <Text accessibilityRole="alert" style={styles.error}>
+          Failed to load your profile: {(me.error as Error).message}
         </Text>
       </View>
     );

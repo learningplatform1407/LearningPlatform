@@ -86,6 +86,19 @@ async function fillComposer() {
   fireEvent.changeText(screen.getByLabelText("Body"), "Smile.");
 }
 
+// Captured so the stub below cannot leak into later tests: two of them replace
+// globalThis.fetch, and without a restore every subsequent test in the file
+// would silently inherit a mock it never set up.
+const realFetch = globalThis.fetch;
+
+function stubFetchReturning(size: number) {
+  globalThis.fetch = jest.fn().mockResolvedValue({ blob: async () => ({ size }) }) as never;
+}
+
+afterEach(() => {
+  globalThis.fetch = realFetch;
+});
+
 beforeEach(() => {
   mockGetMe.mockReset().mockResolvedValue(STUDENT_ME);
   mockListFeed.mockReset().mockResolvedValue([post()]);
@@ -209,7 +222,7 @@ test("an admin posts a picture through upload-url then uploadToSignedUrl", async
   mockUploadToSignedUrl.mockResolvedValue({ error: null });
   mockCreateFeedPost.mockResolvedValue(post());
   // The picker returns a uri, never bytes, so every upload fetches it first.
-  globalThis.fetch = jest.fn().mockResolvedValue({ blob: async () => ({ size: 2048 }) }) as never;
+  stubFetchReturning(2048);
 
   renderScreen();
   await fillComposer();
@@ -250,7 +263,7 @@ test("a failed upload shows an error and never creates the post", async () => {
   });
   mockRequestFeedImageUploadUrl.mockResolvedValue({ storage_path: "feed/x.jpg", token: "t" });
   mockUploadToSignedUrl.mockResolvedValue({ error: new Error("upload exploded") });
-  globalThis.fetch = jest.fn().mockResolvedValue({ blob: async () => ({ size: 10 }) }) as never;
+  stubFetchReturning(10);
 
   renderScreen();
   await fillComposer();
@@ -301,6 +314,88 @@ test("an admin deletes a post after confirming", async () => {
 
   await waitFor(() => expect(mockDeleteFeedPost).toHaveBeenCalledWith("p1"));
   alertSpy.mockRestore();
+});
+
+test("surfaces a failure to load the caller's own profile", async () => {
+  // Without this branch an admin whose /v1/me call failed silently renders
+  // the learner view -- no composer, no actions, no explanation.
+  mockGetMe.mockRejectedValue(new Error("me exploded"));
+  renderScreen();
+
+  expect(await screen.findByText("Failed to load your profile: me exploded")).toBeTruthy();
+});
+
+test("rejects a HEIC pick with a readable message instead of a late 422", async () => {
+  // iOS commonly returns image/heic. Casting it would have sent it to an
+  // endpoint whose Literal rejects it, surfacing as "API request failed with
+  // status 422" only after the fetch had already run.
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  (ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+    status: "granted",
+  });
+  (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+    canceled: false,
+    assets: [{ uri: "file:///p.heic", mimeType: "image/heic", fileSize: 10 }],
+  });
+  renderScreen();
+
+  fireEvent.press(await screen.findByText("Add a picture"));
+
+  expect(await screen.findByText("Pick a JPEG, PNG or WebP image.")).toBeTruthy();
+  expect(mockRequestFeedImageUploadUrl).not.toHaveBeenCalled();
+});
+
+test("sends the uploaded blob's size, not the picker's stale fileSize", async () => {
+  // quality: 0.8 means we upload a re-encode, so asset.fileSize describes a
+  // different payload than the one being sent -- and the bucket's hard
+  // file_size_limit judges the bytes, not the claim.
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  (ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+    status: "granted",
+  });
+  (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+    canceled: false,
+    assets: [{ uri: "file:///p.jpg", mimeType: "image/jpeg", fileSize: 4_000_000 }],
+  });
+  mockRequestFeedImageUploadUrl.mockResolvedValue({ storage_path: "feed/x.jpg", token: "t" });
+  mockUploadToSignedUrl.mockResolvedValue({ error: null });
+  mockCreateFeedPost.mockResolvedValue(post());
+  stubFetchReturning(1234);
+
+  renderScreen();
+  await fillComposer();
+  fireEvent.press(screen.getByText("Add a picture"));
+  await waitFor(() => expect(screen.getByText("Change picture")).toBeTruthy());
+  fireEvent.press(screen.getByText("Post"));
+
+  await waitFor(() => expect(mockRequestFeedImageUploadUrl).toHaveBeenCalled());
+  expect(mockRequestFeedImageUploadUrl).toHaveBeenCalledWith({
+    mime_type: "image/jpeg",
+    size_bytes: 1234,
+  });
+});
+
+test("rejects an oversize blob even when the picker reported no fileSize", async () => {
+  // fileSize is frequently undefined on Android, which made the pick-time
+  // guard a no-op and left nothing bounding the upload client-side.
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  (ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+    status: "granted",
+  });
+  (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+    canceled: false,
+    assets: [{ uri: "file:///p.jpg", mimeType: "image/jpeg" }],
+  });
+  stubFetchReturning(6 * 1024 * 1024);
+
+  renderScreen();
+  await fillComposer();
+  fireEvent.press(screen.getByText("Add a picture"));
+  await waitFor(() => expect(screen.getByText("Change picture")).toBeTruthy());
+  fireEvent.press(screen.getByText("Post"));
+
+  expect(await screen.findByText("Image must be under 5MB.")).toBeTruthy();
+  expect(mockRequestFeedImageUploadUrl).not.toHaveBeenCalled();
 });
 
 test("hides Edit when the server says the caller may not edit", async () => {
