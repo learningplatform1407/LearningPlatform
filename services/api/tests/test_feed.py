@@ -6,11 +6,14 @@ from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
+from app.feed.constants import FeedCategory
 from app.feed.models import FeedPost
+from app.feed.router import _category
 from app.main import app
 from app.users.models import AccountSettings, Profile
 
@@ -293,6 +296,60 @@ def test_edit_cannot_blank_the_title_or_body(admin_client: TestClient) -> None:
     post = _create(admin_client)
     assert admin_client.patch(f"/v1/feed/{post['id']}", json={"title": ""}).status_code == 422
     assert admin_client.patch(f"/v1/feed/{post['id']}", json={"body": ""}).status_code == 422
+
+
+@pytest.mark.parametrize("field", ["title", "body", "category"])
+def test_edit_cannot_null_a_required_field(admin_client: TestClient, field: str) -> None:
+    """An explicit null is a 422, not a 500.
+
+    `min_length` does not constrain the None arm of `str | None`, so without an
+    explicit check these reach the NOT NULL column and surface as an unhandled
+    IntegrityError. `image_path` is the only field where null is meaningful.
+    """
+    post = _create(admin_client)
+    response = admin_client.patch(f"/v1/feed/{post['id']}", json={field: None})
+    assert response.status_code == 422
+    assert field in response.text
+
+
+def test_category_is_constrained_by_the_database(
+    admin_client: TestClient, db_session: Session
+) -> None:
+    """`ck_feed_posts_category` is the first line of defence.
+
+    Declared on the model as well as in 4b1d7ea3c602, so Base.metadata and the
+    migration agree and this is actually enforced in the suite.
+    """
+    db_session.add(FeedPost(title="Legacy", body="b", category="exam"))
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+
+
+def test_an_unknown_category_degrades_instead_of_failing_the_list() -> None:
+    """The second line of defence, unit-tested because the first makes the
+    integration path unreachable.
+
+    It covers the window where the allowed set and the enum disagree -- a
+    migration widening the constraint before the new code ships, or the
+    reverse. Without it `FeedCategory(value)` raises and 500s the *whole*
+    list for every caller, including the admin who would have to fix it. The
+    chip is decorative; the announcement is not.
+    """
+    assert _category("news") == FeedCategory.NEWS
+    assert _category("media") == FeedCategory.MEDIA
+    assert _category("exam") == FeedCategory.NEWS
+
+
+def test_image_path_rejects_a_trailing_newline(admin_client: TestClient) -> None:
+    """`$` also matches just before a trailing newline in Python, so anchoring
+    with it accepts a key this service never minted."""
+    response = admin_client.post(
+        "/v1/feed",
+        json={"title": "t", "body": "b", "image_path": f"{_image_path()}\n"},
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_image_path"
 
 
 def test_category_defaults_to_news_and_rejects_unknown_values(admin_client: TestClient) -> None:

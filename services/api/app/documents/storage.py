@@ -65,16 +65,18 @@ def download_object(path: str) -> bytes:
     return response.content
 
 
-def upload_object(
-    path: str, data: bytes, content_type: str, bucket: str = DOCUMENTS_BUCKET
-) -> None:
+def upload_object(path: str, data: bytes, content_type: str) -> None:
     """Backend-initiated upload (e.g. an image extracted during processing) —
     uses the service_role key directly rather than a signed URL, since this
-    isn't a client-initiated write that needs separate admin-gating."""
+    isn't a client-initiated write that needs separate admin-gating.
+
+    No `bucket` parameter, unlike its two neighbours: nothing writes to a
+    second bucket from the backend, and the feed uploads through a signed URL
+    instead. Add one when there is a caller."""
     if not settings.supabase_url:
         raise RuntimeError("SUPABASE_URL is not configured")
 
-    url = f"{settings.supabase_url}/storage/v1/object/{bucket}/{path}"
+    url = f"{settings.supabase_url}/storage/v1/object/{DOCUMENTS_BUCKET}/{path}"
     headers = {**_headers(), "Content-Type": content_type, "x-upsert": "true"}
     response = httpx.post(url, headers=headers, content=data)
     if response.is_error:

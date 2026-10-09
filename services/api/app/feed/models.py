@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -29,6 +29,16 @@ class FeedPost(Base):
     """
 
     __tablename__ = "feed_posts"
+    __table_args__ = (
+        # Mirrors the constraint in 4b1d7ea3c602. Declared here too so
+        # Base.metadata and the migration agree -- the SQLite suite builds from
+        # the former, so a constraint living only in the migration is drift the
+        # tests could never catch (the mistake ac4940c had to fix on
+        # nullability). `questions.status` and `flashcards.scope` are bare
+        # Strings; this is deliberately stricter, because changing the allowed
+        # set needs a migration anyway to backfill existing rows.
+        CheckConstraint("category IN ('news', 'media')", name="ck_feed_posts_category"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     title: Mapped[str] = mapped_column(String)

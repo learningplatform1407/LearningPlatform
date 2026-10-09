@@ -45,10 +45,23 @@ depends_on: str | Sequence[str] | None = None
 # wanted: no processing pipeline, no integrity requirement for a decorative
 # image). So the bucket is the only limit a client holding a signed URL cannot
 # route around, and it has to do the enforcing.
+#
+# Both statements are guarded, unlike 5cbe88540ef8 and fd66a6611155. A bucket
+# can already exist because someone made it in the Supabase dashboard while
+# developing, or because a previous run inserted the row and then failed on the
+# policy — and a bare insert would then abort the whole migration chain on a
+# duplicate key. The downgrade already assumed as much with
+# `drop policy if exists`; this makes the upgrade symmetric.
 _UPGRADE_SQL = """
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('feed-images', 'feed-images', true, 5242880,
-        array['image/jpeg','image/png','image/webp']);
+        array['image/jpeg','image/png','image/webp'])
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "feed_images_public_read" on storage.objects;
 
 create policy "feed_images_public_read"
 on storage.objects for select

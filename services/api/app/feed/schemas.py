@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.feed.constants import FeedCategory
 
@@ -77,6 +77,26 @@ class FeedPostUpdateRequest(BaseModel):
     body: str | None = Field(default=None, min_length=1)
     category: FeedCategory | None = None
     image_path: str | None = None
+
+    @model_validator(mode="after")
+    def _reject_explicit_nulls(self) -> "FeedPostUpdateRequest":
+        """`image_path` is the only field where null means something.
+
+        These three are typed `X | None` purely to express "may be omitted",
+        and `min_length` does not constrain the None arm -- so without this an
+        explicit `{"title": null}` passes validation, reaches a NOT NULL
+        column, and surfaces as an unhandled IntegrityError rather than a 422.
+        The zod contract already refuses null here, so this also stops the
+        server and the published schema disagreeing.
+        """
+        nulled = [
+            field
+            for field in ("title", "body", "category")
+            if field in self.model_fields_set and getattr(self, field) is None
+        ]
+        if nulled:
+            raise ValueError(f"{', '.join(nulled)} cannot be null")
+        return self
 
 
 class FeedImageUploadUrlRequest(BaseModel):

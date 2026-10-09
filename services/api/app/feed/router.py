@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -28,7 +29,27 @@ from app.users.constants import Role
 from app.users.models import Profile
 from app.users.service import get_or_create_profile
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/v1/feed", tags=["feed"])
+
+
+def _category(value: str) -> FeedCategory:
+    """Coerce a stored category, degrading rather than failing the request.
+
+    `category` is a plain String column, so a hand-written insert or a row
+    predating the news/media narrowing can hold something outside the enum --
+    and `FeedCategory(value)` would then raise, 500ing the *whole list* for
+    every caller, including the admin who would have to fix it. The chip is
+    decorative; the announcement is not, so the post stays readable and the
+    bad value is logged instead. Migration 4b1d7ea3c602 also carries a CHECK
+    constraint, so this is the second line of defence rather than the first.
+    """
+    try:
+        return FeedCategory(value)
+    except ValueError:
+        logger.warning("Feed post has an unrecognised category %r; showing it as news", value)
+        return FeedCategory.NEWS
 
 
 def _to_response(post: FeedPost, author: Profile | None, *, is_admin: bool) -> FeedPostResponse:
@@ -53,7 +74,7 @@ def _to_response(post: FeedPost, author: Profile | None, *, is_admin: bool) -> F
         id=post.id,
         title=post.title,
         body=post.body,
-        category=FeedCategory(post.category),
+        category=_category(post.category),
         image_path=post.image_path,
         author=FeedAuthorResponse.model_validate(author) if author is not None else None,
         published_at=post.published_at,

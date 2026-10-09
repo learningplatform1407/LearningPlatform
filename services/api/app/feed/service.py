@@ -44,7 +44,10 @@ def _validate_image_path(image_path: str | None) -> None:
     """
     if image_path is None:
         return
-    if not _IMAGE_PATH_PATTERN.match(image_path):
+    # fullmatch, not match: Python's `$` also matches just before a trailing
+    # newline, so `match` accepts "feed/<uuid>.jpg\n" -- which then lands in a
+    # getPublicUrl() on both clients and in a delete_object URL path here.
+    if not _IMAGE_PATH_PATTERN.fullmatch(image_path):
         raise ApiError(422, "invalid_image_path", "image_path is not a feed image key")
 
 

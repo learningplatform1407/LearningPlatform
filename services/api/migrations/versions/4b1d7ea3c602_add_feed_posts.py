@@ -63,13 +63,26 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["author_id"], ["profiles.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
+        # `category` is a plain String (matching questions.status and
+        # flashcards.scope), so nothing else stops a hand-written insert from
+        # storing a value the FeedCategory enum has never heard of. The API
+        # degrades rather than 500ing when it finds one — see _category() in
+        # the router — but the row should not exist in the first place.
+        sa.CheckConstraint("category IN ('news', 'media')", name="ck_feed_posts_category"),
     )
     # The list query's only ordering. Indexes live in migrations rather than as
     # index=True on the model, consistent with the rest of this directory.
     op.create_index("ix_feed_posts_published_at", "feed_posts", ["published_at"])
+    # Needed by the SET NULL above, not by any query we issue: deleting a
+    # profile makes Postgres find every referencing row to null out, which
+    # without this is a full scan of feed_posts holding a lock for its
+    # duration. The SQLite suite builds from Base.metadata and so can never
+    # surface that cost.
+    op.create_index("ix_feed_posts_author_id", "feed_posts", ["author_id"])
 
 
 def downgrade() -> None:
     """Downgrade schema."""
+    op.drop_index("ix_feed_posts_author_id", table_name="feed_posts")
     op.drop_index("ix_feed_posts_published_at", table_name="feed_posts")
     op.drop_table("feed_posts")
