@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -102,10 +101,20 @@ class FeedPostUpdateRequest(BaseModel):
 class FeedImageUploadUrlRequest(BaseModel):
     """`size_bytes` is client-declared and therefore advisory -- it buys an
     early, clearer 422 rather than a failed upload. The bucket's own
-    file_size_limit is what a client holding the signed URL cannot bypass."""
+    file_size_limit is what a client holding the signed URL cannot bypass.
 
-    mime_type: Literal["image/jpeg", "image/png", "image/webp"]
-    size_bytes: int
+    `mime_type` is a plain `str` rather than a Literal of the three allowed
+    values, matching documents' UploadUrlRequest. A Literal sounds stricter but
+    would encode the same rule twice -- here and in
+    ALLOWED_IMAGE_MIME_TYPES -- make the service's `unsupported_media_type`
+    error unreachable, and hand a client sending HEIC a generic
+    `validation_error` instead of a message naming the formats.
+    """
+
+    mime_type: str
+    # ge=0 because a negative size would otherwise slip past the
+    # `> MAX_FEED_IMAGE_BYTES` check and mint a token.
+    size_bytes: int = Field(ge=0)
 
 
 class FeedImageUploadUrlResponse(BaseModel):

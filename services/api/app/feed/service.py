@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.common.errors import ApiError
-from app.documents.storage import StorageError, create_signed_upload_url, delete_object
+from app.documents.storage import create_signed_upload_url, delete_object
 from app.feed.constants import (
     ALLOWED_IMAGE_MIME_TYPES,
     FEED_IMAGE_PREFIX,
@@ -26,10 +26,15 @@ logger = logging.getLogger(__name__)
 _IMAGE_EXTENSIONS = "|".join(sorted(set(ALLOWED_IMAGE_MIME_TYPES.values())))
 
 # Exactly the shape create_image_upload_url mints: the prefix, one uuid4, and
-# an extension this module chose. Anchored at both ends, so no traversal
-# segment or second extension can ride along.
+# an extension this module chose. Anchored at both ends (see fullmatch below),
+# so no traversal segment or second extension can ride along.
+#
+# re.escape on the prefix because it is presented as a tunable in constants.py:
+# changing it to "feed.v2" would otherwise turn the dot into a metacharacter
+# and quietly widen the one check standing between a request-body image_path
+# and an arbitrary object in a public bucket.
 _IMAGE_PATH_PATTERN = re.compile(
-    rf"^{FEED_IMAGE_PREFIX}/[0-9a-f]{{8}}-[0-9a-f]{{4}}-[0-9a-f]{{4}}"
+    rf"^{re.escape(FEED_IMAGE_PREFIX)}/[0-9a-f]{{8}}-[0-9a-f]{{4}}-[0-9a-f]{{4}}"
     rf"-[0-9a-f]{{4}}-[0-9a-f]{{12}}\.(?:{_IMAGE_EXTENSIONS})$"
 )
 
@@ -51,20 +56,51 @@ def _validate_image_path(image_path: str | None) -> None:
         raise ApiError(422, "invalid_image_path", "image_path is not a feed image key")
 
 
-def _discard_image(image_path: str | None) -> None:
+def _discard_image(db: Session, image_path: str | None) -> None:
     """Best-effort removal of an image no post references any more.
 
     Always called *after* the database commit. The other order would risk
     deleting the object and then failing the commit, leaving a live post
     pointing at a missing image -- visible breakage, versus an orphaned
-    object, which nobody can see. A StorageError here is logged and swallowed
-    for the same reason: the user's edit did succeed.
+    object, which nobody can see. A failure here is logged and swallowed for
+    the same reason: the user's edit did succeed.
     """
     if image_path is None:
         return
+
+    # Nothing stops two posts holding the same key: `image_path` comes from the
+    # request body, and an admin can read one post's key straight off
+    # GET /v1/feed and PATCH it onto another -- it matches the minted shape, so
+    # validation accepts it. Deleting or re-imaging either post would then pull
+    # the object out from under the other, leaving a broken image in a public
+    # bucket with nothing to explain it. So keep the object alive for as long
+    # as any row still references it; the orphan that leaves behind is the
+    # harmless direction.
+    #
+    # Both callers discard *after* their commit, so the post that just dropped
+    # this key no longer references it -- any row found here is a different
+    # post.
+    still_referenced = db.scalar(
+        select(FeedPost.id).where(FeedPost.image_path == image_path).limit(1)
+    )
+    if still_referenced is not None:
+        logger.info(
+            "Keeping feed image %s: still referenced by post %s", image_path, still_referenced
+        )
+        return
+
     try:
         delete_object(image_path, bucket=FEED_IMAGES_BUCKET)
-    except (StorageError, RuntimeError):
+    except Exception:
+        # Deliberately broad. An earlier `except (StorageError, RuntimeError)`
+        # looked careful and was the bug: httpx raises ConnectError and
+        # ReadTimeout from the transport, both of which subclass
+        # httpx.HTTPError -> Exception and neither of which was listed, so an
+        # unreachable Storage propagated out of an already-committed request
+        # and 500d a delete that had in fact succeeded -- exactly what this
+        # function exists to prevent. Enumerating failure types here means
+        # re-deriving httpx's hierarchy correctly forever; the contract is
+        # simply "never fail the caller".
         logger.warning("Failed to delete feed image %s", image_path, exc_info=True)
 
 
@@ -139,7 +175,7 @@ def update_post(
     db.commit()
     db.refresh(post)
 
-    _discard_image(replaced_image)
+    _discard_image(db, replaced_image)
 
     author = db.get(Profile, post.author_id) if post.author_id is not None else None
     return post, author
@@ -158,7 +194,7 @@ def delete_post(db: Session, post_id: uuid.UUID) -> None:
     db.delete(post)
     db.commit()
 
-    _discard_image(image_path)
+    _discard_image(db, image_path)
 
 
 def create_image_upload_url(data: FeedImageUploadUrlRequest) -> tuple[str, str]:

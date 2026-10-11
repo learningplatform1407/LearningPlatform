@@ -354,6 +354,105 @@ describe("FeedPage", () => {
       expect(openPost().getByLabelText("Title")).toHaveValue("Half-written thou");
     });
 
+    test("removes a post's picture", async () => {
+      // The server's clear branch had no caller at all before this: a post
+      // published with the wrong photo could only be fixed by deleting it.
+      listFeed.mockResolvedValue([
+        post({ image_path: "feed/x.jpg", can_edit: true, can_delete: true }),
+      ]);
+      updateFeedPost.mockResolvedValue(post());
+      renderPage();
+      const user = userEvent.setup();
+
+      await user.click(await screen.findByRole("button", { name: "Edit" }));
+      await user.click(openPost().getByRole("button", { name: "Remove picture" }));
+      expect(openPost().getByText(/picture will be removed/)).toBeInTheDocument();
+      await user.click(openPost().getByRole("button", { name: "Save" }));
+
+      await waitFor(() =>
+        // Explicit null, not an omitted key -- that is how the server tells
+        // "remove it" from "leave it alone".
+        expect(updateFeedPost).toHaveBeenCalledWith("p1", {
+          title: "January timetable is up",
+          body: "On the portal.",
+          image_path: null,
+        }),
+      );
+    });
+
+    test("replaces a post's picture", async () => {
+      listFeed.mockResolvedValue([
+        post({ image_path: "feed/old.jpg", can_edit: true, can_delete: true }),
+      ]);
+      requestFeedImageUploadUrl.mockResolvedValue({ storage_path: "feed/new.jpg", token: "t" });
+      uploadToSignedUrl.mockResolvedValue({ error: null });
+      updateFeedPost.mockResolvedValue(post());
+      renderPage();
+      const user = userEvent.setup();
+
+      await user.click(await screen.findByRole("button", { name: "Edit" }));
+      selectFile(
+        openPost().getByLabelText("Replace the picture"),
+        new File(["x"], "n.jpg", { type: "image/jpeg" }),
+      );
+      await user.click(openPost().getByRole("button", { name: "Save" }));
+
+      await waitFor(() =>
+        expect(updateFeedPost).toHaveBeenCalledWith(
+          "p1",
+          expect.objectContaining({ image_path: "feed/new.jpg" }),
+        ),
+      );
+    });
+
+    test("editing only the text leaves the picture alone", async () => {
+      listFeed.mockResolvedValue([
+        post({ image_path: "feed/x.jpg", can_edit: true, can_delete: true }),
+      ]);
+      updateFeedPost.mockResolvedValue(post());
+      renderPage();
+      const user = userEvent.setup();
+
+      await user.click(await screen.findByRole("button", { name: "Edit" }));
+      const titleField = openPost().getByLabelText("Title");
+      await user.clear(titleField);
+      await user.type(titleField, "New title");
+      await user.click(openPost().getByRole("button", { name: "Save" }));
+
+      await waitFor(() =>
+        expect(updateFeedPost).toHaveBeenCalledWith("p1", {
+          title: "New title",
+          body: "On the portal.",
+        }),
+      );
+    });
+
+    test("a retry after a failed create reuses the uploaded image", async () => {
+      // Otherwise every retry mints another object in a bucket with no sweeper.
+      requestFeedImageUploadUrl.mockResolvedValue({ storage_path: "feed/once.jpg", token: "t" });
+      uploadToSignedUrl.mockResolvedValue({ error: null });
+      createFeedPost.mockRejectedValueOnce(new Error("server said no"));
+      renderPage();
+      const user = userEvent.setup();
+
+      await user.type(await screen.findByLabelText("Title"), "Photo day");
+      await user.type(screen.getByLabelText("Body"), "Smile.");
+      selectFile(
+        screen.getByLabelText("Picture (optional)"),
+        new File(["x"], "p.jpg", { type: "image/jpeg" }),
+      );
+
+      await user.click(screen.getByRole("button", { name: "Post" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("server said no");
+
+      createFeedPost.mockResolvedValue(post());
+      await user.click(screen.getByRole("button", { name: "Post" }));
+
+      await waitFor(() => expect(createFeedPost).toHaveBeenCalledTimes(2));
+      expect(requestFeedImageUploadUrl).toHaveBeenCalledTimes(1);
+      expect(uploadToSignedUrl).toHaveBeenCalledTimes(1);
+    });
+
     test("hides Edit when the server says the caller may not edit", async () => {
       // Proves the buttons read the server's flags rather than re-deriving
       // them from the caller's role -- the bug ad08d02 fixed on flashcards.

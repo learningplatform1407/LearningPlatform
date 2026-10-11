@@ -2,6 +2,7 @@ import type { FeedCategory, FeedPost } from "@lp/contracts";
 import {
   FEED_CATEGORY_LABELS,
   FEED_IMAGES_BUCKET,
+  FEED_PAGE_SIZE,
   MAX_FEED_IMAGE_BYTES,
   formatPostDate,
   isAllowedFeedImageType,
@@ -107,11 +108,20 @@ function Composer() {
   const [body, setBody] = useState("");
   const [category, setCategory] = useState<FeedCategory>("news");
   const [asset, setAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  // The key of an upload that already landed. If createFeedPost then fails,
+  // pressing Post again must reuse it rather than minting a second object --
+  // a public bucket with no sweeper would otherwise collect one orphan per
+  // retry. Cleared whenever the pick changes.
+  const [uploadedPath, setUploadedPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const imagePath = asset ? await uploadImage(asset) : null;
+      let imagePath = uploadedPath;
+      if (asset && imagePath === null) {
+        imagePath = await uploadImage(asset);
+        setUploadedPath(imagePath);
+      }
       return getApiClient().createFeedPost({
         title: title.trim(),
         body: body.trim(),
@@ -124,6 +134,7 @@ function Composer() {
       setBody("");
       setCategory("news");
       setAsset(null);
+      setUploadedPath(null);
       setError(null);
       queryClient.invalidateQueries({ queryKey: ["feed"] });
     },
@@ -163,6 +174,7 @@ function Composer() {
       return;
     }
     setAsset(picked);
+    setUploadedPath(null);
   }
 
   const canPost = title.trim().length > 0 && body.trim().length > 0;
@@ -229,7 +241,10 @@ function Composer() {
         <View style={styles.previewRow}>
           <Image source={{ uri: asset.uri }} style={styles.preview} contentFit="cover" />
           <Pressable
-            onPress={() => setAsset(null)}
+            onPress={() => {
+              setAsset(null);
+              setUploadedPath(null);
+            }}
             disabled={isPending}
             accessibilityRole="button"
             style={styles.secondaryButton}
@@ -280,11 +295,36 @@ function PostCard({ post }: { post: FeedPost }) {
     setSyncedFrom(post);
   }
 
+  // Picture edits, kept out of the text state because this is the one field
+  // where "left alone" and "cleared" are different requests. Without these the
+  // server's replace and clear branches had no caller at all: an announcement
+  // published with the wrong photo could only be fixed by deleting it.
+  const [replacement, setReplacement] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [removeImage, setRemoveImage] = useState(false);
+
+  function resetImageEdits() {
+    setReplacement(null);
+    setRemoveImage(false);
+  }
+
   const updateMutation = useMutation({
-    mutationFn: () =>
-      getApiClient().updateFeedPost(post.id, { title: title.trim(), body: body.trim() }),
+    mutationFn: async () => {
+      // Three cases, which the server tells apart by whether the key is
+      // present at all: a new pick uploads and sends its path, an explicit
+      // removal sends null, and anything else omits the field.
+      let imagePatch: { image_path?: string | null } = {};
+      if (replacement) imagePatch = { image_path: await uploadImage(replacement) };
+      else if (removeImage) imagePatch = { image_path: null };
+
+      return getApiClient().updateFeedPost(post.id, {
+        title: title.trim(),
+        body: body.trim(),
+        ...imagePatch,
+      });
+    },
     onSuccess: () => {
       setIsEditing(false);
+      resetImageEdits();
       setError(null);
       queryClient.invalidateQueries({ queryKey: ["feed"] });
     },
@@ -292,6 +332,29 @@ function PostCard({ post }: { post: FeedPost }) {
       setError(err instanceof Error ? err.message : "Failed to save.");
     },
   });
+
+  async function handleReplaceImage() {
+    setError(null);
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (permission.status !== "granted") {
+      setError("Photo library permission is required to attach a picture.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      quality: 0.8,
+    });
+    if (result.canceled) return;
+    const picked = result.assets[0];
+    if (!picked) return;
+    if (!isAllowedFeedImageType(picked.mimeType)) {
+      setError("Pick a JPEG, PNG or WebP image.");
+      return;
+    }
+    setReplacement(picked);
+    // Picking a new file supersedes a pending removal.
+    setRemoveImage(false);
+  }
 
   const deleteMutation = useMutation({
     mutationFn: () => getApiClient().deleteFeedPost(post.id),
@@ -332,6 +395,56 @@ function PostCard({ post }: { post: FeedPost }) {
           multiline
           accessibilityLabel="Edit body"
         />
+
+        {replacement ? (
+          <View style={styles.previewRow}>
+            <Image source={{ uri: replacement.uri }} style={styles.preview} contentFit="cover" />
+            <Pressable
+              onPress={resetImageEdits}
+              disabled={isBusy}
+              accessibilityRole="button"
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryButtonText}>Undo</Text>
+            </Pressable>
+          </View>
+        ) : removeImage ? (
+          <View style={styles.previewRow}>
+            <Text style={styles.bylineMeta}>The picture will be removed when you save.</Text>
+            <Pressable
+              onPress={resetImageEdits}
+              disabled={isBusy}
+              accessibilityRole="button"
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryButtonText}>Keep it</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        <View style={styles.actions}>
+          <Pressable
+            onPress={() => void handleReplaceImage()}
+            disabled={isBusy}
+            accessibilityRole="button"
+            style={styles.secondaryButton}
+          >
+            <Text style={styles.secondaryButtonText}>
+              {post.image_path ? "Replace picture" : "Add a picture"}
+            </Text>
+          </Pressable>
+          {post.image_path && !removeImage && !replacement ? (
+            <Pressable
+              onPress={() => setRemoveImage(true)}
+              disabled={isBusy}
+              accessibilityRole="button"
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.dangerButtonText}>Remove picture</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
         {error ? (
           <Text accessibilityRole="alert" style={styles.error}>
             {error}
@@ -352,6 +465,7 @@ function PostCard({ post }: { post: FeedPost }) {
             onPress={() => {
               setTitle(post.title);
               setBody(post.body);
+              resetImageEdits();
               setIsEditing(false);
               setError(null);
             }}
@@ -370,6 +484,14 @@ function PostCard({ post }: { post: FeedPost }) {
     <View style={styles.card}>
       <Text style={styles.postTitle}>{post.title}</Text>
       <View style={styles.byline}>
+        {post.author?.avatar_url ? (
+          <Image
+            source={{ uri: post.author.avatar_url }}
+            style={styles.avatar}
+            contentFit="cover"
+            accessibilityIgnoresInvertColors
+          />
+        ) : null}
         {/* `author` is null once the authoring admin's profile is deleted --
             the announcement outlives them by design, so this falls back
             rather than hiding the post. */}
@@ -439,7 +561,10 @@ function PostCard({ post }: { post: FeedPost }) {
 
 export default function FeedScreen() {
   const me = useQuery({ queryKey: ["me"], queryFn: () => getApiClient().getMe() });
-  const feed = useQuery({ queryKey: ["feed"], queryFn: () => getApiClient().listFeed() });
+  const feed = useQuery({
+    queryKey: ["feed"],
+    queryFn: () => getApiClient().listFeed({ limit: FEED_PAGE_SIZE }),
+  });
 
   if (me.isPending || feed.isPending) {
     return (
@@ -478,6 +603,14 @@ export default function FeedScreen() {
     <FlatList
       style={styles.list}
       contentContainerStyle={styles.listContent}
+      // The composer lives in this list's header, and a VirtualizedList
+      // defaults to keyboardShouldPersistTaps="never" -- which means the first
+      // tap on Post (or Add a picture, or a category) while the keyboard is up
+      // only dismisses the keyboard and never reaches the handler. This is the
+      // first FlatList in the app to host a form, so there was no existing
+      // screen to copy the fix from, and `fireEvent.press` in the suite
+      // bypasses the keyboard entirely so the tests cannot catch it either.
+      keyboardShouldPersistTaps="handled"
       data={feed.data ?? []}
       keyExtractor={(post) => post.id}
       ListHeaderComponent={
@@ -487,6 +620,14 @@ export default function FeedScreen() {
         </View>
       }
       ListEmptyComponent={<Text style={styles.empty}>No announcements yet.</Text>}
+      // No "Load more" yet (FEED-9), so a full page means older announcements
+      // exist that this screen cannot reach. Saying so beats a list that just
+      // ends and reads as the whole history.
+      ListFooterComponent={
+        (feed.data ?? []).length >= FEED_PAGE_SIZE ? (
+          <Text style={styles.empty}>Showing the {FEED_PAGE_SIZE} most recent announcements.</Text>
+        ) : null
+      }
       renderItem={({ item }) => <PostCard post={item} />}
     />
   );
@@ -593,6 +734,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.xs,
   },
+  // 24px round, matching the web byline's `size-6 rounded-full`.
+  avatar: { width: 24, height: 24, borderRadius: 12 },
   authorName: {
     fontSize: fontSizes.xs,
     fontWeight: fontWeights.medium,

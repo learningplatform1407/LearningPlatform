@@ -6,6 +6,7 @@ import {
   FEED_CATEGORY_LABELS,
   isAllowedFeedImageType,
   FEED_IMAGES_BUCKET,
+  FEED_PAGE_SIZE,
   MAX_FEED_IMAGE_BYTES,
   formatPostDate,
   splitLinkifiedBody,
@@ -125,10 +126,17 @@ function ImageField({
   file,
   onPick,
   disabled,
+  label = "Picture (optional)",
+  inputId = "feed-image",
 }: {
   file: File | null;
   onPick: (file: File | null) => void;
   disabled: boolean;
+  /** The composer and each post's edit form both render one of these, so the
+   * label and the input id have to differ -- duplicate ids would make
+   * getByLabelText ambiguous and break the label/input association. */
+  label?: string;
+  inputId?: string;
 }) {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -145,12 +153,12 @@ function ImageField({
 
   return (
     <div>
-      <label className="block text-sm font-medium text-foreground" htmlFor="feed-image">
-        Picture (optional)
+      <label className="block text-sm font-medium text-foreground" htmlFor={inputId}>
+        {label}
       </label>
       <input
         ref={inputRef}
-        id="feed-image"
+        id={inputId}
         type="file"
         accept={ALLOWED_FEED_IMAGE_TYPES.join(",")}
         disabled={disabled}
@@ -201,6 +209,12 @@ function Composer() {
   const [body, setBody] = useState("");
   const [category, setCategory] = useState<FeedCategory>("news");
   const [file, setFile] = useState<File | null>(null);
+  // The key of an upload that already landed. If createFeedPost then fails
+  // (a 422, a 500, a dropped connection), pressing Post again must reuse it
+  // rather than minting a second object -- a public bucket with no sweeper
+  // would otherwise collect one orphan per retry. Cleared whenever the picked
+  // file changes, since the remembered key then describes the wrong bytes.
+  const [uploadedPath, setUploadedPath] = useState<string | null>(null);
   // Bumped only on a successful post, to hand the whole composer a fresh
   // ImageField. Remounting also drops its local validation error, which is
   // what we want here: the form is empty again. Clearing the picture without
@@ -210,7 +224,11 @@ function Composer() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const imagePath = file ? await uploadImage(file) : null;
+      let imagePath = uploadedPath;
+      if (file && imagePath === null) {
+        imagePath = await uploadImage(file);
+        setUploadedPath(imagePath);
+      }
       return getBrowserApiClient().createFeedPost({
         title: title.trim(),
         body: body.trim(),
@@ -223,6 +241,7 @@ function Composer() {
       setBody("");
       setCategory("news");
       setFile(null);
+      setUploadedPath(null);
       setResetKey((key) => key + 1);
       setError(null);
       queryClient.invalidateQueries({ queryKey: ["feed"] });
@@ -283,7 +302,10 @@ function Composer() {
         <ImageField
           key={resetKey}
           file={file}
-          onPick={setFile}
+          onPick={(picked) => {
+            setFile(picked);
+            setUploadedPath(null);
+          }}
           disabled={createMutation.isPending}
         />
         {error ? (
@@ -330,11 +352,36 @@ function PostCard({ post }: { post: FeedPost }) {
     setSyncedFrom(post);
   }
 
+  // Picture edits, kept out of the text state above because this is the one
+  // field where "left alone" and "cleared" are different requests.
+  // `replacement` holds a newly picked file; `removeImage` records an explicit
+  // clear. Both default to leaving the existing picture exactly as it is.
+  const [replacement, setReplacement] = useState<File | null>(null);
+  const [removeImage, setRemoveImage] = useState(false);
+
+  function resetImageEdits() {
+    setReplacement(null);
+    setRemoveImage(false);
+  }
+
   const updateMutation = useMutation({
-    mutationFn: () =>
-      getBrowserApiClient().updateFeedPost(post.id, { title: title.trim(), body: body.trim() }),
+    mutationFn: async () => {
+      // Three cases, which the server tells apart by whether the key is
+      // present at all: a new file uploads and sends its path, an explicit
+      // removal sends null, and anything else omits the field.
+      let imagePatch: { image_path?: string | null } = {};
+      if (replacement) imagePatch = { image_path: await uploadImage(replacement) };
+      else if (removeImage) imagePatch = { image_path: null };
+
+      return getBrowserApiClient().updateFeedPost(post.id, {
+        title: title.trim(),
+        body: body.trim(),
+        ...imagePatch,
+      });
+    },
     onSuccess: () => {
       setIsEditing(false);
+      resetImageEdits();
       setError(null);
       queryClient.invalidateQueries({ queryKey: ["feed"] });
     },
@@ -378,6 +425,38 @@ function PostCard({ post }: { post: FeedPost }) {
             rows={4}
             className="w-full rounded-md border border-border bg-background px-md py-sm text-sm text-foreground"
           />
+          {/* Without these the server's replace and clear branches had no
+              caller at all: an announcement published with the wrong photo
+              could only be fixed by deleting it and retyping. */}
+          {post.image_path && !removeImage && !replacement ? (
+            <div className="flex items-center gap-sm">
+              <span className="text-sm text-muted-foreground">Current picture</span>
+              <Button variant="secondary" onClick={() => setRemoveImage(true)} disabled={isBusy}>
+                Remove picture
+              </Button>
+            </div>
+          ) : null}
+          {removeImage ? (
+            <div className="flex items-center gap-sm">
+              <span className="text-sm text-muted-foreground">
+                The picture will be removed when you save.
+              </span>
+              <Button variant="secondary" onClick={resetImageEdits} disabled={isBusy}>
+                Keep it
+              </Button>
+            </div>
+          ) : null}
+          <ImageField
+            file={replacement}
+            onPick={(picked) => {
+              setReplacement(picked);
+              // Picking a new file supersedes a pending removal.
+              if (picked) setRemoveImage(false);
+            }}
+            disabled={isBusy}
+            label={post.image_path ? "Replace the picture" : "Add a picture"}
+            inputId={`image-${post.id}`}
+          />
           <div className="flex gap-sm">
             <Button
               onClick={() => updateMutation.mutate()}
@@ -390,6 +469,7 @@ function PostCard({ post }: { post: FeedPost }) {
               onClick={() => {
                 setTitle(post.title);
                 setBody(post.body);
+                resetImageEdits();
                 setIsEditing(false);
                 setError(null);
               }}
@@ -452,7 +532,10 @@ function PostCard({ post }: { post: FeedPost }) {
 
 export default function FeedPage() {
   const me = useQuery({ queryKey: ["me"], queryFn: () => getBrowserApiClient().getMe() });
-  const feed = useQuery({ queryKey: ["feed"], queryFn: () => getBrowserApiClient().listFeed() });
+  const feed = useQuery({
+    queryKey: ["feed"],
+    queryFn: () => getBrowserApiClient().listFeed({ limit: FEED_PAGE_SIZE }),
+  });
 
   if (me.isPending || feed.isPending) {
     return (
@@ -498,13 +581,23 @@ export default function FeedPage() {
       {posts.length === 0 ? (
         <p className="mt-md text-sm text-muted-foreground">No announcements yet.</p>
       ) : (
-        <ul className="mt-lg flex flex-col gap-lg">
-          {posts.map((post) => (
-            <li key={post.id}>
-              <PostCard post={post} />
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="mt-lg flex flex-col gap-lg">
+            {posts.map((post) => (
+              <li key={post.id}>
+                <PostCard post={post} />
+              </li>
+            ))}
+          </ul>
+          {/* There is no "Load more" yet (FEED-9), so a full page means older
+              announcements exist that this screen cannot reach. Saying so
+              beats a list that simply ends and reads as the whole history. */}
+          {posts.length >= FEED_PAGE_SIZE ? (
+            <p className="mt-lg max-w-[42rem] text-sm text-muted-foreground">
+              Showing the {FEED_PAGE_SIZE} most recent announcements.
+            </p>
+          ) : null}
+        </>
       )}
     </main>
   );

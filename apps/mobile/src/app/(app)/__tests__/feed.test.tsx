@@ -95,8 +95,22 @@ function stubFetchReturning(size: number) {
   globalThis.fetch = jest.fn().mockResolvedValue({ blob: async () => ({ size }) }) as never;
 }
 
+/** Auto-confirms (or dismisses) the delete dialog.
+ *
+ * Restored in afterEach rather than inline: an inline `mockRestore()` placed
+ * after an `await waitFor` never runs if the assertion throws, and this jest
+ * config sets no `restoreMocks` -- so one real failure would leave Alert.alert
+ * auto-pressing Delete for every later test and cascade into confusing ones.
+ */
+function stubAlertPressing(choice: "Delete" | "Cancel") {
+  jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => {
+    buttons?.find((button) => button.text === choice)?.onPress?.();
+  });
+}
+
 afterEach(() => {
   globalThis.fetch = realFetch;
+  jest.restoreAllMocks();
 });
 
 beforeEach(() => {
@@ -305,15 +319,12 @@ test("an admin deletes a post after confirming", async () => {
   mockGetMe.mockResolvedValue(ADMIN_ME);
   mockListFeed.mockResolvedValue([post({ can_edit: true, can_delete: true })]);
   mockDeleteFeedPost.mockResolvedValue(undefined);
-  const alertSpy = jest.spyOn(Alert, "alert").mockImplementation((_t, _m, buttons) => {
-    buttons?.find((button) => button.text === "Delete")?.onPress?.();
-  });
+  stubAlertPressing("Delete");
   renderScreen();
 
   fireEvent.press(await screen.findByText("Delete"));
 
   await waitFor(() => expect(mockDeleteFeedPost).toHaveBeenCalledWith("p1"));
-  alertSpy.mockRestore();
 });
 
 test("surfaces a failure to load the caller's own profile", async () => {
@@ -396,6 +407,131 @@ test("rejects an oversize blob even when the picker reported no fileSize", async
 
   expect(await screen.findByText("Image must be under 5MB.")).toBeTruthy();
   expect(mockRequestFeedImageUploadUrl).not.toHaveBeenCalled();
+});
+
+test("renders the author's avatar, as web does", async () => {
+  // avatar_url is served, typed and rendered on web; mobile was dropping it.
+  mockListFeed.mockResolvedValue([
+    post({
+      author: { id: "u1", display_name: "Dr Popescu", avatar_url: "https://cdn.test/a.png" },
+    }),
+  ]);
+  const { UNSAFE_queryAllByType } = renderScreen();
+  await screen.findByText("Dr Popescu");
+
+  const { Image } = jest.requireActual("react-native");
+  const sources = UNSAFE_queryAllByType(Image).map(
+    (node: { props: { source?: { uri?: string } } }) => node.props.source?.uri,
+  );
+  expect(sources).toContain("https://cdn.test/a.png");
+});
+
+test("an admin removes a post's picture", async () => {
+  // The server's clear branch had no caller at all before this: a post
+  // published with the wrong photo could only be fixed by deleting it.
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  mockListFeed.mockResolvedValue([
+    post({ image_path: "feed/x.jpg", can_edit: true, can_delete: true }),
+  ]);
+  mockUpdateFeedPost.mockResolvedValue(post());
+  renderScreen();
+
+  fireEvent.press(await screen.findByText("Edit"));
+  fireEvent.press(screen.getByText("Remove picture"));
+  expect(screen.getByText("The picture will be removed when you save.")).toBeTruthy();
+  fireEvent.press(screen.getByText("Save"));
+
+  await waitFor(() =>
+    // Explicit null, not an omitted key -- that is how the server tells
+    // "remove it" from "leave it alone".
+    expect(mockUpdateFeedPost).toHaveBeenCalledWith("p1", {
+      title: "January timetable is up",
+      body: "On the portal.",
+      image_path: null,
+    }),
+  );
+});
+
+test("an admin replaces a post's picture", async () => {
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  mockListFeed.mockResolvedValue([
+    post({ image_path: "feed/old.jpg", can_edit: true, can_delete: true }),
+  ]);
+  (ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+    status: "granted",
+  });
+  (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+    canceled: false,
+    assets: [{ uri: "file:///new.jpg", mimeType: "image/jpeg", fileSize: 10 }],
+  });
+  mockRequestFeedImageUploadUrl.mockResolvedValue({ storage_path: "feed/new.jpg", token: "t" });
+  mockUploadToSignedUrl.mockResolvedValue({ error: null });
+  mockUpdateFeedPost.mockResolvedValue(post());
+  stubFetchReturning(10);
+  renderScreen();
+
+  fireEvent.press(await screen.findByText("Edit"));
+  fireEvent.press(screen.getByText("Replace picture"));
+  await waitFor(() => expect(screen.getByText("Undo")).toBeTruthy());
+  fireEvent.press(screen.getByText("Save"));
+
+  await waitFor(() =>
+    expect(mockUpdateFeedPost).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({ image_path: "feed/new.jpg" }),
+    ),
+  );
+});
+
+test("editing only the text leaves the picture alone", async () => {
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  mockListFeed.mockResolvedValue([
+    post({ image_path: "feed/x.jpg", can_edit: true, can_delete: true }),
+  ]);
+  mockUpdateFeedPost.mockResolvedValue(post());
+  renderScreen();
+
+  fireEvent.press(await screen.findByText("Edit"));
+  fireEvent.changeText(screen.getByLabelText("Edit title"), "New title");
+  fireEvent.press(screen.getByText("Save"));
+
+  await waitFor(() =>
+    expect(mockUpdateFeedPost).toHaveBeenCalledWith("p1", {
+      title: "New title",
+      body: "On the portal.",
+    }),
+  );
+});
+
+test("a retry after a failed create reuses the uploaded image", async () => {
+  // Otherwise every retry mints another object in a bucket with no sweeper.
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  (ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+    status: "granted",
+  });
+  (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+    canceled: false,
+    assets: [{ uri: "file:///p.jpg", mimeType: "image/jpeg", fileSize: 10 }],
+  });
+  mockRequestFeedImageUploadUrl.mockResolvedValue({ storage_path: "feed/once.jpg", token: "t" });
+  mockUploadToSignedUrl.mockResolvedValue({ error: null });
+  mockCreateFeedPost.mockRejectedValueOnce(new Error("server said no"));
+  stubFetchReturning(10);
+  renderScreen();
+
+  await fillComposer();
+  fireEvent.press(screen.getByText("Add a picture"));
+  await waitFor(() => expect(screen.getByText("Change picture")).toBeTruthy());
+
+  fireEvent.press(screen.getByText("Post"));
+  expect(await screen.findByText("server said no")).toBeTruthy();
+
+  mockCreateFeedPost.mockResolvedValue(post());
+  fireEvent.press(screen.getByText("Post"));
+
+  await waitFor(() => expect(mockCreateFeedPost).toHaveBeenCalledTimes(2));
+  expect(mockRequestFeedImageUploadUrl).toHaveBeenCalledTimes(1);
+  expect(mockUploadToSignedUrl).toHaveBeenCalledTimes(1);
 });
 
 test("hides Edit when the server says the caller may not edit", async () => {

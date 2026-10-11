@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import patch
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
+from app.documents.storage import StorageError
 from app.feed.constants import FeedCategory
 from app.feed.models import FeedPost
 from app.feed.router import _category
@@ -449,14 +451,28 @@ def test_deleting_a_post_deletes_its_image(delete_object: Any, admin_client: Tes
     delete_object.assert_called_once_with(path, bucket="feed-images")
 
 
-@patch("app.feed.service.delete_object", side_effect=RuntimeError("storage down"))
+@pytest.mark.parametrize(
+    "failure",
+    [
+        RuntimeError("SUPABASE_URL is not configured"),
+        StorageError("Failed to delete object: 500"),
+        # The ones a narrow `except (StorageError, RuntimeError)` missed:
+        # httpx raises these from the transport, and they subclass
+        # httpx.HTTPError -> Exception, so they escaped a commit that had
+        # already succeeded and 500d a delete that in fact happened.
+        httpx.ConnectError("connection refused"),
+        httpx.ReadTimeout("timed out"),
+    ],
+)
 def test_a_failed_image_delete_does_not_fail_the_request(
-    _delete_object: Any, admin_client: TestClient
+    admin_client: TestClient, failure: Exception
 ) -> None:
     """The row is already committed by then: an orphaned object is invisible,
     whereas a 500 would tell the admin their delete failed when it did not."""
     post = _create(admin_client, image_path=_image_path())
-    assert admin_client.delete(f"/v1/feed/{post['id']}").status_code == 204
+    with patch("app.feed.service.delete_object", side_effect=failure):
+        assert admin_client.delete(f"/v1/feed/{post['id']}").status_code == 204
+    assert admin_client.get("/v1/feed").json() == []
 
 
 @patch("app.feed.service.create_signed_upload_url", return_value="signed-token")
@@ -489,17 +505,54 @@ def test_image_upload_url_is_reachable_despite_the_uuid_route(
     assert response.status_code == 200
 
 
-def test_image_upload_url_rejects_bad_mime_and_oversize(admin_client: TestClient) -> None:
-    assert (
-        admin_client.post(
-            "/v1/feed/image-upload-url",
-            json={"mime_type": "application/pdf", "size_bytes": 1},
-        ).status_code
-        == 422
+@pytest.mark.parametrize("mime_type", ["application/pdf", "image/heic", "", "image/jpeg; x=1"])
+def test_image_upload_url_rejects_an_unsupported_mime(
+    admin_client: TestClient, mime_type: str
+) -> None:
+    """The service's own error, not Pydantic's generic validation_error.
+
+    `mime_type` is a plain `str` precisely so this path stays live: a Literal
+    would reject during parsing and the caller would get no message naming the
+    formats it can actually send.
+    """
+    response = admin_client.post(
+        "/v1/feed/image-upload-url", json={"mime_type": mime_type, "size_bytes": 1}
     )
+    assert response.status_code == 422
+    assert response.json()["code"] == "unsupported_media_type"
+
+
+def test_image_upload_url_rejects_oversize(admin_client: TestClient) -> None:
     response = admin_client.post(
         "/v1/feed/image-upload-url",
         json={"mime_type": "image/jpeg", "size_bytes": 5 * 1024 * 1024 + 1},
     )
     assert response.status_code == 422
     assert response.json()["code"] == "file_too_large"
+
+
+def test_image_upload_url_rejects_a_negative_size(admin_client: TestClient) -> None:
+    """A negative size would otherwise sail past `> MAX_FEED_IMAGE_BYTES`."""
+    response = admin_client.post(
+        "/v1/feed/image-upload-url", json={"mime_type": "image/jpeg", "size_bytes": -1}
+    )
+    assert response.status_code == 422
+
+
+@patch("app.feed.service.delete_object")
+def test_an_image_two_posts_share_is_not_deleted_with_one_of_them(
+    delete_object: Any, admin_client: TestClient
+) -> None:
+    """`image_path` arrives in the request body, so an admin can read one
+    post's key off GET /v1/feed and PATCH it onto another. Deleting either
+    must not pull the object out from under the one still showing it."""
+    path = _image_path()
+    first = _create(admin_client, title="First", image_path=path)
+    second = _create(admin_client, title="Second", image_path=path)
+
+    assert admin_client.delete(f"/v1/feed/{first['id']}").status_code == 204
+    delete_object.assert_not_called()
+
+    # Once the last reference goes, the object may be removed.
+    assert admin_client.delete(f"/v1/feed/{second['id']}").status_code == 204
+    delete_object.assert_called_once_with(path, bucket="feed-images")

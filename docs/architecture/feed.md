@@ -166,20 +166,28 @@ resolving it themselves.
 
 ### Orphaned images
 
-Three sources, two closed:
+Four sources, three closed:
 
 - **Replacing or clearing a picture**, and **deleting a post** — the service
   deletes the old object, always _after_ the commit succeeds. The other order
   risks deleting the object and then failing the commit, leaving a live post
-  pointing at a missing image. A `StorageError` there is logged and swallowed
-  for the same reason: the user's edit did succeed, and an unreferenced object
-  is invisible.
+  pointing at a missing image. A failure there is logged and swallowed for the
+  same reason: the user's edit did succeed, and an unreferenced object is
+  invisible. The `except` is deliberately broad; an earlier narrow
+  `except (StorageError, RuntimeError)` missed httpx's transport errors and so
+  turned an unreachable Storage into a 500 on an already-committed delete.
+  `_discard_image` also **declines to delete a key another post still
+  references** — two posts can hold the same one, because `image_path` comes
+  from the request body and an admin can copy it off `GET /v1/feed`.
 - **An abandoned composer** — closed by uploading on submit rather than on
-  pick, so walking away uploads nothing at all. Only a crash between the
-  Storage upload and the `POST` leaves one.
+  pick, so walking away uploads nothing at all.
+- **A retry after the `POST` failed** — the clients remember the key an upload
+  already produced and reuse it, so a 422 or a dropped connection costs one
+  object rather than one per attempt. Cleared when the pick changes.
 
-The residual case has no sweeper. It is admin-only and low-volume; FEED-9 has
-the reaper (list the bucket, anti-join `feed_posts.image_path`).
+What is left is a crash between the Storage upload and the `POST` landing,
+which has no sweeper. It is admin-only and rare; FEED-9 has the reaper (list
+the bucket, anti-join `feed_posts.image_path`).
 
 ## Pagination
 
@@ -187,6 +195,14 @@ the reaper (list the bucket, anti-join `feed_posts.image_path`).
 clients fetch one page and there is no "Load more" yet**. That is zero offset
 skew by construction: a post arriving between page 1 and page 2 cannot
 duplicate or skip a row if there is only ever one page.
+
+The cost is that anything past that page is **unreachable**, not merely
+unfetched — a list that simply ends reads as the whole history. So the clients
+ask for `FEED_PAGE_SIZE` (matching the server's `MAX_FEED_LIMIT`, rather than
+accepting the smaller `DEFAULT_FEED_LIMIT`), and when a response comes back
+full they say "Showing the N most recent announcements" instead of implying
+there is no more. Paging proper is still FEED-9; this makes the gap visible
+rather than silent in the meantime.
 
 Two things are in place now because they cannot be retrofitted cheaply:
 

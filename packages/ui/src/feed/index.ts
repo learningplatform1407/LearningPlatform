@@ -10,6 +10,15 @@
 
 export const FEED_IMAGES_BUCKET = "feed-images";
 
+/** Matches MAX_FEED_LIMIT on the server, which is the most it will return.
+ *
+ * Both clients fetch one page of this size. Requesting it explicitly rather
+ * than taking the server's smaller DEFAULT_FEED_LIMIT matters: the UI has no
+ * "Load more" yet, so whatever is not in the first page is simply unreachable
+ * -- and a list that just ends looks like the whole history. When a response
+ * fills the page the clients say so rather than implying there is no more. */
+export const FEED_PAGE_SIZE = 200;
+
 export const MAX_FEED_IMAGE_BYTES = 5 * 1024 * 1024;
 
 export const ALLOWED_FEED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
