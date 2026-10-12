@@ -1,9 +1,4 @@
-import type {
-  QuizOptionResult,
-  QuizQuestionResult,
-  QuizSession,
-  QuizSessionQuestion,
-} from "@lp/api-client";
+import type { QuizQuestionResult, QuizSession, QuizSessionQuestion } from "@lp/api-client";
 import { ApiClientError } from "@lp/api-client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -20,6 +15,7 @@ import {
 } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
+import { OptionResultRow, QuestionRevealPanel } from "@/lib/question-reveal";
 import { ExpandableRow } from "@/lib/expandable-row";
 import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
 
@@ -370,42 +366,6 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
 
 // --- runner --------------------------------------------------------------
 
-function OptionResultRow({ option }: { option: QuizOptionResult }) {
-  const color = option.classified_correctly
-    ? colors.success
-    : option.selected
-      ? colors.danger
-      : colors.mutedForeground;
-  return (
-    <View style={styles.optionResultRow}>
-      <Text style={{ color }}>{option.selected ? "☑" : "☐"}</Text>
-      <View style={styles.optionResultText}>
-        <Text style={styles.optionText}>
-          {option.text}
-          {option.in_key && <Text style={styles.hint}> (correct answer)</Text>}
-        </Text>
-        {option.rationale && <Text style={styles.rationale}>{option.rationale}</Text>}
-      </View>
-    </View>
-  );
-}
-
-function ImmediateReveal({ result }: { result: QuizQuestionResult }) {
-  return (
-    <View style={styles.reveal}>
-      <Text style={styles.revealTitle}>
-        {result.outcome} — {result.points_awarded}/{result.points_possible} points
-      </Text>
-      <View style={styles.optionResultList}>
-        {result.options.map((option) => (
-          <OptionResultRow key={option.id} option={option} />
-        ))}
-      </View>
-      {result.explanation && <Text style={styles.rationale}>{result.explanation}</Text>}
-    </View>
-  );
-}
-
 function QuestionCard({
   question,
   revealMode,
@@ -464,7 +424,7 @@ function QuestionCard({
         })}
       </View>
       {reveal ? (
-        <ImmediateReveal result={reveal} />
+        <QuestionRevealPanel reveal={reveal} />
       ) : locked ? (
         // Answered in an earlier visit: the session payload carries the
         // points and outcome under `immediate`, but not the per-option

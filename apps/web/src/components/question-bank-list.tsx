@@ -5,13 +5,8 @@ import type { QuestionBankItem, QuestionReveal, TopicFilter } from "@lp/api-clie
 import { useState } from "react";
 
 import { Button } from "@/components/button";
+import { OUTCOME_MARKS, QuestionRevealPanel } from "@/components/question-reveal";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
-
-const OUTCOME_MARKS = {
-  correct: { icon: "✓", label: "Answered correctly", className: "text-success" },
-  partial: { icon: "◐", label: "Answered partially correctly", className: "text-warning" },
-  incorrect: { icon: "✗", label: "Answered incorrectly", className: "text-danger" },
-} as const;
 
 /**
  * Marks a question the reader has attempted before. Outcome-coloured rather
@@ -44,49 +39,6 @@ function ProgressMark({
         <span className="text-muted-foreground">· {attemptCount} tries</span>
       )}
     </span>
-  );
-}
-
-function Reveal({ reveal }: { reveal: QuestionReveal }) {
-  return (
-    <div className="mt-sm rounded-md border border-border bg-secondary/40 p-sm">
-      <p className="text-sm font-medium text-foreground">
-        {reveal.outcome} — {reveal.points_awarded}/{reveal.points_possible} points
-      </p>
-      <ul className="mt-xs flex flex-col gap-xs">
-        {reveal.options.map((option) => (
-          <li key={option.id} className="flex items-start gap-sm text-sm">
-            {/* Two independent axes: whether the option belongs in the answer
-                (in_key) and whether the student earned its point
-                (classified_correctly). Avoiding a wrong option scores, so
-                collapsing these would call a wrong option "right". */}
-            <span
-              className={
-                option.classified_correctly
-                  ? "text-success"
-                  : option.selected
-                    ? "text-danger"
-                    : "text-muted-foreground"
-              }
-            >
-              {option.selected ? "☑" : "☐"}
-            </span>
-            <span className="flex-1">
-              {option.text}
-              {option.in_key && (
-                <span className="ml-xs text-xs text-muted-foreground">(correct answer)</span>
-              )}
-              {option.rationale && (
-                <span className="block text-xs text-muted-foreground">{option.rationale}</span>
-              )}
-            </span>
-          </li>
-        ))}
-      </ul>
-      {reveal.explanation && (
-        <p className="mt-xs text-xs text-muted-foreground">{reveal.explanation}</p>
-      )}
-    </div>
   );
 }
 
@@ -178,7 +130,7 @@ function QuestionCard({
 
       {reveal ? (
         <>
-          <Reveal reveal={reveal} />
+          <QuestionRevealPanel reveal={reveal} />
           <Button
             type="button"
             variant="secondary"
