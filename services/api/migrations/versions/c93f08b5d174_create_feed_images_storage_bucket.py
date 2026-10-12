@@ -46,20 +46,32 @@ depends_on: str | Sequence[str] | None = None
 # image). So the bucket is the only limit a client holding a signed URL cannot
 # route around, and it has to do the enforcing.
 #
-# Both statements are guarded, unlike 5cbe88540ef8 and fd66a6611155. A bucket
+# Every statement is guarded, unlike 5cbe88540ef8 and fd66a6611155. A bucket
 # can already exist because someone made it in the Supabase dashboard while
 # developing, or because a previous run inserted the row and then failed on the
 # policy — and a bare insert would then abort the whole migration chain on a
 # duplicate key. The downgrade already assumed as much with
 # `drop policy if exists`; this makes the upgrade symmetric.
+#
+# `where not exists` plus a follow-up update rather than `on conflict (id) do
+# update`: ON CONFLICT with a column target needs a matching unique or
+# exclusion constraint, and storage.buckets is Supabase-managed, so that is an
+# assumption about someone else's schema rather than something this repo can
+# check. This form converges the settings either way and needs no constraint.
+#
+# file_size_limit and allowed_mime_types are confirmed real fields, checked
+# against the installed @supabase/storage-js `Bucket` type.
 _UPGRADE_SQL = """
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('feed-images', 'feed-images', true, 5242880,
-        array['image/jpeg','image/png','image/webp'])
-on conflict (id) do update
-set public = excluded.public,
-    file_size_limit = excluded.file_size_limit,
-    allowed_mime_types = excluded.allowed_mime_types;
+select 'feed-images', 'feed-images', true, 5242880,
+       array['image/jpeg','image/png','image/webp']
+where not exists (select 1 from storage.buckets where id = 'feed-images');
+
+update storage.buckets
+set public = true,
+    file_size_limit = 5242880,
+    allowed_mime_types = array['image/jpeg','image/png','image/webp']
+where id = 'feed-images';
 
 drop policy if exists "feed_images_public_read" on storage.objects;
 
