@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { MeResponse } from "@lp/contracts";
+import { formatMonthYear } from "@lp/ui";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -10,10 +11,6 @@ import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { createClient } from "@/lib/supabase/client";
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
-
-function formatJoined(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", { month: "long", year: "numeric" });
-}
 
 export default function ProfilePage() {
   const queryClient = useQueryClient();
@@ -162,7 +159,7 @@ export default function ProfilePage() {
             disabled={avatarUploading}
           />
         </label>
-        <p className="text-sm text-muted-foreground">Joined {formatJoined(data.created_at)}</p>
+        <p className="text-sm text-muted-foreground">Joined {formatMonthYear(data.created_at)}</p>
       </div>
       {avatarError && (
         <p role="alert" className="mt-xs text-sm text-danger">

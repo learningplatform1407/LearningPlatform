@@ -15,6 +15,10 @@ import {
   documentResponseSchema,
   documentSummaryResponseSchema,
   clozeRatingSchema,
+  feedCategorySchema,
+  feedPostCreateRequestSchema,
+  feedPostResponseSchema,
+  feedPostUpdateRequestSchema,
   flashcardCardSchema,
   flashcardResponseSchema,
   flashcardReviewStateResponseSchema,
@@ -868,5 +872,74 @@ describe("questionImportResultSchema", () => {
     };
 
     expect(questionImportResultSchema.safeParse(payload).success).toBe(true);
+  });
+});
+
+describe("feedPostResponseSchema", () => {
+  test("accepts a post with an image and an author", () => {
+    const payload = {
+      id: "p1",
+      title: "January timetable is up",
+      body: "The new timetable is on the portal: https://example.edu/timetable",
+      category: "media",
+      image_path: "feed/3f2a1b0c-0000-4000-8000-000000000000.jpg",
+      author: { id: "u1", display_name: "Dr Popescu", avatar_url: "https://cdn.test/a.png" },
+      published_at: "2026-10-09T13:16:00+00:00",
+      created_at: "2026-10-09T13:16:00+00:00",
+      updated_at: "2026-10-09T13:16:00+00:00",
+      can_edit: true,
+      can_delete: true,
+    };
+
+    expect(feedPostResponseSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("accepts a post with no image and a deleted author", () => {
+    // author_id is SET NULL, so an announcement outliving its author is a
+    // normal response rather than an error the client has to guard against.
+    const payload = {
+      id: "p2",
+      title: "Library closed Friday",
+      body: "Reopens Monday.",
+      category: "news",
+      image_path: null,
+      author: null,
+      published_at: "2026-10-01T09:00:00+00:00",
+      created_at: "2026-10-01T09:00:00+00:00",
+      updated_at: "2026-10-01T09:00:00+00:00",
+      can_edit: false,
+      can_delete: false,
+    };
+
+    expect(feedPostResponseSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("rejects a category the backend no longer has", () => {
+    // The epic's original news/exam/livestream values are superseded.
+    expect(feedCategorySchema.safeParse("livestream").success).toBe(false);
+  });
+});
+
+describe("feedPostCreateRequestSchema", () => {
+  test("accepts a title, body and category", () => {
+    const payload = { title: "Exam dates", body: "See the portal.", category: "news" };
+    expect(feedPostCreateRequestSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("rejects an empty title or body", () => {
+    expect(
+      feedPostCreateRequestSchema.safeParse({ title: "", body: "b", category: "news" }).success,
+    ).toBe(false);
+    expect(
+      feedPostCreateRequestSchema.safeParse({ title: "t", body: "", category: "news" }).success,
+    ).toBe(false);
+  });
+});
+
+describe("feedPostUpdateRequestSchema", () => {
+  test("allows clearing the image, but not blanking the title", () => {
+    expect(feedPostUpdateRequestSchema.safeParse({ image_path: null }).success).toBe(true);
+    expect(feedPostUpdateRequestSchema.safeParse({}).success).toBe(true);
+    expect(feedPostUpdateRequestSchema.safeParse({ title: "" }).success).toBe(false);
   });
 });

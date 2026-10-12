@@ -359,6 +359,79 @@ describe("createApiClient", () => {
     expect(init.method).toBe("DELETE");
   });
 
+  test("listFeed hits GET /v1/feed with no query string by default", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([{ id: "p1", title: "Hello" }]));
+
+    const result = await client().listFeed();
+
+    expect(result).toEqual([{ id: "p1", title: "Hello" }]);
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/feed");
+  });
+
+  test("listFeed passes limit and offset through", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    await client().listFeed({ limit: 10, offset: 20 });
+
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/feed?limit=10&offset=20");
+  });
+
+  test("createFeedPost POSTs to /v1/feed", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "p1" }));
+
+    await client().createFeedPost({ title: "Exam dates", body: "Portal.", category: "news" });
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/feed");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      title: "Exam dates",
+      body: "Portal.",
+      category: "news",
+    });
+  });
+
+  test("updateFeedPost PATCHes /v1/feed/{id} and can clear the image", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "p1" }));
+
+    await client().updateFeedPost("p1", { image_path: null });
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/feed/p1");
+    expect(init.method).toBe("PATCH");
+    // Explicit null, not an omitted key: the server reads this as "remove the
+    // picture" rather than "leave it alone".
+    expect(JSON.parse(init.body as string)).toEqual({ image_path: null });
+  });
+
+  test("deleteFeedPost DELETEs /v1/feed/{id}", async () => {
+    fetchMock.mockResolvedValueOnce(noContentResponse());
+
+    await client().deleteFeedPost("p1");
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/feed/p1");
+    expect(init.method).toBe("DELETE");
+  });
+
+  test("requestFeedImageUploadUrl POSTs to /v1/feed/image-upload-url", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ storage_path: "feed/abc.jpg", token: "signed" }),
+    );
+
+    const result = await client().requestFeedImageUploadUrl({
+      mime_type: "image/jpeg",
+      size_bytes: 1024,
+    });
+
+    expect(result).toEqual({ storage_path: "feed/abc.jpg", token: "signed" });
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/feed/image-upload-url");
+    expect(init.method).toBe("POST");
+  });
+
   test("submitFlashcardReview POSTs the rating to /v1/flashcards/{id}/review", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({ id: "s1", flashcard_id: "f1", ease_factor: 2.5, interval_days: 1 }),

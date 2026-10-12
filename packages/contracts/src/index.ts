@@ -18,6 +18,13 @@ import type {
   documentVersionResponseSchema,
   entitlementResponseSchema,
   extractedContentSchema,
+  feedAuthorSchema,
+  feedCategorySchema,
+  feedImageUploadUrlRequestSchema,
+  feedImageUploadUrlResponseSchema,
+  feedPostCreateRequestSchema,
+  feedPostResponseSchema,
+  feedPostUpdateRequestSchema,
   flashcardCardSchema,
   flashcardCreateRequestSchema,
   flashcardImportItemSchema,
@@ -118,3 +125,10 @@ export type Tag = z.infer<typeof tagResponseSchema>;
 export type QuestionImportRequest = z.infer<typeof questionImportRequestSchema>;
 export type QuestionImportResult = z.infer<typeof questionImportResultSchema>;
 export type QuestionImportError = z.infer<typeof questionImportErrorSchema>;
+export type FeedCategory = z.infer<typeof feedCategorySchema>;
+export type FeedAuthor = z.infer<typeof feedAuthorSchema>;
+export type FeedPost = z.infer<typeof feedPostResponseSchema>;
+export type FeedPostCreateRequest = z.infer<typeof feedPostCreateRequestSchema>;
+export type FeedPostUpdateRequest = z.infer<typeof feedPostUpdateRequestSchema>;
+export type FeedImageUploadUrlRequest = z.infer<typeof feedImageUploadUrlRequestSchema>;
+export type FeedImageUploadUrlResponse = z.infer<typeof feedImageUploadUrlResponseSchema>;

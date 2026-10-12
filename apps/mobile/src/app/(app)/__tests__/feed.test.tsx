@@ -1,0 +1,547 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import * as ImagePicker from "expo-image-picker";
+import * as WebBrowser from "expo-web-browser";
+import { Alert } from "react-native";
+
+import FeedScreen from "../feed";
+
+const mockGetMe = jest.fn();
+const mockListFeed = jest.fn();
+const mockCreateFeedPost = jest.fn();
+const mockUpdateFeedPost = jest.fn();
+const mockDeleteFeedPost = jest.fn();
+const mockRequestFeedImageUploadUrl = jest.fn();
+const mockUploadToSignedUrl = jest.fn();
+const mockGetPublicUrl = jest.fn();
+
+jest.mock("@/lib/api-client", () => ({
+  getApiClient: () => ({
+    getMe: mockGetMe,
+    listFeed: mockListFeed,
+    createFeedPost: mockCreateFeedPost,
+    updateFeedPost: mockUpdateFeedPost,
+    deleteFeedPost: mockDeleteFeedPost,
+    requestFeedImageUploadUrl: mockRequestFeedImageUploadUrl,
+  }),
+}));
+
+jest.mock("@/lib/supabase", () => ({
+  supabase: {
+    storage: {
+      from: () => ({
+        uploadToSignedUrl: mockUploadToSignedUrl,
+        getPublicUrl: mockGetPublicUrl,
+      }),
+    },
+  },
+}));
+
+jest.mock("expo-image-picker", () => ({
+  requestMediaLibraryPermissionsAsync: jest.fn(),
+  launchImageLibraryAsync: jest.fn(),
+}));
+
+jest.mock("expo-web-browser", () => ({ openBrowserAsync: jest.fn() }));
+
+// expo-image is a native module; the list only needs it to render something.
+jest.mock("expo-image", () => {
+  const { Image } = jest.requireActual("react-native");
+  return { Image };
+});
+
+const AT = "2026-10-09T13:16:00+00:00";
+
+function post(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "p1",
+    title: "January timetable is up",
+    body: "On the portal.",
+    category: "news",
+    image_path: null,
+    author: { id: "u1", display_name: "Dr Popescu", avatar_url: null },
+    published_at: AT,
+    created_at: AT,
+    updated_at: AT,
+    can_edit: false,
+    can_delete: false,
+    ...overrides,
+  };
+}
+
+function renderScreen() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <FeedScreen />
+    </QueryClientProvider>,
+  );
+}
+
+const STUDENT_ME = { id: "u1", role: "student" };
+const ADMIN_ME = { id: "u1", role: "admin" };
+
+async function fillComposer() {
+  fireEvent.changeText(await screen.findByLabelText("Title"), "Photo day");
+  fireEvent.changeText(screen.getByLabelText("Body"), "Smile.");
+}
+
+// Captured so the stub below cannot leak into later tests: two of them replace
+// globalThis.fetch, and without a restore every subsequent test in the file
+// would silently inherit a mock it never set up.
+const realFetch = globalThis.fetch;
+
+function stubFetchReturning(size: number) {
+  globalThis.fetch = jest.fn().mockResolvedValue({ blob: async () => ({ size }) }) as never;
+}
+
+/** Auto-confirms (or dismisses) the delete dialog.
+ *
+ * Restored in afterEach rather than inline: an inline `mockRestore()` placed
+ * after an `await waitFor` never runs if the assertion throws, and this jest
+ * config sets no `restoreMocks` -- so one real failure would leave Alert.alert
+ * auto-pressing Delete for every later test and cascade into confusing ones.
+ */
+function stubAlertPressing(choice: "Delete" | "Cancel") {
+  jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => {
+    buttons?.find((button) => button.text === choice)?.onPress?.();
+  });
+}
+
+afterEach(() => {
+  globalThis.fetch = realFetch;
+  jest.restoreAllMocks();
+});
+
+beforeEach(() => {
+  mockGetMe.mockReset().mockResolvedValue(STUDENT_ME);
+  mockListFeed.mockReset().mockResolvedValue([post()]);
+  mockCreateFeedPost.mockReset();
+  mockUpdateFeedPost.mockReset();
+  mockDeleteFeedPost.mockReset();
+  mockRequestFeedImageUploadUrl.mockReset();
+  mockUploadToSignedUrl.mockReset();
+  mockGetPublicUrl.mockReset().mockReturnValue({
+    data: { publicUrl: "https://cdn.test/feed/x.jpg" },
+  });
+  (ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockReset();
+  (ImagePicker.launchImageLibraryAsync as jest.Mock).mockReset();
+  (WebBrowser.openBrowserAsync as jest.Mock).mockReset();
+});
+
+test("shows a post with its title, byline and category", async () => {
+  renderScreen();
+
+  expect(await screen.findByText("January timetable is up")).toBeTruthy();
+  expect(screen.getByText("Dr Popescu")).toBeTruthy();
+  expect(screen.getByText("News")).toBeTruthy();
+});
+
+test("a learner gets no composer and no actions", async () => {
+  renderScreen();
+
+  await screen.findByText("January timetable is up");
+  expect(screen.queryByText("New announcement")).toBeNull();
+  expect(screen.queryByText("Edit")).toBeNull();
+  expect(screen.queryByText("Delete")).toBeNull();
+});
+
+test("falls back to a generic byline when the author's profile is gone", async () => {
+  // author_id is SET NULL, so the announcement outlives its author.
+  mockListFeed.mockResolvedValue([post({ author: null })]);
+  renderScreen();
+
+  expect(await screen.findByText("Staff")).toBeTruthy();
+});
+
+test("opens a pasted https URL in the in-app browser", async () => {
+  mockListFeed.mockResolvedValue([post({ body: "Watch at https://example.edu/live now." })]);
+  renderScreen();
+
+  fireEvent.press(await screen.findByText("https://example.edu/live"));
+
+  // openBrowserAsync rather than Linking.openURL, so an unexpected target
+  // cannot hand off to another app.
+  expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith("https://example.edu/live");
+});
+
+test("does not linkify a javascript: scheme", async () => {
+  // Asserted on the link role rather than by pressing the text: a plain
+  // body <Text> has no onPress, so a press-based assertion would pass even
+  // with a matcher wide enough to linkify this.
+  mockListFeed.mockResolvedValue([post({ body: "javascript:alert(1)" })]);
+  renderScreen();
+
+  await screen.findByText("January timetable is up");
+  expect(screen.queryByRole("link")).toBeNull();
+});
+
+test("linkifies only the https run, so the surrounding text stays inert", async () => {
+  mockListFeed.mockResolvedValue([post({ body: "mailto:a@b.com and https://example.edu/live" })]);
+  renderScreen();
+
+  await screen.findByText("January timetable is up");
+  const links = screen.queryAllByRole("link");
+  expect(links).toHaveLength(1);
+  fireEvent.press(links[0]!);
+  expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith("https://example.edu/live");
+});
+
+test("shows the empty state when there are no posts", async () => {
+  mockListFeed.mockResolvedValue([]);
+  renderScreen();
+
+  expect(await screen.findByText("No announcements yet.")).toBeTruthy();
+});
+
+test("surfaces a load failure", async () => {
+  mockListFeed.mockRejectedValue(new Error("boom"));
+  renderScreen();
+
+  expect(await screen.findByText("Failed to load the feed: boom")).toBeTruthy();
+});
+
+test("an admin posts without an image", async () => {
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  mockCreateFeedPost.mockResolvedValue(post());
+  renderScreen();
+
+  await fillComposer();
+  fireEvent.press(screen.getByText("Post"));
+
+  await waitFor(() =>
+    expect(mockCreateFeedPost).toHaveBeenCalledWith({
+      title: "Photo day",
+      body: "Smile.",
+      category: "news",
+      image_path: null,
+    }),
+  );
+  expect(mockRequestFeedImageUploadUrl).not.toHaveBeenCalled();
+});
+
+test("an admin posts a picture through upload-url then uploadToSignedUrl", async () => {
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  (ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+    status: "granted",
+  });
+  (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+    canceled: false,
+    assets: [{ uri: "file:///p.jpg", mimeType: "image/jpeg", fileSize: 2048 }],
+  });
+  mockRequestFeedImageUploadUrl.mockResolvedValue({
+    storage_path: "feed/3f2a1b0c-0000-4000-8000-000000000000.jpg",
+    token: "signed",
+  });
+  mockUploadToSignedUrl.mockResolvedValue({ error: null });
+  mockCreateFeedPost.mockResolvedValue(post());
+  // The picker returns a uri, never bytes, so every upload fetches it first.
+  stubFetchReturning(2048);
+
+  renderScreen();
+  await fillComposer();
+  fireEvent.press(screen.getByText("Add a picture"));
+  await waitFor(() => expect(screen.getByText("Change picture")).toBeTruthy());
+  fireEvent.press(screen.getByText("Post"));
+
+  await waitFor(() => expect(mockCreateFeedPost).toHaveBeenCalled());
+  // The post carries the key the server minted, not a client-made path.
+  expect(mockCreateFeedPost).toHaveBeenCalledWith(
+    expect.objectContaining({ image_path: "feed/3f2a1b0c-0000-4000-8000-000000000000.jpg" }),
+  );
+});
+
+test("a denied photo permission shows an error instead of hanging", async () => {
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  (ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+    status: "denied",
+  });
+  renderScreen();
+
+  fireEvent.press(await screen.findByText("Add a picture"));
+
+  expect(
+    await screen.findByText("Photo library permission is required to attach a picture."),
+  ).toBeTruthy();
+  expect(ImagePicker.launchImageLibraryAsync).not.toHaveBeenCalled();
+});
+
+test("a failed upload shows an error and never creates the post", async () => {
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  (ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+    status: "granted",
+  });
+  (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+    canceled: false,
+    assets: [{ uri: "file:///p.jpg", mimeType: "image/jpeg", fileSize: 10 }],
+  });
+  mockRequestFeedImageUploadUrl.mockResolvedValue({ storage_path: "feed/x.jpg", token: "t" });
+  mockUploadToSignedUrl.mockResolvedValue({ error: new Error("upload exploded") });
+  stubFetchReturning(10);
+
+  renderScreen();
+  await fillComposer();
+  fireEvent.press(screen.getByText("Add a picture"));
+  await waitFor(() => expect(screen.getByText("Change picture")).toBeTruthy());
+  fireEvent.press(screen.getByText("Post"));
+
+  expect(await screen.findByText("upload exploded")).toBeTruthy();
+  expect(mockCreateFeedPost).not.toHaveBeenCalled();
+});
+
+test("an admin edits a post it did not author", async () => {
+  // The distinctive rule: can_edit is role-based, so an admin sees Edit on
+  // another admin's post.
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  mockListFeed.mockResolvedValue([
+    post({
+      author: { id: "someone-else", display_name: "Dr Ionescu", avatar_url: null },
+      can_edit: true,
+      can_delete: true,
+    }),
+  ]);
+  mockUpdateFeedPost.mockResolvedValue(post());
+  renderScreen();
+
+  fireEvent.press(await screen.findByText("Edit"));
+  fireEvent.changeText(screen.getByLabelText("Edit title"), "Corrected title");
+  fireEvent.press(screen.getByText("Save"));
+
+  await waitFor(() =>
+    expect(mockUpdateFeedPost).toHaveBeenCalledWith("p1", {
+      title: "Corrected title",
+      body: "On the portal.",
+    }),
+  );
+});
+
+test("an admin deletes a post after confirming", async () => {
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  mockListFeed.mockResolvedValue([post({ can_edit: true, can_delete: true })]);
+  mockDeleteFeedPost.mockResolvedValue(undefined);
+  stubAlertPressing("Delete");
+  renderScreen();
+
+  fireEvent.press(await screen.findByText("Delete"));
+
+  await waitFor(() => expect(mockDeleteFeedPost).toHaveBeenCalledWith("p1"));
+});
+
+test("surfaces a failure to load the caller's own profile", async () => {
+  // Without this branch an admin whose /v1/me call failed silently renders
+  // the learner view -- no composer, no actions, no explanation.
+  mockGetMe.mockRejectedValue(new Error("me exploded"));
+  renderScreen();
+
+  expect(await screen.findByText("Failed to load your profile: me exploded")).toBeTruthy();
+});
+
+test("rejects a HEIC pick with a readable message instead of a late 422", async () => {
+  // iOS commonly returns image/heic. Casting it would have sent it to an
+  // endpoint whose Literal rejects it, surfacing as "API request failed with
+  // status 422" only after the fetch had already run.
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  (ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+    status: "granted",
+  });
+  (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+    canceled: false,
+    assets: [{ uri: "file:///p.heic", mimeType: "image/heic", fileSize: 10 }],
+  });
+  renderScreen();
+
+  fireEvent.press(await screen.findByText("Add a picture"));
+
+  expect(await screen.findByText("Pick a JPEG, PNG or WebP image.")).toBeTruthy();
+  expect(mockRequestFeedImageUploadUrl).not.toHaveBeenCalled();
+});
+
+test("sends the uploaded blob's size, not the picker's stale fileSize", async () => {
+  // quality: 0.8 means we upload a re-encode, so asset.fileSize describes a
+  // different payload than the one being sent -- and the bucket's hard
+  // file_size_limit judges the bytes, not the claim.
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  (ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+    status: "granted",
+  });
+  (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+    canceled: false,
+    assets: [{ uri: "file:///p.jpg", mimeType: "image/jpeg", fileSize: 4_000_000 }],
+  });
+  mockRequestFeedImageUploadUrl.mockResolvedValue({ storage_path: "feed/x.jpg", token: "t" });
+  mockUploadToSignedUrl.mockResolvedValue({ error: null });
+  mockCreateFeedPost.mockResolvedValue(post());
+  stubFetchReturning(1234);
+
+  renderScreen();
+  await fillComposer();
+  fireEvent.press(screen.getByText("Add a picture"));
+  await waitFor(() => expect(screen.getByText("Change picture")).toBeTruthy());
+  fireEvent.press(screen.getByText("Post"));
+
+  await waitFor(() => expect(mockRequestFeedImageUploadUrl).toHaveBeenCalled());
+  expect(mockRequestFeedImageUploadUrl).toHaveBeenCalledWith({
+    mime_type: "image/jpeg",
+    size_bytes: 1234,
+  });
+});
+
+test("rejects an oversize blob even when the picker reported no fileSize", async () => {
+  // fileSize is frequently undefined on Android, which made the pick-time
+  // guard a no-op and left nothing bounding the upload client-side.
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  (ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+    status: "granted",
+  });
+  (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+    canceled: false,
+    assets: [{ uri: "file:///p.jpg", mimeType: "image/jpeg" }],
+  });
+  stubFetchReturning(6 * 1024 * 1024);
+
+  renderScreen();
+  await fillComposer();
+  fireEvent.press(screen.getByText("Add a picture"));
+  await waitFor(() => expect(screen.getByText("Change picture")).toBeTruthy());
+  fireEvent.press(screen.getByText("Post"));
+
+  expect(await screen.findByText("Image must be under 5MB.")).toBeTruthy();
+  expect(mockRequestFeedImageUploadUrl).not.toHaveBeenCalled();
+});
+
+test("renders the author's avatar, as web does", async () => {
+  // avatar_url is served, typed and rendered on web; mobile was dropping it.
+  mockListFeed.mockResolvedValue([
+    post({
+      author: { id: "u1", display_name: "Dr Popescu", avatar_url: "https://cdn.test/a.png" },
+    }),
+  ]);
+  const { UNSAFE_queryAllByType } = renderScreen();
+  await screen.findByText("Dr Popescu");
+
+  const { Image } = jest.requireActual("react-native");
+  const sources = UNSAFE_queryAllByType(Image).map(
+    (node: { props: { source?: { uri?: string } } }) => node.props.source?.uri,
+  );
+  expect(sources).toContain("https://cdn.test/a.png");
+});
+
+test("an admin removes a post's picture", async () => {
+  // The server's clear branch had no caller at all before this: a post
+  // published with the wrong photo could only be fixed by deleting it.
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  mockListFeed.mockResolvedValue([
+    post({ image_path: "feed/x.jpg", can_edit: true, can_delete: true }),
+  ]);
+  mockUpdateFeedPost.mockResolvedValue(post());
+  renderScreen();
+
+  fireEvent.press(await screen.findByText("Edit"));
+  fireEvent.press(screen.getByText("Remove picture"));
+  expect(screen.getByText("The picture will be removed when you save.")).toBeTruthy();
+  fireEvent.press(screen.getByText("Save"));
+
+  await waitFor(() =>
+    // Explicit null, not an omitted key -- that is how the server tells
+    // "remove it" from "leave it alone".
+    expect(mockUpdateFeedPost).toHaveBeenCalledWith("p1", {
+      title: "January timetable is up",
+      body: "On the portal.",
+      image_path: null,
+    }),
+  );
+});
+
+test("an admin replaces a post's picture", async () => {
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  mockListFeed.mockResolvedValue([
+    post({ image_path: "feed/old.jpg", can_edit: true, can_delete: true }),
+  ]);
+  (ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+    status: "granted",
+  });
+  (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+    canceled: false,
+    assets: [{ uri: "file:///new.jpg", mimeType: "image/jpeg", fileSize: 10 }],
+  });
+  mockRequestFeedImageUploadUrl.mockResolvedValue({ storage_path: "feed/new.jpg", token: "t" });
+  mockUploadToSignedUrl.mockResolvedValue({ error: null });
+  mockUpdateFeedPost.mockResolvedValue(post());
+  stubFetchReturning(10);
+  renderScreen();
+
+  fireEvent.press(await screen.findByText("Edit"));
+  fireEvent.press(screen.getByText("Replace picture"));
+  await waitFor(() => expect(screen.getByText("Undo")).toBeTruthy());
+  fireEvent.press(screen.getByText("Save"));
+
+  await waitFor(() =>
+    expect(mockUpdateFeedPost).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({ image_path: "feed/new.jpg" }),
+    ),
+  );
+});
+
+test("editing only the text leaves the picture alone", async () => {
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  mockListFeed.mockResolvedValue([
+    post({ image_path: "feed/x.jpg", can_edit: true, can_delete: true }),
+  ]);
+  mockUpdateFeedPost.mockResolvedValue(post());
+  renderScreen();
+
+  fireEvent.press(await screen.findByText("Edit"));
+  fireEvent.changeText(screen.getByLabelText("Edit title"), "New title");
+  fireEvent.press(screen.getByText("Save"));
+
+  await waitFor(() =>
+    expect(mockUpdateFeedPost).toHaveBeenCalledWith("p1", {
+      title: "New title",
+      body: "On the portal.",
+    }),
+  );
+});
+
+test("a retry after a failed create reuses the uploaded image", async () => {
+  // Otherwise every retry mints another object in a bucket with no sweeper.
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  (ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+    status: "granted",
+  });
+  (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+    canceled: false,
+    assets: [{ uri: "file:///p.jpg", mimeType: "image/jpeg", fileSize: 10 }],
+  });
+  mockRequestFeedImageUploadUrl.mockResolvedValue({ storage_path: "feed/once.jpg", token: "t" });
+  mockUploadToSignedUrl.mockResolvedValue({ error: null });
+  mockCreateFeedPost.mockRejectedValueOnce(new Error("server said no"));
+  stubFetchReturning(10);
+  renderScreen();
+
+  await fillComposer();
+  fireEvent.press(screen.getByText("Add a picture"));
+  await waitFor(() => expect(screen.getByText("Change picture")).toBeTruthy());
+
+  fireEvent.press(screen.getByText("Post"));
+  expect(await screen.findByText("server said no")).toBeTruthy();
+
+  mockCreateFeedPost.mockResolvedValue(post());
+  fireEvent.press(screen.getByText("Post"));
+
+  await waitFor(() => expect(mockCreateFeedPost).toHaveBeenCalledTimes(2));
+  expect(mockRequestFeedImageUploadUrl).toHaveBeenCalledTimes(1);
+  expect(mockUploadToSignedUrl).toHaveBeenCalledTimes(1);
+});
+
+test("hides Edit when the server says the caller may not edit", async () => {
+  // Proves the buttons read the server's flags rather than re-deriving them
+  // from the caller's role -- the bug ad08d02 fixed on flashcards.
+  mockGetMe.mockResolvedValue(ADMIN_ME);
+  mockListFeed.mockResolvedValue([post({ can_edit: false, can_delete: false })]);
+  renderScreen();
+
+  await screen.findByText("January timetable is up");
+  expect(screen.queryByText("Edit")).toBeNull();
+  expect(screen.queryByText("Delete")).toBeNull();
+});
