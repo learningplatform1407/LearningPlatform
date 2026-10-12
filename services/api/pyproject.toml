@@ -13,6 +13,12 @@ dependencies = [
     "pyjwt[crypto]>=2.13.0",
     "pymupdf>=1.28.2",
     "sqlalchemy>=2.0.52",
+    # app/core/clock.py resolves the institution timezone with ZoneInfo, which
+    # reads the system tz database. Debian images ship one; slim and Alpine do
+    # not, and the failure is a ZoneInfoNotFoundError at *request* time rather
+    # than startup -- a 500 on the Learn page. No Dockerfile exists in this
+    # repo yet to guarantee the system copy, so carry the wheel.
+    "tzdata>=2026.1",
     "uvicorn[standard]>=0.52.4",
 ]
 
