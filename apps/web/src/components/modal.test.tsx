@@ -108,6 +108,32 @@ describe("Modal", () => {
     await waitFor(() => expect(opener).toHaveFocus());
   });
 
+  test("a re-render with a fresh onClose does not yank focus out of the panel", async () => {
+    // The daily-question overlay's onClose closes over which day is open, so
+    // its identity changes between renders -- the normal case. If the effect
+    // depended on it, every such render would run the cleanup, which pushes
+    // focus back to the opener, stealing it from whatever the reader was
+    // typing into.
+    function Host({ label }: { label: string }) {
+      return (
+        <>
+          <button type="button">Opener</button>
+          <Modal open title={label} onClose={() => {}}>
+            <input aria-label="Answer" />
+          </Modal>
+        </>
+      );
+    }
+
+    const { rerender } = render(<Host label="Day" />);
+    const input = screen.getByLabelText("Answer");
+    input.focus();
+
+    rerender(<Host label="Day" />);
+
+    expect(input).toHaveFocus();
+  });
+
   test("escapes the page's stacking context via a portal", async () => {
     // Rendered into document.body rather than next to the trigger, so no
     // ancestor's transform/filter/contain can re-anchor the fixed positioning.

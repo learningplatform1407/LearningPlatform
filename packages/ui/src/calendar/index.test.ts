@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { buildMonthGrid, monthOf, monthRange, shiftMonth } from "./index";
+import { buildMonthGrid, formatCalendarDate, monthOf, monthRange, shiftMonth } from "./index";
 
 // Worth knowing what these do and do not prove. This package's test script
 // pins `TZ=UTC`, so they are deterministic -- but that pin also means they
@@ -112,5 +112,22 @@ describe("monthRange", () => {
 describe("monthOf", () => {
   test("extracts the month from an ISO date", () => {
     expect(monthOf("2026-10-13")).toBe("2026-10");
+  });
+});
+
+describe("formatCalendarDate", () => {
+  test("names the day without shifting it", () => {
+    expect(formatCalendarDate("2026-10-13")).toBe("Tuesday, October 13, 2026");
+    // The two dates most likely to shift under a non-UTC formatter: the first
+    // of a month (would print the previous month) and the first of a year.
+    expect(formatCalendarDate("2026-10-01")).toBe("Thursday, October 1, 2026");
+    expect(formatCalendarDate("2026-01-01")).toBe("Thursday, January 1, 2026");
+  });
+
+  test("rejects anything that is not a calendar date", () => {
+    // An instant would format fine and silently render in whichever zone the
+    // host is in, so it has to be refused rather than accepted.
+    expect(() => formatCalendarDate("2026-10-13T22:00:00Z")).toThrow();
+    expect(() => formatCalendarDate("2026-10")).toThrow();
   });
 });

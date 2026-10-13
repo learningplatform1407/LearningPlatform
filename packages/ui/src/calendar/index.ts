@@ -24,6 +24,19 @@ const MONTH_LABEL = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
+// Both pin timeZone: "UTC", unlike the formatters in ../format/date.ts, and
+// the difference is the point. Those render an *instant* -- a byline should
+// read in the viewer's own local time. These render a *calendar date*, which
+// has no instant and no zone; "2026-10-12" is the twelfth everywhere. Letting
+// the host zone in would print the eleventh for anyone west of UTC.
+const DAY_LABEL = new Intl.DateTimeFormat("en-US", {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
 const MS_PER_DAY = 86_400_000;
 
 /** Monday-first, matching European convention. */
@@ -64,6 +77,18 @@ function isoDate(timestamp: number): string {
 /** The month containing an ISO date, as "YYYY-MM". */
 export function monthOf(date: string): string {
   return date.slice(0, 7);
+}
+
+/** "Monday, October 12, 2026" — the heading on one day's question.
+ *
+ * Takes a `YYYY-MM-DD` calendar date, not an instant. Appending a time would
+ * reintroduce exactly the zone problem this module exists to avoid.
+ */
+export function formatCalendarDate(date: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error(`Expected a YYYY-MM-DD date, got "${date}"`);
+  }
+  return DAY_LABEL.format(new Date(`${date}T00:00:00Z`));
 }
 
 /** "2026-10" + 1 → "2026-11"; -1 → "2026-09". Rolls the year correctly. */

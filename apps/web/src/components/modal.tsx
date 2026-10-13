@@ -33,6 +33,20 @@ export function Modal({
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
 
+  // Held in a ref so the effect below depends on `open` alone. A caller whose
+  // onClose identity changes between renders -- the normal case for a handler
+  // closing over state -- would otherwise re-run the whole effect, and its
+  // cleanup pushes focus back to the opener. The overlay would silently steal
+  // focus away from whatever the reader was doing inside it.
+  //
+  // Synced in its own effect rather than assigned during render: effects run
+  // in declaration order, so this one has always written the current handler
+  // before the one below reads it.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -42,7 +56,7 @@ export function Modal({
     closeRef.current?.focus();
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") onCloseRef.current();
     }
     document.addEventListener("keydown", onKeyDown);
 
@@ -55,7 +69,7 @@ export function Modal({
       document.body.style.overflow = previousOverflow;
       opener?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   // Rendering null when closed also means `document` is guaranteed to exist by
   // the time the portal mounts -- an overlay only ever opens from an

@@ -1,9 +1,12 @@
 "use client";
 
+import type { DailyQuestion } from "@lp/api-client";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
 import { Card } from "@/components/card";
+import { DailyQuestionOverlay, useDailyQuestion } from "@/components/daily-question-overlay";
+import { DailyQuestionCard, DailyQuestionRail } from "@/components/daily-question-panel";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -12,7 +15,22 @@ const STATUS_LABEL: Record<string, string> = {
   failed: "Failed",
 };
 
-export default function LearnPage() {
+/** The hub's own content: recent lessons and the nav grid.
+ *
+ * Its query lives here rather than in the page so the loading and error
+ * branches can keep their early returns while the layout -- and with it the
+ * calendar rail -- stays mounted above them. Previously each branch returned
+ * its own `<main className="p-xl">`, which would have made the rail vanish
+ * during both, and would have delayed the question's auto-open until an
+ * unrelated lessons query resolved.
+ */
+function LearnContent({
+  today,
+  onOpenToday,
+}: {
+  today: DailyQuestion | undefined;
+  onOpenToday: () => void;
+}) {
   const {
     data: recentLessons,
     isPending,
@@ -23,20 +41,14 @@ export default function LearnPage() {
   });
 
   if (isPending) {
-    return (
-      <main className="p-xl">
-        <p className="text-sm text-muted-foreground">Loading...</p>
-      </main>
-    );
+    return <p className="text-sm text-muted-foreground">Loading...</p>;
   }
 
   if (isError) {
     return (
-      <main className="p-xl">
-        <p role="alert" className="text-sm text-danger">
-          Failed to load your recent lessons.
-        </p>
-      </main>
+      <p role="alert" className="text-sm text-danger">
+        Failed to load your recent lessons.
+      </p>
     );
   }
 
@@ -44,7 +56,7 @@ export default function LearnPage() {
   const recentlyOpened = rest.slice(0, 5);
 
   return (
-    <main className="p-xl">
+    <>
       <h1 className="text-2xl font-semibold text-foreground">Learn</h1>
 
       {continueLesson && (
@@ -111,7 +123,53 @@ export default function LearnPage() {
             All your notes and drawings in one place.
           </p>
         </Card>
+        {/* Below `lg` the rail is hidden, so the question gets a sixth card
+            here instead -- which is also the shape mobile uses. */}
+        {today && <DailyQuestionCard today={today} onOpen={onOpenToday} />}
       </div>
+    </>
+  );
+}
+
+export default function LearnPage() {
+  const { today, openDate, open, holdOpen, close } = useDailyQuestion();
+  const day = today.data;
+
+  return (
+    <main className="flex w-full">
+      {/* min-w-0 so a long lesson title cannot push the rail off screen: a
+          flex item's default min-width is auto, which is its content. */}
+      <div className="min-w-0 flex-1 p-xl">
+        <LearnContent
+          today={day}
+          onOpenToday={() => {
+            if (day) open(day.server_today);
+          }}
+        />
+      </div>
+
+      <aside className="hidden shrink-0 border-l border-border p-lg lg:flex lg:w-[20rem]">
+        {day ? (
+          <DailyQuestionRail today={day} onOpenDay={open} />
+        ) : today.isError ? (
+          <p role="alert" className="text-xs text-danger">
+            Failed to load the question of the day.
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">Loading...</p>
+        )}
+      </aside>
+
+      {/* One overlay for both entry points, mounted here so the rail and the
+          card cannot each open their own. */}
+      {day && (
+        <DailyQuestionOverlay
+          forDate={openDate}
+          today={day}
+          onAnswered={holdOpen}
+          onClose={close}
+        />
+      )}
     </main>
   );
 }

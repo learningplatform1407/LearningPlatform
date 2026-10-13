@@ -12,6 +12,32 @@ afterEach(() => {
   cleanup();
 });
 
+// Node 26 ships its own `localStorage` global, which is unavailable unless
+// --localstorage-file is passed, and it shadows the perfectly good one jsdom
+// provides — so `window.localStorage` reads back `undefined` on a dev machine
+// while being a real Storage under CI's pinned Node 22. The question-of-the-day
+// dismissal marker lives in localStorage, so without this the same test is red
+// locally and green in CI. A minimal in-memory Storage makes both agree.
+// `typeof window` guard, not just a truthiness check: checksum.test.ts opts
+// into the node environment, where there is no window at all.
+if (typeof window !== "undefined" && typeof window.localStorage?.getItem !== "function") {
+  const entries = new Map<string, string>();
+  const storage: Storage = {
+    get length() {
+      return entries.size;
+    },
+    clear: () => entries.clear(),
+    getItem: (key) => entries.get(key) ?? null,
+    key: (index) => [...entries.keys()][index] ?? null,
+    removeItem: (key) => void entries.delete(key),
+    setItem: (key, value) => void entries.set(key, String(value)),
+  };
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: storage,
+  });
+}
+
 // jsdom doesn't implement ResizeObserver — DrawingCanvas (notebook drawings)
 // uses it to size the canvas to its container. A no-op stub is enough since
 // tests assert on stroke data, not on-screen pixel layout.
