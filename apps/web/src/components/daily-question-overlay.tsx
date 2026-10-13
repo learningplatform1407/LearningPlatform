@@ -61,12 +61,17 @@ export function useDailyQuestion() {
   const holdOpen = useCallback(() => setChosen({ date: openDate }), [openDate]);
 
   const close = useCallback(() => {
-    // Closing *today's* question is the dismissal. Closing a past day opened
-    // from the calendar is not -- otherwise browsing history would silence the
-    // day's own prompt.
-    if (openDate !== null && openDate === serverToday) writeDismissedDate(openDate);
+    // The marker means "today's question has been offered", not "this exact
+    // day was closed", so closing writes it whichever day is on screen. There
+    // is no path here that has not already seen today: auto-open resolves
+    // before any calendar click is possible, and the cases where it does not
+    // fire -- already answered, or an empty bank -- are the cases with nothing
+    // to offer. Mobile needs this reading, because its calendar sits *inside*
+    // the overlay, so "browse to a past day, then close" is reachable there
+    // and would otherwise leave today un-marked.
+    if (serverToday !== undefined) writeDismissedDate(serverToday);
     setChosen({ date: null });
-  }, [openDate, serverToday]);
+  }, [serverToday]);
 
   return { today, openDate, open, holdOpen, close };
 }
