@@ -18,6 +18,11 @@ the system grows.
   not ownership-based; `author_id` is `SET NULL`, not `CASCADE`), why there is
   no `link_url` column, and the public-read/no-client-write shape of the
   `feed-images` bucket.
+- [`daily-question.md`](./daily-question.md) — one question per calendar day,
+  drawn lazily by the day's first reader. Settles the institution-timezone
+  model and why not per-user, why `attempt`-is-null-or-reveal is the whole
+  privacy story, why the answer endpoint carries no date, and why a daily
+  answer stays out of `question_progress`.
 
 ## Where admin authoring lives
 

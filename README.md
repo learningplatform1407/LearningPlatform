@@ -261,6 +261,21 @@ classDiagram
         +int points_awarded
         +string outcome
     }
+    class DailyQuestion {
+        +date for_date
+        +UUID question_id
+        +UUID selected_by
+    }
+    class DailyQuestionAttempt {
+        +UUID user_id
+        +date for_date
+        +UUID question_id
+        +json selected_option_ids
+        +int points_awarded
+        +int points_possible
+        +string outcome
+        +datetime answered_at
+    }
 
     Profile "1" -- "1" AccountSettings
     Profile "1" -- "*" Subscription
@@ -294,4 +309,9 @@ classDiagram
     Profile "1" -- "*" QuizSession : one OPEN at a time
     QuizSession "1" -- "*" QuizSessionQuestion : frozen at start
     Question "1" -- "*" QuizSessionQuestion : RESTRICT
+
+    Question "1" -- "*" DailyQuestion : RESTRICT
+    Profile "0..1" -- "*" DailyQuestion : selected_by, SET NULL
+    DailyQuestion "1" -- "*" DailyQuestionAttempt : composite FK, RESTRICT
+    Profile "1" -- "*" DailyQuestionAttempt : one row per day
 ```
