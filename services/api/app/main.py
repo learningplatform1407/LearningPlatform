@@ -13,6 +13,8 @@ from app.cloze.router import router as cloze_router
 from app.common.errors import ApiError, ErrorResponse, FieldError
 from app.core.config import settings
 from app.core.logging import configure_logging
+from app.daily.router import admin_router as daily_admin_router
+from app.daily.router import router as daily_router
 from app.db import models as _db_models  # noqa: F401 -- registers all tables on Base.metadata
 from app.documents.router import router as documents_router
 from app.feed.router import router as feed_router
@@ -56,6 +58,8 @@ app.include_router(tags_router)
 app.include_router(bank_router)
 app.include_router(quiz_sessions_router)
 app.include_router(feed_router)
+app.include_router(daily_router)
+app.include_router(daily_admin_router)
 
 
 @app.exception_handler(ApiError)
