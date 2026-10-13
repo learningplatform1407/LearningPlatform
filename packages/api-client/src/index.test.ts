@@ -359,6 +359,73 @@ describe("createApiClient", () => {
     expect(init.method).toBe("DELETE");
   });
 
+  test("getDailyQuestion hits GET /v1/daily-question", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ for_date: "2026-10-13", server_today: "2026-10-13", attempt: null }),
+    );
+
+    const result = await client().getDailyQuestion();
+
+    expect(result).toMatchObject({ for_date: "2026-10-13" });
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/daily-question");
+    expect(init.method ?? "GET").toBe("GET");
+  });
+
+  test("getDailyQuestionCalendar passes the range through", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ server_today: "2026-10-13", days: [] }));
+
+    await client().getDailyQuestionCalendar({ start: "2026-10-01", end: "2026-10-31" });
+
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/daily-question/calendar?start=2026-10-01&end=2026-10-31");
+  });
+
+  test("getDailyQuestionForDate hits GET /v1/daily-question/{date}", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ for_date: "2026-10-12" }));
+
+    await client().getDailyQuestionForDate("2026-10-12");
+
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/daily-question/2026-10-12");
+  });
+
+  test("answerDailyQuestion POSTs the token and selection, with no date in the path", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ for_date: "2026-10-13" }));
+
+    await client().answerDailyQuestion("q1", ["a"]);
+
+    const [url, init] = lastCall(fetchMock);
+    // No date segment: the day answered is always the server's today, and a
+    // stale question_id is what surfaces a rollover.
+    expect(url).toBe("http://api.test/v1/daily-question/answer");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      question_id: "q1",
+      selected_option_ids: ["a"],
+    });
+  });
+
+  test("getDailyQuestionAdmin hits GET /v1/admin/daily-question", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ server_today: "2026-10-13", days: [] }));
+
+    await client().getDailyQuestionAdmin();
+
+    const [url] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/admin/daily-question");
+  });
+
+  test("setDailyQuestion PUTs, and null means redraw", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ for_date: "2026-10-14" }));
+
+    await client().setDailyQuestion("2026-10-14", null);
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/admin/daily-question/2026-10-14");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body as string)).toEqual({ question_id: null });
+  });
+
   test("listFeed hits GET /v1/feed with no query string by default", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse([{ id: "p1", title: "Hello" }]));
 

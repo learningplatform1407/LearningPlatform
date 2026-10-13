@@ -304,6 +304,62 @@ export interface QuestionProgress {
   last_answered_at: string;
 }
 
+// Daily-question types, inline here for the same reason the quiz-session ones
+// above are (QUIZ-9): the question shapes they compose are not in
+// @lp/contracts/@lp/validation either, so threading these through zod would
+// mean writing a second definition of the question-bank item — duplicating
+// the one shape whose single definition is, per QuestionBankItem below, the
+// entire safety story. The shared-schema pass is its own piece of work.
+
+/** The day's question as someone who has not answered it may see it: no
+ * answer key, no rationales, no explanation. */
+export interface DailyQuestionPrompt {
+  id: string;
+  prompt: string;
+  kind: "single" | "multi";
+  difficulty: "easy" | "medium" | "hard";
+  points_possible: number;
+  options: QuizQuestionOption[];
+}
+
+export interface DailyQuestion {
+  for_date: string;
+  /** The institution's today. Never compute this from the device clock — a
+   * phone in another timezone, or simply set wrong, would disagree about
+   * which question is current. Same rule as QuizSession.server_time. */
+  server_today: string;
+  answerable: boolean;
+  /** `null` only when the bank holds no published question at all. */
+  question: DailyQuestionPrompt | null;
+  /** Non-null **iff** this caller answered that day, and the only field that
+   * ever carries the answer key. */
+  attempt: QuestionReveal | null;
+}
+
+export interface DailyQuestionDay {
+  for_date: string;
+  answered: boolean;
+  outcome: "correct" | "partial" | "incorrect" | null;
+}
+
+export interface DailyQuestionCalendar {
+  server_today: string;
+  days: DailyQuestionDay[];
+}
+
+export interface DailyQuestionAdminDay {
+  for_date: string;
+  question: DailyQuestionPrompt | null;
+  overridden: boolean;
+  answer_count: number;
+  can_change: boolean;
+}
+
+export interface DailyQuestionAdmin {
+  server_today: string;
+  days: DailyQuestionAdminDay[];
+}
+
 /** Student-facing view of a bank question: no answer key, by design. */
 export interface QuestionBankItem {
   id: string;
@@ -488,6 +544,33 @@ export function createApiClient(config: ApiClientConfig) {
       request<QuestionReveal>(`/v1/question-bank/${questionId}/answers`, {
         method: "POST",
         body: JSON.stringify({ selected_option_ids: selectedOptionIds }),
+      }),
+    /** Today's question, drawn server-side on first read of the day. */
+    getDailyQuestion: () => request<DailyQuestion>("/v1/daily-question"),
+    getDailyQuestionCalendar: (params: { start: string; end: string }) => {
+      const query = new URLSearchParams({ start: params.start, end: params.end });
+      return request<DailyQuestionCalendar>(`/v1/daily-question/calendar?${query}`);
+    },
+    getDailyQuestionForDate: (forDate: string) =>
+      request<DailyQuestion>(`/v1/daily-question/${forDate}`),
+    /** No date: the day being answered is always the server's today, and
+     * `questionId` is the concurrency token. A stale one means the day rolled
+     * over mid-answer and comes back as a 409 to refetch on, rather than
+     * being recorded against the wrong question. */
+    answerDailyQuestion: (questionId: string, selectedOptionIds: string[]) =>
+      request<DailyQuestion>("/v1/daily-question/answer", {
+        method: "POST",
+        body: JSON.stringify({
+          question_id: questionId,
+          selected_option_ids: selectedOptionIds,
+        }),
+      }),
+    getDailyQuestionAdmin: () => request<DailyQuestionAdmin>("/v1/admin/daily-question"),
+    /** `questionId: null` redraws at random, excluding the current pick. */
+    setDailyQuestion: (forDate: string, questionId: string | null) =>
+      request<DailyQuestionAdminDay>(`/v1/admin/daily-question/${forDate}`, {
+        method: "PUT",
+        body: JSON.stringify({ question_id: questionId }),
       }),
     getCurrentQuizSession: () => request<QuizSession | null>("/v1/quiz-sessions/current"),
     listQuizSessionHistory: () => request<QuizSessionHistoryItem[]>("/v1/quiz-sessions"),
