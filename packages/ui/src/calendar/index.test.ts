@@ -1,6 +1,13 @@
 import { describe, expect, test } from "vitest";
 
-import { buildMonthGrid, formatCalendarDate, monthOf, monthRange, shiftMonth } from "./index";
+import {
+  addDays,
+  buildMonthGrid,
+  formatCalendarDate,
+  monthOf,
+  monthRange,
+  shiftMonth,
+} from "./index";
 
 // Worth knowing what these do and do not prove. This package's test script
 // pins `TZ=UTC`, so they are deterministic -- but that pin also means they
@@ -97,6 +104,44 @@ describe("shiftMonth", () => {
   test("rolls across a year boundary in both directions", () => {
     expect(shiftMonth("2026-12", 1)).toBe("2027-01");
     expect(shiftMonth("2026-01", -1)).toBe("2025-12");
+  });
+});
+
+describe("addDays", () => {
+  test("rolls over month and year boundaries in both directions", () => {
+    expect(addDays("2026-10-13", 1)).toBe("2026-10-14");
+    expect(addDays("2026-10-31", 1)).toBe("2026-11-01");
+    expect(addDays("2026-11-01", -1)).toBe("2026-10-31");
+    expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
+    expect(addDays("2026-01-01", -1)).toBe("2025-12-31");
+    expect(addDays("2026-10-13", 0)).toBe("2026-10-13");
+  });
+
+  test("handles February in both a leap and a non-leap year", () => {
+    expect(addDays("2024-02-28", 1)).toBe("2024-02-29");
+    expect(addDays("2026-02-28", 1)).toBe("2026-03-01");
+  });
+
+  test("crosses a DST transition without skipping or repeating a day", () => {
+    // Europe/Bucharest springs forward on 29 March 2026 and falls back on
+    // 25 October. These add whole UTC days, so neither can shift the result.
+    expect(addDays("2026-03-28", 1)).toBe("2026-03-29");
+    expect(addDays("2026-03-29", 1)).toBe("2026-03-30");
+    expect(addDays("2026-10-24", 1)).toBe("2026-10-25");
+    expect(addDays("2026-10-25", 1)).toBe("2026-10-26");
+  });
+
+  test("spans a fortnight, the admin console's planning window", () => {
+    const window = Array.from({ length: 15 }, (_, index) => addDays("2026-10-13", index));
+
+    expect(window).toHaveLength(15);
+    expect(window.at(-1)).toBe("2026-10-27");
+    expect(new Set(window).size).toBe(15);
+  });
+
+  test("rejects anything that is not a calendar date", () => {
+    expect(() => addDays("2026-10", 1)).toThrow();
+    expect(() => addDays("2026-10-13T00:00:00Z", 1)).toThrow();
   });
 });
 

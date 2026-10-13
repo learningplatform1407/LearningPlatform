@@ -50,5 +50,12 @@ describe("AdminPage", () => {
       "href",
       "/learn/flashcards/manage",
     );
+    // The one tool here that is *not* where its content lives, because
+    // planning a fortnight ahead wants every day in one view. Recorded as a
+    // deliberate exception in docs/architecture/README.md.
+    expect(screen.getByRole("link", { name: /Question of the day/ })).toHaveAttribute(
+      "href",
+      "/admin/question-of-the-day",
+    );
   });
 });

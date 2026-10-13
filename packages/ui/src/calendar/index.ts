@@ -91,6 +91,18 @@ export function formatCalendarDate(date: string): string {
   return DAY_LABEL.format(new Date(`${date}T00:00:00Z`));
 }
 
+/** "2026-10-31" + 1 → "2026-11-01". Rolls months and years correctly.
+ *
+ * Adds whole UTC days rather than 24-hour spans, so it cannot land on a
+ * nonexistent local time: on a spring-forward day 02:30 does not exist, and
+ * naive local-midnight arithmetic would either skip or repeat a date.
+ */
+export function addDays(date: string, delta: number): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) throw new Error(`Expected a YYYY-MM-DD date, got "${date}"`);
+  return isoDate(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + delta));
+}
+
 /** "2026-10" + 1 → "2026-11"; -1 → "2026-09". Rolls the year correctly. */
 export function shiftMonth(month: string, delta: number): string {
   const { year, monthIndex } = parseMonth(month);

@@ -17,8 +17,8 @@ import { getBrowserApiClient } from "@/lib/api-client.browser";
  * learner page.
  *
  * Mobile has no equivalent, which is the one intentional break in web/mobile
- * parity here: two of the three tools are web-only bulk importers, and
- * library authoring mobile already has inline.
+ * parity here: the two bulk importers and the question-of-the-day schedule are
+ * web-only by design, and library authoring mobile already has inline.
  */
 const TOOLS = [
   {
@@ -38,6 +38,12 @@ const TOOLS = [
     title: "Import flashcards",
     description:
       "Bulk JSON import of official cards, bound to a lesson. Same dry-run-then-commit flow as questions.",
+  },
+  {
+    href: "/admin/question-of-the-day",
+    title: "Question of the day",
+    description:
+      "Plan which question each of the coming days gets, or redraw one. Days left alone draw at random when a learner first opens them.",
   },
 ] as const;
 

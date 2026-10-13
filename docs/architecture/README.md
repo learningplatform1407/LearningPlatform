@@ -31,6 +31,14 @@ The two exceptions are the bulk JSON importers (`/question-bank/manage`,
 `/learn/flashcards/manage`), because a dry-run-then-commit workflow does not
 fit inline, and they are web-only by design.
 
+The question-of-the-day schedule (`/admin/question-of-the-day`) is the **third
+exception**, and it is worth recording as one rather than leaving it to look
+like drift. A per-day assignment could have gone inline in the `/learn`
+overlay, next to the day it changes. It did not, because planning a fortnight
+ahead wants every day in one view, and an overlay scoped to a single day cannot
+give that. The consequence is the same trade the importers make: **mobile
+admins cannot override.** Learners get the full feature on both platforms.
+
 The feed composer on `/feed` **is** the contextual-inline rule rather than a
 third exception: it sits directly above the list it writes into, on both
 platforms, and is gated on `me.data?.role === "admin"` like every other inline
