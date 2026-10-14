@@ -9,6 +9,7 @@ from app.annotations.models import DocumentAnnotation
 from app.books.models import Book
 from app.chapters.models import Chapter
 from app.cloze.models import ClozeCard, ClozeReviewState
+from app.daily.models import DailyQuestion, DailyQuestionAttempt
 from app.db.external import auth_users
 from app.documents.models import Document, DocumentVersion, LessonView
 from app.feed.models import FeedPost
@@ -28,6 +29,8 @@ __all__ = [
     "ClozeCard",
     "ClozeReviewState",
     "Consent",
+    "DailyQuestion",
+    "DailyQuestionAttempt",
     "Document",
     "DocumentAnnotation",
     "DocumentVersion",

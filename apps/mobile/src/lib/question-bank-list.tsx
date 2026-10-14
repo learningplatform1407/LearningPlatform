@@ -1,21 +1,11 @@
-import type {
-  QuestionBankItem,
-  QuestionReveal,
-  QuizOptionResult,
-  TopicFilter,
-} from "@lp/api-client";
+import type { QuestionBankItem, QuestionReveal, TopicFilter } from "@lp/api-client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
+import { OUTCOME_MARKS, QuestionRevealPanel } from "@/lib/question-reveal";
 import { colors, fontSizes, fontWeights, spacing } from "@/lib/theme";
-
-const OUTCOME_MARKS = {
-  correct: { icon: "✓", label: "Answered correctly", color: colors.success },
-  partial: { icon: "◐", label: "Answered partially correctly", color: colors.warning },
-  incorrect: { icon: "✗", label: "Answered incorrectly", color: colors.danger },
-} as const;
 
 /**
  * Marks a question the reader has attempted before. Outcome-coloured rather
@@ -47,42 +37,6 @@ function ProgressMark({
       {attemptCount !== undefined && attemptCount > 1 && (
         <Text style={styles.hint}>· {attemptCount} tries</Text>
       )}
-    </View>
-  );
-}
-
-function OptionResultRow({ option }: { option: QuizOptionResult }) {
-  const color = option.classified_correctly
-    ? colors.success
-    : option.selected
-      ? colors.danger
-      : colors.mutedForeground;
-  return (
-    <View style={styles.optionResultRow}>
-      <Text style={{ color }}>{option.selected ? "☑" : "☐"}</Text>
-      <View style={styles.optionResultText}>
-        <Text style={styles.optionText}>
-          {option.text}
-          {option.in_key && <Text style={styles.hint}> (correct answer)</Text>}
-        </Text>
-        {option.rationale && <Text style={styles.rationale}>{option.rationale}</Text>}
-      </View>
-    </View>
-  );
-}
-
-function Reveal({ reveal }: { reveal: QuestionReveal }) {
-  return (
-    <View style={styles.reveal}>
-      <Text style={styles.revealTitle}>
-        {reveal.outcome} — {reveal.points_awarded}/{reveal.points_possible} points
-      </Text>
-      <View style={styles.optionResultList}>
-        {reveal.options.map((option) => (
-          <OptionResultRow key={option.id} option={option} />
-        ))}
-      </View>
-      {reveal.explanation && <Text style={styles.rationale}>{reveal.explanation}</Text>}
     </View>
   );
 }
@@ -177,7 +131,7 @@ function QuestionCard({
 
       {reveal ? (
         <>
-          <Reveal reveal={reveal} />
+          <QuestionRevealPanel reveal={reveal} />
           <Pressable
             style={styles.button}
             onPress={() => {

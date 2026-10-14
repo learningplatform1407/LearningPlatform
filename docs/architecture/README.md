@@ -18,6 +18,11 @@ the system grows.
   not ownership-based; `author_id` is `SET NULL`, not `CASCADE`), why there is
   no `link_url` column, and the public-read/no-client-write shape of the
   `feed-images` bucket.
+- [`daily-question.md`](./daily-question.md) — one question per calendar day,
+  drawn lazily by the day's first reader. Settles the institution-timezone
+  model and why not per-user, why `attempt`-is-null-or-reveal is the whole
+  privacy story, why the answer endpoint carries no date, and why a daily
+  answer stays out of `question_progress`.
 
 ## Where admin authoring lives
 
@@ -30,6 +35,14 @@ mobile at parity, since it has the same inline affordances.
 The two exceptions are the bulk JSON importers (`/question-bank/manage`,
 `/learn/flashcards/manage`), because a dry-run-then-commit workflow does not
 fit inline, and they are web-only by design.
+
+The question-of-the-day schedule (`/admin/question-of-the-day`) is the **third
+exception**, and it is worth recording as one rather than leaving it to look
+like drift. A per-day assignment could have gone inline in the `/learn`
+overlay, next to the day it changes. It did not, because planning a fortnight
+ahead wants every day in one view, and an overlay scoped to a single day cannot
+give that. The consequence is the same trade the importers make: **mobile
+admins cannot override.** Learners get the full feature on both platforms.
 
 The feed composer on `/feed` **is** the contextual-inline rule rather than a
 third exception: it sits directly above the list it writes into, on both

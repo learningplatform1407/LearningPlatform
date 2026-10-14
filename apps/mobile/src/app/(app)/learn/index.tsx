@@ -1,8 +1,11 @@
+import type { DailyQuestion } from "@lp/api-client";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
+import { DailyQuestionCard } from "@/lib/daily-question-card";
+import { DailyQuestionOverlay, useDailyQuestion } from "@/lib/daily-question-overlay";
 import { colors, fontSizes, fontWeights, lineHeight, radii, shadows, spacing } from "@/lib/theme";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -11,7 +14,20 @@ const STATUS_LABEL: Record<string, string> = {
   failed: "Failed",
 };
 
-export default function LearnScreen() {
+/** The hub's own content: recent lessons and the nav grid.
+ *
+ * Its query lives here rather than in the screen so the loading and error
+ * branches can keep their early returns while the sheet stays mounted above
+ * them -- otherwise the question of the day could not offer itself until an
+ * unrelated lessons query had resolved. Same split as the web page.
+ */
+function LearnContent({
+  today,
+  onOpenToday,
+}: {
+  today: DailyQuestion | undefined;
+  onOpenToday: () => void;
+}) {
   const {
     data: recentLessons,
     isPending,
@@ -123,8 +139,36 @@ export default function LearnScreen() {
           <Text style={styles.navCardTitle}>Notebook</Text>
           <Text style={styles.navCardSubtitle}>All your notes and drawings in one place.</Text>
         </Pressable>
+        {today && <DailyQuestionCard today={today} onOpen={onOpenToday} />}
       </View>
     </ScrollView>
+  );
+}
+
+export default function LearnScreen() {
+  const { today, openDate, open, holdOpen, close } = useDailyQuestion();
+  const day = today.data;
+
+  return (
+    <>
+      <LearnContent
+        today={day}
+        onOpenToday={() => {
+          if (day) open(day.server_today);
+        }}
+      />
+      {/* One sheet for the card and the calendar inside it, mounted here so
+          neither can open its own. */}
+      {day && (
+        <DailyQuestionOverlay
+          forDate={openDate}
+          today={day}
+          onSelectDay={open}
+          onAnswered={holdOpen}
+          onClose={close}
+        />
+      )}
+    </>
   );
 }
 

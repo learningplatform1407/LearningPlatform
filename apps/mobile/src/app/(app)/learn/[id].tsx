@@ -30,6 +30,7 @@ import {
   NotebookEntryEditor,
   NotebookEntryList,
 } from "@/lib/notebook-entry-editor";
+import { Overlay } from "@/lib/overlay";
 import { QuestionBankList } from "@/lib/question-bank-list";
 import { supabase } from "@/lib/supabase";
 import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
@@ -957,39 +958,25 @@ function TocModal({
   });
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlayContainer}>
-        <View style={styles.overlayHeader}>
-          <Text style={styles.overlayTitle}>Contents</Text>
-          <Pressable onPress={onClose} accessibilityRole="button">
-            <Text style={styles.overlayClose}>Close</Text>
-          </Pressable>
-        </View>
-        <ScrollView contentContainerStyle={styles.overlayContent}>
-          {isPending && <Text style={styles.hint}>Loading...</Text>}
-          {!isPending && (!data || data.length === 0) && (
-            <Text style={styles.hint}>No lessons.</Text>
-          )}
-          {data?.map((doc) => (
-            <Pressable
-              key={doc.id}
-              style={[styles.tocRow, doc.id === currentDocumentId && styles.tocRowActive]}
-              onPress={() => {
-                onClose();
-                router.push(`/learn/${doc.id}`);
-              }}
-              accessibilityRole="button"
-            >
-              <Text
-                style={[styles.rowTitle, doc.id === currentDocumentId && styles.tocRowActiveText]}
-              >
-                {doc.title}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
-    </Modal>
+    <Overlay visible={visible} title="Contents" onClose={onClose}>
+      {isPending && <Text style={styles.hint}>Loading...</Text>}
+      {!isPending && (!data || data.length === 0) && <Text style={styles.hint}>No lessons.</Text>}
+      {data?.map((doc) => (
+        <Pressable
+          key={doc.id}
+          style={[styles.tocRow, doc.id === currentDocumentId && styles.tocRowActive]}
+          onPress={() => {
+            onClose();
+            router.push(`/learn/${doc.id}`);
+          }}
+          accessibilityRole="button"
+        >
+          <Text style={[styles.rowTitle, doc.id === currentDocumentId && styles.tocRowActiveText]}>
+            {doc.title}
+          </Text>
+        </Pressable>
+      ))}
+    </Overlay>
   );
 }
 
@@ -1013,64 +1000,60 @@ function NotesModal({
     view.kind === "entry" ? entries.data?.find((e) => e.id === view.entryId) : undefined;
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlayContainer}>
-        <View style={styles.overlayHeader}>
-          <Text style={styles.overlayTitle}>Notes</Text>
-          <Pressable onPress={onClose} accessibilityRole="button">
-            <Text style={styles.overlayClose}>Close</Text>
-          </Pressable>
-        </View>
-        <ScrollView contentContainerStyle={styles.overlayContent}>
-          {entries.isPending && <Text style={styles.hint}>Loading...</Text>}
-          {entries.isError && <Text style={styles.error}>Failed to load notes.</Text>}
-          {entries.data && (
-            <>
-              {view.kind !== "list" && (
-                <Pressable onPress={() => setView({ kind: "list" })} accessibilityRole="button">
-                  <Text style={styles.backLink}>← Notes</Text>
-                </Pressable>
-              )}
-              {view.kind === "list" && (
-                <NotebookEntryList
-                  entries={entries.data}
-                  onSelect={(entryId) => setView({ kind: "entry", entryId })}
-                />
-              )}
-              {view.kind === "new-text" && (
-                <NotebookEntryEditor
-                  type="text"
-                  sourceDocumentId={documentId}
-                  onCreated={(id) => setView({ kind: "entry", entryId: id })}
-                />
-              )}
-              {view.kind === "new-drawing" && (
-                <NotebookEntryEditor
-                  type="drawing"
-                  sourceDocumentId={documentId}
-                  onCreated={(id) => setView({ kind: "entry", entryId: id })}
-                />
-              )}
-              {view.kind === "entry" && selectedEntry && (
-                <NotebookEntryEditor
-                  key={selectedEntry.id}
-                  entry={selectedEntry}
-                  onDeleted={() => setView({ kind: "list" })}
-                />
-              )}
-            </>
-          )}
-        </ScrollView>
-        {view.kind === "list" && (
-          <View style={styles.overlayFooter}>
-            <NewEntryButtons
-              onNewText={() => setView({ kind: "new-text" })}
-              onNewDrawing={() => setView({ kind: "new-drawing" })}
-            />
-          </View>
+    <Overlay
+      visible={visible}
+      title="Notes"
+      onClose={onClose}
+      footer={
+        view.kind === "list" ? (
+          <NewEntryButtons
+            onNewText={() => setView({ kind: "new-text" })}
+            onNewDrawing={() => setView({ kind: "new-drawing" })}
+          />
+        ) : undefined
+      }
+    >
+      <>
+        {entries.isPending && <Text style={styles.hint}>Loading...</Text>}
+        {entries.isError && <Text style={styles.error}>Failed to load notes.</Text>}
+        {entries.data && (
+          <>
+            {view.kind !== "list" && (
+              <Pressable onPress={() => setView({ kind: "list" })} accessibilityRole="button">
+                <Text style={styles.backLink}>← Notes</Text>
+              </Pressable>
+            )}
+            {view.kind === "list" && (
+              <NotebookEntryList
+                entries={entries.data}
+                onSelect={(entryId) => setView({ kind: "entry", entryId })}
+              />
+            )}
+            {view.kind === "new-text" && (
+              <NotebookEntryEditor
+                type="text"
+                sourceDocumentId={documentId}
+                onCreated={(id) => setView({ kind: "entry", entryId: id })}
+              />
+            )}
+            {view.kind === "new-drawing" && (
+              <NotebookEntryEditor
+                type="drawing"
+                sourceDocumentId={documentId}
+                onCreated={(id) => setView({ kind: "entry", entryId: id })}
+              />
+            )}
+            {view.kind === "entry" && selectedEntry && (
+              <NotebookEntryEditor
+                key={selectedEntry.id}
+                entry={selectedEntry}
+                onDeleted={() => setView({ kind: "list" })}
+              />
+            )}
+          </>
         )}
-      </View>
-    </Modal>
+      </>
+    </Overlay>
   );
 }
 
@@ -1529,38 +1512,8 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.medium,
     color: colors.foreground,
   },
-  overlayContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  overlayHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: spacing.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  overlayTitle: {
-    fontSize: fontSizes.xl,
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
-  },
-  overlayClose: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
-    color: colors.primary,
-  },
-  overlayContent: {
-    flexGrow: 1,
-    padding: spacing.xl,
-    gap: spacing.xs,
-  },
-  overlayFooter: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    padding: spacing.md,
-  },
+  // The overlay chrome these two sheets used now lives in @/lib/overlay, so
+  // the question of the day gets the same sheet rather than a fourth copy.
   tocRow: {
     borderWidth: 1,
     borderColor: colors.border,

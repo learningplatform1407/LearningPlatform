@@ -199,6 +199,24 @@ classDiagram
         +datetime due_at
         +datetime last_reviewed_at
     }
+    class ClozeCard {
+        +UUID id
+        +UUID document_id
+        +int block_index
+        +int start_offset
+        +int end_offset
+        +string answer_text
+    }
+    class ClozeReviewState {
+        +UUID id
+        +UUID user_id
+        +UUID cloze_card_id
+        +float ease_factor
+        +int interval_days
+        +int repetitions
+        +datetime due_at
+        +datetime last_reviewed_at
+    }
     class FeedPost {
         +UUID id
         +string title
@@ -261,6 +279,30 @@ classDiagram
         +int points_awarded
         +string outcome
     }
+    class QuestionProgress {
+        +UUID user_id
+        +UUID question_id
+        +string outcome
+        +int points_awarded
+        +int points_possible
+        +int attempt_count
+        +datetime last_answered_at
+    }
+    class DailyQuestion {
+        +date for_date
+        +UUID question_id
+        +UUID selected_by
+    }
+    class DailyQuestionAttempt {
+        +UUID user_id
+        +date for_date
+        +UUID question_id
+        +json selected_option_ids
+        +int points_awarded
+        +int points_possible
+        +string outcome
+        +datetime answered_at
+    }
 
     Profile "1" -- "1" AccountSettings
     Profile "1" -- "*" Subscription
@@ -284,6 +326,10 @@ classDiagram
     Flashcard "1" -- "*" FlashcardReviewState
     Profile "1" -- "*" FlashcardReviewState : one row per card
 
+    Document "1" -- "*" ClozeCard : auto-generated
+    ClozeCard "1" -- "*" ClozeReviewState
+    Profile "1" -- "*" ClozeReviewState : one row per card
+
     Document "0..1" -- "*" Question : provenance
     Profile "1" -- "*" Question : created_by
     Question "1" -- "*" QuestionTag
@@ -294,4 +340,12 @@ classDiagram
     Profile "1" -- "*" QuizSession : one OPEN at a time
     QuizSession "1" -- "*" QuizSessionQuestion : frozen at start
     Question "1" -- "*" QuizSessionQuestion : RESTRICT
+
+    Profile "1" -- "*" QuestionProgress : latest attempt wins
+    Question "1" -- "*" QuestionProgress : projection, not source of truth
+
+    Question "1" -- "*" DailyQuestion : RESTRICT
+    Profile "0..1" -- "*" DailyQuestion : selected_by, SET NULL
+    DailyQuestion "1" -- "*" DailyQuestionAttempt : composite FK, RESTRICT
+    Profile "1" -- "*" DailyQuestionAttempt : one row per day
 ```
