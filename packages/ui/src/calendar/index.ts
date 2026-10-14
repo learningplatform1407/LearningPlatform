@@ -59,6 +59,17 @@ export interface MonthGrid {
   /** "October 2026" */
   label: string;
   weeks: CalendarDay[][];
+  /** The dates this grid actually covers, padding included.
+   *
+   * Wider than the month itself: the first row starts on the Monday on or
+   * before the 1st, and the sixth row runs past the last. Load a grid's data
+   * for **this** range, never the month's own first-to-last — the padding
+   * cells would then match no row and render as "never had a question", so the
+   * same date would be inert in one month's view and marked in its
+   * neighbour's. Carried on the grid so the range and what gets rendered
+   * cannot drift apart.
+   */
+  range: { start: string; end: string };
 }
 
 function parseMonth(month: string): { year: number; monthIndex: number } {
@@ -111,17 +122,6 @@ export function shiftMonth(month: string, delta: number): string {
   return new Date(Date.UTC(year, monthIndex + delta, 1)).toISOString().slice(0, 7);
 }
 
-/** The first and last day of a month, for the calendar API's query bounds. */
-export function monthRange(month: string): { start: string; end: string } {
-  const { year, monthIndex } = parseMonth(month);
-  return {
-    start: isoDate(Date.UTC(year, monthIndex, 1)),
-    // Day 0 of the next month is the last day of this one, which handles
-    // 28/29/30/31 without a lookup table.
-    end: isoDate(Date.UTC(year, monthIndex + 1, 0)),
-  };
-}
-
 /** A six-week, Monday-first grid covering `month`, padded with neighbours.
  *
  * Always six rows, so the calendar does not change height as someone pages
@@ -155,5 +155,10 @@ export function buildMonthGrid(month: string, options: { today: string }): Month
     weeks.push(days);
   }
 
-  return { month, label: MONTH_LABEL.format(new Date(firstOfMonth)), weeks };
+  return {
+    month,
+    label: MONTH_LABEL.format(new Date(firstOfMonth)),
+    weeks,
+    range: { start: weeks[0]![0]!.date, end: weeks[5]![6]!.date },
+  };
 }

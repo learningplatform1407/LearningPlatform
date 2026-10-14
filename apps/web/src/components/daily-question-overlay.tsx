@@ -62,16 +62,18 @@ export function useDailyQuestion() {
 
   const close = useCallback(() => {
     // The marker means "today's question has been offered", not "this exact
-    // day was closed", so closing writes it whichever day is on screen. There
-    // is no path here that has not already seen today: auto-open resolves
-    // before any calendar click is possible, and the cases where it does not
-    // fire -- already answered, or an empty bank -- are the cases with nothing
-    // to offer. Mobile needs this reading, because its calendar sits *inside*
-    // the overlay, so "browse to a past day, then close" is reachable there
-    // and would otherwise leave today un-marked.
-    if (serverToday !== undefined) writeDismissedDate(serverToday);
+    // day was closed", so closing writes it whichever day is on screen.
+    // Mobile needs that reading, because its calendar sits *inside* the
+    // overlay, so "browse to a past day, then close" is reachable there and
+    // would otherwise leave today un-marked.
+    //
+    // Except when there is nothing to offer. The card is still openable on an
+    // empty-bank day -- it reports the emptiness -- and marking today from
+    // there would suppress the auto-open if an admin published a question
+    // later the same day.
+    if (serverToday !== undefined && day?.question != null) writeDismissedDate(serverToday);
     setChosen({ date: null });
-  }, [serverToday]);
+  }, [day?.question, serverToday]);
 
   return { today, openDate, open, holdOpen, close };
 }

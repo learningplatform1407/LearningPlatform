@@ -16,8 +16,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+import app.daily.service as daily_service
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
+from app.daily.constants import ADMIN_HORIZON_DAYS
 from app.daily.dependencies import Clock, get_clock
 from app.daily.models import DailyQuestion, DailyQuestionAttempt
 from app.main import app
@@ -311,6 +313,51 @@ def test_a_second_answer_returns_the_first_rather_than_regrading(
     assert db_session.scalar(select(func.count()).select_from(DailyQuestionAttempt)) == 1
 
 
+def test_two_answers_racing_on_a_first_attempt_fold_into_one(
+    admin_client: TestClient,
+    admin_user: AuthenticatedUser,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The sequential double tap above is the easy half of that promise.
+
+    Concurrently, both requests look for an attempt before either commits, so
+    both see none and the loser's INSERT collides on (user_id, for_date). The
+    loser must still answer 200 with the stored result -- a 500 would tell them
+    the answer could not be saved when the winner has just saved it.
+
+    The blinded first look reproduces that window deterministically: the suite
+    shares one session, so two real transactions are not available.
+    """
+    question = _add_question(db_session, admin_user.id)
+    first = _answer_today(admin_client, option="a")
+    assert first["attempt"]["outcome"] == "correct"
+
+    real_get_attempt = daily_service.get_attempt
+    looks = {"count": 0}
+
+    def blind_on_first_look(
+        db: Session, *, user_id: uuid.UUID, for_date: date
+    ) -> DailyQuestionAttempt | None:
+        looks["count"] += 1
+        if looks["count"] == 1:
+            return None  # the attempt the winner is about to commit
+        return real_get_attempt(db, user_id=user_id, for_date=for_date)
+
+    monkeypatch.setattr(daily_service, "get_attempt", blind_on_first_look)
+
+    # A *wrong* answer, so folding into the stored one is distinguishable from
+    # re-grading this submission.
+    response = admin_client.post(
+        "/v1/daily-question/answer",
+        json={"question_id": str(question.id), "selected_option_ids": ["b"]},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["attempt"]["outcome"] == "correct"
+    assert db_session.scalar(select(func.count()).select_from(DailyQuestionAttempt)) == 1
+
+
 def test_a_stale_question_id_is_a_recoverable_conflict(
     admin_client: TestClient, admin_user: AuthenticatedUser, db_session: Session
 ) -> None:
@@ -526,6 +573,68 @@ def test_today_cannot_be_changed_once_answered(
     )
 
     assert response.status_code == 409
+    assert response.json()["code"] == "day_answered"
+
+
+def test_a_day_cannot_be_booked_years_ahead(
+    admin_client: TestClient, admin_user: AuthenticatedUser, db_session: Session
+) -> None:
+    """The console offers a fortnight, but the endpoint is reachable directly.
+
+    A row booked for 2099 would be unreachable by any UI -- the schedule stops
+    at the horizon and the calendar clamps to today -- so it would sit there
+    invisible until that date arrived.
+    """
+    question = _add_question(db_session, admin_user.id)
+
+    response = admin_client.put(
+        f"/v1/admin/daily-question/{date(2099, 1, 1).isoformat()}",
+        json={"question_id": str(question.id)},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "invalid_request"
+    assert db_session.scalar(select(func.count()).select_from(DailyQuestion)) == 0
+
+
+def test_the_admin_schedule_reports_the_window_it_covers(
+    admin_client: TestClient, admin_user: AuthenticatedUser, db_session: Session
+) -> None:
+    """The console builds its rows from this rather than its own constant."""
+    _add_question(db_session, admin_user.id)
+
+    body = admin_client.get("/v1/admin/daily-question").json()
+
+    assert body["horizon_days"] == ADMIN_HORIZON_DAYS
+    assert body["server_today"] == TODAY.isoformat()
+
+
+def test_an_override_racing_a_first_answer_is_a_409_not_a_500(
+    admin_client: TestClient,
+    admin_user: AuthenticatedUser,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Someone can answer between the count and the UPDATE.
+
+    The composite foreign key refuses to re-point an answered day whatever the
+    application believes, so the only question is whether that surfaces as this
+    endpoint's own 409 or as an IntegrityError reaching the catch-all handler
+    as a 500. Patching the count to lie reproduces the window deterministically
+    -- the suite shares one session, so two real transactions are not
+    available.
+    """
+    _add_question(db_session, admin_user.id, prompt="One")
+    _add_question(db_session, admin_user.id, prompt="Two")
+    _answer_today(admin_client)
+
+    monkeypatch.setattr(daily_service, "_answer_count", lambda _db, _for_date: 0)
+
+    response = admin_client.put(
+        f"/v1/admin/daily-question/{TODAY.isoformat()}", json={"question_id": None}
+    )
+
+    assert response.status_code == 409, response.text
     assert response.json()["code"] == "day_answered"
 
 

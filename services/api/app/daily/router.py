@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
 from app.common.errors import ApiError
+from app.daily.constants import ADMIN_HORIZON_DAYS
 from app.daily.dependencies import Clock, get_clock
 from app.daily.models import DailyQuestion, DailyQuestionAttempt
 from app.daily.schemas import (
@@ -47,9 +48,6 @@ admin_router = APIRouter(
     tags=["daily-question"],
     dependencies=[Depends(require_admin)],
 )
-
-# How far ahead the admin console plans.
-_ADMIN_HORIZON_DAYS = 14
 
 
 def _prompt(question: Question) -> DailyQuestionPrompt:
@@ -199,7 +197,7 @@ def read_admin_days(
     clock: Clock = Depends(get_clock),
     db: Session = Depends(get_db),
 ) -> DailyQuestionAdminResponse:
-    start, end = upcoming_range(clock.today, _ADMIN_HORIZON_DAYS)
+    start, end = upcoming_range(clock.today, ADMIN_HORIZON_DAYS)
     rows = list_admin_days(db, start=start, end=end)
     days: list[DailyQuestionAdminDay] = []
     for day, answers in rows:
@@ -213,7 +211,13 @@ def read_admin_days(
                 can_change=answers == 0,
             )
         )
-    return DailyQuestionAdminResponse(server_today=clock.today, days=days)
+    # The horizon travels with the response so the console does not hard-code
+    # its own copy: a window drawn from a different number than the one these
+    # rows cover would silently hide days, or show days the endpoint never
+    # returns.
+    return DailyQuestionAdminResponse(
+        server_today=clock.today, horizon_days=ADMIN_HORIZON_DAYS, days=days
+    )
 
 
 @admin_router.put("/{for_date}", response_model=DailyQuestionAdminDay)

@@ -1,12 +1,5 @@
 import type { DailyQuestion, DailyQuestionDay } from "@lp/api-client";
-import {
-  WEEKDAY_LABELS,
-  buildMonthGrid,
-  formatCalendarDate,
-  monthOf,
-  monthRange,
-  shiftMonth,
-} from "@lp/ui";
+import { WEEKDAY_LABELS, buildMonthGrid, formatCalendarDate, monthOf, shiftMonth } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -54,6 +47,9 @@ export function useDailyQuestion() {
     mutationFn: writeDismissedDate,
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["qotd-dismissed"] }),
   });
+  // `mutate` is stable; the mutation object around it is not, and depending on
+  // the object would churn `close`'s identity on every render.
+  const recordDismissal = dismiss.mutate;
 
   const day = today.data;
   const autoOpen =
@@ -78,9 +74,14 @@ export function useDailyQuestion() {
     // matters more here than on web: the calendar below sits *inside* the
     // sheet, so browsing to a past day and then closing is reachable, and a
     // day-specific marker would leave today un-offered.
-    if (serverToday !== undefined) dismiss.mutate(serverToday);
+    //
+    // Except when there is nothing to offer. The hub card is still openable on
+    // an empty-bank day -- it reports the emptiness -- and marking today from
+    // there would suppress the auto-open if an admin published a question
+    // later the same day.
+    if (serverToday !== undefined && day?.question != null) recordDismissal(serverToday);
     setChosen({ date: null });
-  }, [dismiss, serverToday]);
+  }, [day?.question, recordDismissal, serverToday]);
 
   return { today, openDate, open, holdOpen, close };
 }
@@ -114,14 +115,18 @@ function MonthCalendar({
   const [month, setMonth] = useState(currentMonth);
   const atCurrentMonth = month >= currentMonth;
 
+  // Built before the query, because the grid is what decides the range to
+  // fetch: it renders six weeks, so it reaches into both neighbouring months,
+  // and asking only for this month's own days would leave those padding cells
+  // matching no row -- inert and unmarked even for a day you answered. The
+  // server clamps `end` to its own today, so a range running into next month
+  // is safe.
+  const grid = buildMonthGrid(month, { today: serverToday });
+
   const calendar = useQuery({
     queryKey: ["daily-question", "calendar", month],
-    // The server clamps `end` to its own today, so asking for the whole month
-    // is safe even for the current one.
-    queryFn: () => getApiClient().getDailyQuestionCalendar(monthRange(month)),
+    queryFn: () => getApiClient().getDailyQuestionCalendar(grid.range),
   });
-
-  const grid = buildMonthGrid(month, { today: serverToday });
   const rows = new Map((calendar.data?.days ?? []).map((row) => [row.for_date, row]));
 
   return (

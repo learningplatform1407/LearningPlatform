@@ -20,7 +20,9 @@ vi.mock("@/lib/api-client.browser", () => ({
 const TODAY = "2026-10-13";
 
 function schedule(days: DailyQuestionAdmin["days"] = []): DailyQuestionAdmin {
-  return { server_today: TODAY, days };
+  // horizon_days comes from the response rather than a constant in the page,
+  // so the window it draws always matches the rows the endpoint covers.
+  return { server_today: TODAY, horizon_days: 14, days };
 }
 
 function drawn(
@@ -94,7 +96,11 @@ describe("DailyQuestionAdminPage", () => {
     // the device clock". The other cases use a TODAY that may coincide with
     // the real date, so a device-clock bug could pass them by luck; this date
     // is chosen not to.
-    getDailyQuestionAdmin.mockResolvedValue({ server_today: "2026-10-25", days: [] });
+    getDailyQuestionAdmin.mockResolvedValue({
+      server_today: "2026-10-25",
+      horizon_days: 14,
+      days: [],
+    });
 
     renderPage();
 
@@ -104,6 +110,20 @@ describe("DailyQuestionAdminPage", () => {
     expect(screen.getByText("Saturday, October 31, 2026")).toBeInTheDocument();
     expect(screen.getByText("Sunday, November 1, 2026")).toBeInTheDocument();
     expect(screen.getByText("Sunday, November 8, 2026")).toBeInTheDocument();
+  });
+
+  test("draws the window the server says it covers, not a hard-coded one", async () => {
+    // The page used to carry its own copy of the horizon. If the endpoint's
+    // changed, the two disagreed: days hidden, or rows drawn that the API
+    // never returns.
+    getDailyQuestionAdmin.mockResolvedValue({ server_today: TODAY, horizon_days: 2, days: [] });
+
+    renderPage();
+
+    expect(await screen.findAllByRole("listitem")).toHaveLength(3);
+    expect(screen.getByText("Thursday, October 15, 2026")).toBeInTheDocument();
+    expect(screen.queryByText("Friday, October 16, 2026")).not.toBeInTheDocument();
+    expect(screen.getByText(/Today and the next 2 days/)).toBeInTheDocument();
   });
 
   test("shows a drawn day's question and whether an admin chose it", async () => {

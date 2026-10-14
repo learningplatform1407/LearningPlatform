@@ -309,9 +309,14 @@ on each platform pins it.
 Closing writes the marker **whichever day is on screen**, because the marker
 means "today's question has been offered" rather than "this exact day was
 closed". Mobile needs that reading, since its calendar sits inside the sheet
-and browsing to a past day before closing is reachable there. Every path where
-auto-open was wanted resolves before any calendar tap is possible, so there is
-no case where closing suppresses an offer that had not happened.
+and browsing to a past day before closing is reachable there.
+
+With one carve-out: closing writes nothing when today has **no** question. The
+card is still openable on an empty-bank day — it is what reports the emptiness
+— and marking today from there would suppress the auto-open if an admin
+published a question later the same day. With that exception in place, every
+path where auto-open was wanted does resolve before any calendar tap is
+possible, so closing cannot suppress an offer that had not happened.
 
 Storage is a convenience and never correctness: every read and write is
 `try/catch`-wrapped, since Safari in private mode throws on `setItem` and a

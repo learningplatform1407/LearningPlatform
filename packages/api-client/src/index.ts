@@ -357,6 +357,10 @@ export interface DailyQuestionAdminDay {
 
 export interface DailyQuestionAdmin {
   server_today: string;
+  /** How many days past `server_today` these rows cover. Build the schedule's
+   * window from this rather than from a constant of your own, or the two
+   * disagree and days get silently hidden, or drawn but never returned. */
+  horizon_days: number;
   days: DailyQuestionAdminDay[];
 }
 

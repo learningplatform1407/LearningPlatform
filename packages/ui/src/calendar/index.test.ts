@@ -1,13 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import {
-  addDays,
-  buildMonthGrid,
-  formatCalendarDate,
-  monthOf,
-  monthRange,
-  shiftMonth,
-} from "./index";
+import { addDays, buildMonthGrid, formatCalendarDate, monthOf, shiftMonth } from "./index";
 
 // Worth knowing what these do and do not prove. This package's test script
 // pins `TZ=UTC`, so they are deterministic -- but that pin also means they
@@ -145,12 +138,38 @@ describe("addDays", () => {
   });
 });
 
-describe("monthRange", () => {
-  test("spans the whole month, whatever its length", () => {
-    expect(monthRange("2026-10")).toEqual({ start: "2026-10-01", end: "2026-10-31" });
-    expect(monthRange("2026-11")).toEqual({ start: "2026-11-01", end: "2026-11-30" });
-    expect(monthRange("2024-02")).toEqual({ start: "2024-02-01", end: "2024-02-29" });
-    expect(monthRange("2026-02")).toEqual({ start: "2026-02-01", end: "2026-02-28" });
+describe("MonthGrid.range", () => {
+  test("covers every cell the grid renders, not just the month", () => {
+    // The bug this replaces: fetching the month's own first-to-last left the
+    // padding cells matching no row, so a day answered on 29 September was
+    // inert and unmarked in October's grid but marked in September's.
+    for (const month of ["2026-10", "2026-11", "2024-02", "2026-02"]) {
+      const grid = buildMonthGrid(month, { today: TODAY });
+      const cells = grid.weeks.flat().map((day) => day.date);
+
+      expect(grid.range.start).toBe(cells[0]);
+      expect(grid.range.end).toBe(cells.at(-1));
+      // Nothing rendered falls outside the range — the property that matters,
+      // stated without restating the arithmetic.
+      expect(cells.every((date) => date >= grid.range.start && date <= grid.range.end)).toBe(true);
+    }
+  });
+
+  test("reaches into both neighbouring months when the padding does", () => {
+    const grid = buildMonthGrid("2026-10", { today: TODAY });
+
+    expect(grid.range.start).toBe("2026-09-28");
+    expect(grid.range.end).toBe("2026-11-08");
+  });
+
+  test("stays within the server's 92-day calendar span limit", () => {
+    // Six weeks is 42 days, so a grid is always fetchable in one request.
+    const grid = buildMonthGrid("2026-10", { today: TODAY });
+    const days =
+      (Date.parse(`${grid.range.end}T00:00:00Z`) - Date.parse(`${grid.range.start}T00:00:00Z`)) /
+      86_400_000;
+
+    expect(days).toBe(41);
   });
 });
 

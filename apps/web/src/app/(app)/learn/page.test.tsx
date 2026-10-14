@@ -428,16 +428,20 @@ describe("LearnPage question of the day", () => {
     ).toBeInTheDocument();
   });
 
-  test("asks the calendar for the month it is showing, and will not page into the future", async () => {
+  test("asks for every day it renders, not just the month, and will not page into the future", async () => {
     listRecentLessons.mockResolvedValue([]);
     const user = userEvent.setup();
 
     renderPage();
     await screen.findByRole("heading", { name: "Question of the day" });
+    // The grid is six weeks, so October's view also shows 28–30 September and
+    // the start of November. Fetching only 1–31 October left those cells
+    // matching no row: a day answered on the 29th rendered inert and unmarked
+    // here, but marked once you paged back to September.
     await waitFor(() =>
       expect(getDailyQuestionCalendar).toHaveBeenCalledWith({
-        start: "2026-10-01",
-        end: "2026-10-31",
+        start: "2026-09-28",
+        end: "2026-11-08",
       }),
     );
 
@@ -448,10 +452,56 @@ describe("LearnPage question of the day", () => {
     expect(await screen.findByText("September 2026")).toBeInTheDocument();
     await waitFor(() =>
       expect(getDailyQuestionCalendar).toHaveBeenCalledWith({
-        start: "2026-09-01",
-        end: "2026-09-30",
+        start: "2026-08-31",
+        end: "2026-10-11",
       }),
     );
     expect(screen.getByRole("button", { name: "Next month" })).toBeEnabled();
+  });
+
+  test("a padding day from a neighbouring month is openable like any other", async () => {
+    listRecentLessons.mockResolvedValue([]);
+    // 29 September is rendered inside October's grid. It is a real answered
+    // day, so it must carry its outcome and open — the defect was that no
+    // padding cell ever could.
+    getDailyQuestionCalendar.mockResolvedValue(
+      calendar([{ for_date: "2026-09-29", answered: true, outcome: "correct" }]),
+    );
+    getDailyQuestionForDate.mockResolvedValue({
+      ...answered(),
+      for_date: "2026-09-29",
+    } satisfies DailyQuestion);
+    const user = userEvent.setup();
+
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Tuesday, September 29, 2026: Answered correctly",
+      }),
+    );
+
+    await screen.findByRole("dialog");
+    expect(getDailyQuestionForDate).toHaveBeenCalledWith("2026-09-29");
+    expect(screen.getByText("correct — 2/2 points")).toBeInTheDocument();
+  });
+
+  test("closing an empty-bank day does not silence a question published later", async () => {
+    listRecentLessons.mockResolvedValue([]);
+    const user = userEvent.setup();
+
+    // The card still opens on a day with no question — it reports the
+    // emptiness — so closing it must not mark today as already offered.
+    const first = renderPage();
+    await user.click(await screen.findByRole("button", { name: /Question of the day/ }));
+    await screen.findByText("There is no question today. Check back tomorrow.");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    first.unmount();
+
+    // An admin publishes one later the same day.
+    getDailyQuestion.mockResolvedValue(unanswered());
+    renderPage();
+
+    expect(await screen.findByRole("dialog")).toHaveAccessibleName("Question of the day");
   });
 });

@@ -117,4 +117,8 @@ class DailyQuestionAdminDay(BaseModel):
 
 class DailyQuestionAdminResponse(BaseModel):
     server_today: date
+    #: How many days past `server_today` these rows cover. The console builds
+    #: its window from this rather than from its own constant, so the two
+    #: cannot disagree about how far ahead the schedule runs.
+    horizon_days: int
     days: list[DailyQuestionAdminDay]

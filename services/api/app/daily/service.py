@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.common.errors import ApiError
-from app.daily.constants import MAX_CALENDAR_SPAN_DAYS
+from app.daily.constants import MAX_BOOKING_DAYS, MAX_CALENDAR_SPAN_DAYS
 from app.daily.models import DailyQuestion, DailyQuestionAttempt
 from app.questions.constants import QuestionStatus
 from app.questions.grading import grade_answer, validate_selection
@@ -110,6 +110,18 @@ def get_day(db: Session, for_date: date, *, today: date) -> DailyQuestion | None
 
 def get_attempt(db: Session, *, user_id: uuid.UUID, for_date: date) -> DailyQuestionAttempt | None:
     return db.get(DailyQuestionAttempt, (user_id, for_date))
+
+
+def _answer_count(db: Session, for_date: date) -> int:
+    """How many people have answered a day. Zero means it is still changeable."""
+    return (
+        db.scalar(
+            select(func.count())
+            .select_from(DailyQuestionAttempt)
+            .where(DailyQuestionAttempt.for_date == for_date)
+        )
+        or 0
+    )
 
 
 def load_question(db: Session, question_id: uuid.UUID) -> Question | None:
@@ -222,7 +234,26 @@ def answer_today(
         outcome=outcome,
         answered_at=now,
     )
-    db.add(attempt)
+
+    # Two submissions racing on a first answer both saw no attempt above, so
+    # the loser's INSERT violates the (user_id, for_date) primary key. Without
+    # this the loser gets a 500 saying the answer could not be saved -- while
+    # the winner has in fact saved it, which is the misleading part. Same
+    # savepoint idiom as _record_attempt in app/progress/service.py, and it is
+    # what actually delivers the idempotence the docstring promises.
+    savepoint = db.begin_nested()
+    try:
+        db.add(attempt)
+        db.flush()
+    except IntegrityError:
+        savepoint.rollback()
+        raced = get_attempt(db, user_id=user_id, for_date=today)
+        if raced is None:
+            # Not a race after all -- re-raise rather than mistake some other
+            # integrity failure for one.
+            raise
+        return raced, question
+    savepoint.commit()
     return attempt, question
 
 
@@ -245,19 +276,19 @@ def set_day_question(
     """
     if for_date < today:
         raise ApiError(409, "day_closed", "A past day cannot be changed")
+    if (for_date - today).days > MAX_BOOKING_DAYS:
+        raise ApiError(
+            400,
+            "invalid_request",
+            f"A day may be booked at most {MAX_BOOKING_DAYS} days ahead",
+        )
 
     existing = db.get(DailyQuestion, for_date)
 
-    if existing is not None:
-        answers = db.scalar(
-            select(func.count())
-            .select_from(DailyQuestionAttempt)
-            .where(DailyQuestionAttempt.for_date == for_date)
+    if existing is not None and _answer_count(db, for_date):
+        raise ApiError(
+            409, "day_answered", "This day has already been answered and cannot be changed"
         )
-        if answers:
-            raise ApiError(
-                409, "day_answered", "This day has already been answered and cannot be changed"
-            )
 
     if question_id is None:
         question = _draw(db, exclude=existing.question_id if existing else None)
@@ -276,12 +307,43 @@ def set_day_question(
             raise ApiError(404, "not_found", "Question not found")
 
     if existing is None:
-        day = DailyQuestion(for_date=for_date, question_id=question.id, selected_by=admin_id)
-        db.add(day)
-        return day
+        # The row can appear between the `db.get` above and this insert: a
+        # learner opening Learn materialises *today*, which is a day an admin
+        # may be redrawing at that moment. Fold into whoever won and apply the
+        # override to their row instead.
+        savepoint = db.begin_nested()
+        try:
+            day = DailyQuestion(for_date=for_date, question_id=question.id, selected_by=admin_id)
+            db.add(day)
+            db.flush()
+        except IntegrityError:
+            savepoint.rollback()
+            raced = db.get(DailyQuestion, for_date)
+            if raced is None:
+                raise
+            existing = raced
+        else:
+            savepoint.commit()
+            return day
 
-    existing.question_id = question.id
-    existing.selected_by = admin_id
+    # The composite foreign key refuses to re-point a day that has attempts,
+    # which is the same rule the count above checks -- but someone can answer
+    # in the gap between the two. Convert that into the 409 this function
+    # already promises rather than letting an IntegrityError reach the
+    # catch-all handler as a 500. An UPDATE here cannot violate anything else:
+    # the primary key is untouched, and (for_date, question_id) is unique only
+    # against other rows, which hold other dates.
+    savepoint = db.begin_nested()
+    try:
+        existing.question_id = question.id
+        existing.selected_by = admin_id
+        db.flush()
+    except IntegrityError:
+        savepoint.rollback()
+        raise ApiError(
+            409, "day_answered", "This day has already been answered and cannot be changed"
+        ) from None
+    savepoint.commit()
     return existing
 
 
@@ -291,6 +353,8 @@ def list_admin_days(db: Session, *, start: date, end: date) -> list[tuple[DailyQ
     Unlike `list_calendar` this does *not* clamp to today -- planning ahead is
     the whole point of that page.
     """
+    if end < start:
+        raise ApiError(400, "invalid_request", "end must not be before start")
     if (end - start).days > MAX_CALENDAR_SPAN_DAYS:
         raise ApiError(
             400,

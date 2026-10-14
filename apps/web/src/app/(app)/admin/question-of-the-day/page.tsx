@@ -9,11 +9,6 @@ import { useState } from "react";
 import { Button } from "@/components/button";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
-/** How far ahead this plans. Mirrors `_ADMIN_HORIZON_DAYS` in the router --
- * the API returns only the days it has rows for, so the window is rebuilt
- * here. */
-const HORIZON_DAYS = 14;
-
 function describeError(err: unknown): string {
   if (err instanceof ApiClientError) {
     const body = err.body as { message?: string } | null;
@@ -158,9 +153,10 @@ export default function DailyQuestionAdminPage() {
     <main className="p-xl">
       <h1 className="text-2xl font-semibold text-foreground">Question of the day</h1>
       <p className="mt-xs max-w-[48rem] text-sm text-muted-foreground">
-        Today and the next {HORIZON_DAYS} days. A day nobody has drawn yet gets a random published
-        question the first time a learner opens it, so leaving these alone is a valid plan. Past
-        days never appear here: changing one would rewrite history people have already answered.
+        Today and the next {days.data?.horizon_days ?? 14} days. A day nobody has drawn yet gets a
+        random published question the first time a learner opens it, so leaving these alone is a
+        valid plan. Past days never appear here: changing one would rewrite history people have
+        already answered.
       </p>
 
       {days.isPending && <p className="mt-lg text-sm text-muted-foreground">Loading days...</p>}
@@ -174,8 +170,10 @@ export default function DailyQuestionAdminPage() {
         <ul className="mt-lg flex w-full max-w-[48rem] flex-col gap-sm">
           {/* The API returns only the days that have a row, so the window is
               rebuilt from server_today -- never from the device clock, which
-              could be in another timezone and would mis-label every row. */}
-          {Array.from({ length: HORIZON_DAYS + 1 }, (_, offset) => {
+              could be in another timezone and would mis-label every row. Its
+              length comes from the response too, so this cannot draw a window
+              the endpoint does not cover. */}
+          {Array.from({ length: days.data.horizon_days + 1 }, (_, offset) => {
             const forDate = addDays(days.data.server_today, offset);
             return (
               <DayRow

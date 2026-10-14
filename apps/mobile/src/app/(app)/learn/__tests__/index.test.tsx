@@ -354,6 +354,63 @@ test("answering keeps the sheet open, showing the score and reasoning", async ()
   expect(screen.getByText("Divisible only by 1 and itself.")).toBeTruthy();
 });
 
+test("asks for every day the grid renders, not just the month", async () => {
+  mockListRecentLessons.mockResolvedValue([]);
+  mockGetDailyQuestion.mockResolvedValue(unanswered());
+
+  renderScreen();
+  await screen.findByText("Check answer");
+
+  // Six weeks, so October's grid also shows 28–30 September and early
+  // November. Fetching only 1–31 October left those cells matching no row.
+  await waitFor(() =>
+    expect(mockGetDailyQuestionCalendar).toHaveBeenCalledWith({
+      start: "2026-09-28",
+      end: "2026-11-08",
+    }),
+  );
+});
+
+test("a padding day from a neighbouring month is pressable like any other", async () => {
+  mockListRecentLessons.mockResolvedValue([]);
+  mockGetDailyQuestionCalendar.mockResolvedValue(
+    calendar([{ for_date: "2026-09-29", answered: true, outcome: "correct" }]),
+  );
+  mockGetDailyQuestionForDate.mockResolvedValue({
+    ...answered(),
+    for_date: "2026-09-29",
+  } satisfies DailyQuestion);
+
+  renderScreen();
+  // The bank is empty today, so nothing auto-opens; the card is the way in.
+  fireEvent.press(await screen.findByText("Question of the day"));
+
+  fireEvent.press(await screen.findByLabelText("Tuesday, September 29, 2026: Answered correctly"));
+
+  await waitFor(() => expect(mockGetDailyQuestionForDate).toHaveBeenCalledWith("2026-09-29"));
+  expect(await screen.findByText("correct — 2/2 points")).toBeTruthy();
+});
+
+test("closing an empty-bank day does not silence a question published later", async () => {
+  mockListRecentLessons.mockResolvedValue([]);
+
+  // The hub card still opens on a day with no question — it reports the
+  // emptiness — so closing it must not mark today as already offered.
+  const first = renderScreen();
+  fireEvent.press(await screen.findByText("Question of the day"));
+  await screen.findByText("There is no question today. Check back tomorrow.");
+  fireEvent.press(screen.getByText("Close"));
+  await waitFor(() => expect(screen.queryByText("Close")).toBeNull());
+  expect(await AsyncStorage.getItem("lp.qotd.dismissed")).toBeNull();
+  first.unmount();
+
+  // An admin publishes one later the same day.
+  mockGetDailyQuestion.mockResolvedValue(unanswered());
+  renderScreen();
+
+  expect(await screen.findByText("Check answer")).toBeTruthy();
+});
+
 test("a day the calendar has no row for is not pressable", async () => {
   mockListRecentLessons.mockResolvedValue([]);
   mockGetDailyQuestion.mockResolvedValue(unanswered());

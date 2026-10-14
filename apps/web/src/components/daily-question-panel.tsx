@@ -1,14 +1,7 @@
 "use client";
 
 import type { DailyQuestion, DailyQuestionDay } from "@lp/api-client";
-import {
-  WEEKDAY_LABELS,
-  buildMonthGrid,
-  formatCalendarDate,
-  monthOf,
-  monthRange,
-  shiftMonth,
-} from "@lp/ui";
+import { WEEKDAY_LABELS, buildMonthGrid, formatCalendarDate, monthOf, shiftMonth } from "@lp/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -53,14 +46,18 @@ export function DailyQuestionRail({
   const currentMonth = monthOf(serverToday);
   const [month, setMonth] = useState(currentMonth);
 
+  // Built before the query, because the grid is what decides the range to
+  // fetch: it renders six weeks, so it reaches into both neighbouring months,
+  // and asking only for this month's own days would leave those padding cells
+  // matching no row -- inert and unmarked even for a day you answered. The
+  // server clamps `end` to its own today, so a range running into next month
+  // is safe.
+  const grid = buildMonthGrid(month, { today: serverToday });
+
   const calendar = useQuery({
     queryKey: ["daily-question", "calendar", month],
-    // The server clamps `end` to its own today, so asking for the whole month
-    // is safe even for the current one.
-    queryFn: () => getBrowserApiClient().getDailyQuestionCalendar(monthRange(month)),
+    queryFn: () => getBrowserApiClient().getDailyQuestionCalendar(grid.range),
   });
-
-  const grid = buildMonthGrid(month, { today: serverToday });
   const rows = new Map((calendar.data?.days ?? []).map((day) => [day.for_date, day]));
 
   return (
