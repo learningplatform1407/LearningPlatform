@@ -239,8 +239,29 @@ describe("LearnPage question of the day", () => {
     // Safari in private mode throws on setItem. Auto-open is derived from the
     // marker, so without a latch on "the reader has taken control" a failed
     // write would re-derive as open and trap them in the overlay.
-    const setItem = vi.spyOn(window.localStorage, "setItem").mockImplementation(() => {
+    //
+    // The whole Storage is swapped rather than spying on setItem, because
+    // `vi.spyOn(window.localStorage, "setItem")` does not work against real
+    // jsdom: its Storage is a Proxy whose defineProperty trap stores a *key*
+    // named "setItem" instead of installing the spy, leaving the prototype
+    // method to run. The spy then never fires, so this test passed locally —
+    // where vitest.setup.ts installs a plain object, Node 26 having shadowed
+    // jsdom's localStorage — and failed on CI's Node 22. Defining on `window`
+    // behaves identically in both.
+    const real = window.localStorage;
+    const setItem = vi.fn(() => {
       throw new DOMException("QuotaExceededError");
+    });
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        length: 0,
+        clear: () => {},
+        getItem: () => null,
+        key: () => null,
+        removeItem: () => {},
+        setItem,
+      },
     });
     const user = userEvent.setup();
 
@@ -250,9 +271,11 @@ describe("LearnPage question of the day", () => {
       await user.click(screen.getByRole("button", { name: "Close" }));
 
       await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-      expect(setItem).toHaveBeenCalled();
+      // The write really was attempted and really did throw, so the overlay
+      // staying shut is the latch doing its job rather than a silent no-op.
+      expect(setItem).toHaveBeenCalledWith("lp.qotd.dismissed", TODAY);
     } finally {
-      setItem.mockRestore();
+      Object.defineProperty(window, "localStorage", { configurable: true, value: real });
     }
   });
 
