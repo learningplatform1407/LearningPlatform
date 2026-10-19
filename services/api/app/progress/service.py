@@ -238,6 +238,67 @@ def _unassigned_counts(db: Session, user_id: uuid.UUID) -> _UnassignedStats:
     return _UnassignedStats(total, answered, outcomes, points_awarded, points_possible)
 
 
+def _is_lesson_completed(question_count: int, answered_count: int, correct_count: int) -> bool:
+    """A lesson counts as "completed" once its success rate (correct /
+    answered) clears LESSON_COMPLETION_THRESHOLD — the same ratio the
+    Question Bank already shows, just thresholded. A lesson with no
+    published questions is never completed (there is nothing to pass), the
+    same "not a stat" treatment BankStatsLine gives a zero-question node.
+
+    Shared by `get_bank_tree` (which needs it per-node, to roll up through
+    the tree) and `get_lesson_completion_totals` (which needs only the grand
+    total, for the profile page) — one rule, so the two can't quietly drift
+    apart on what "completed" means.
+    """
+    if question_count == 0 or answered_count == 0:
+        return False
+    return correct_count / answered_count >= LESSON_COMPLETION_THRESHOLD
+
+
+def get_lesson_completion_totals(db: Session, user_id: uuid.UUID) -> tuple[int, int]:
+    """(completed_count, eligible_count) across every lesson this user has
+    published questions for — the profile page's figure, without
+    materialising the book/chapter/sub-chapter tree `get_bank_tree` needs to
+    render the Library's per-level progress bars."""
+    totals, answered, outcomes, _ = _question_counts(db, user_id)
+    completed = 0
+    eligible = 0
+    for document_id, question_count in totals.items():
+        if question_count == 0:
+            continue
+        eligible += 1
+        answered_count = answered.get(document_id, 0)
+        correct_count = outcomes.get(document_id, {}).get("correct", 0)
+        if _is_lesson_completed(question_count, answered_count, correct_count):
+            completed += 1
+    return completed, eligible
+
+
+class QuestionTotals(NamedTuple):
+    attempted: int
+    lifetime_answers: int
+    correct: int
+
+
+def get_question_totals(db: Session, user_id: uuid.UUID) -> QuestionTotals:
+    """Lifetime question-bank activity for the profile page.
+
+    `attempted` (row count) undercounts true answer volume — QuestionProgress
+    is latest-attempt-wins per question, so re-answering the same question
+    five times is one row. `lifetime_answers` sums `attempt_count` instead,
+    which is incremented on every answer regardless of outcome.
+    """
+    row = db.execute(
+        select(
+            func.count(),
+            func.coalesce(func.sum(QuestionProgress.attempt_count), 0),
+            func.count().filter(QuestionProgress.outcome == "correct"),
+        ).where(QuestionProgress.user_id == user_id)
+    ).one()
+    attempted, lifetime_answers, correct = row
+    return QuestionTotals(attempted=attempted, lifetime_answers=lifetime_answers, correct=correct)
+
+
 def get_bank_tree(db: Session, user_id: uuid.UUID) -> BankTreeResponse:
     """The content hierarchy annotated with question and progress counts.
 
@@ -258,13 +319,7 @@ def get_bank_tree(db: Session, user_id: uuid.UUID) -> BankTreeResponse:
         # should not count as "incomplete" against its chapter, the same
         # "not a stat" treatment BankStatsLine gives a zero-question node.
         eligible = 1 if question_count > 0 else 0
-        completed = (
-            1
-            if eligible
-            and answered_count > 0
-            and correct_count / answered_count >= LESSON_COMPLETION_THRESHOLD
-            else 0
-        )
+        completed = 1 if _is_lesson_completed(question_count, answered_count, correct_count) else 0
         return BankTreeLesson(
             id=document.id,
             title=document.title,

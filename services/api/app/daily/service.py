@@ -382,3 +382,38 @@ def list_admin_days(db: Session, *, start: date, end: date) -> list[tuple[DailyQ
 def upcoming_range(today: date, days: int) -> tuple[date, date]:
     """The admin console's window: today plus the next `days` days."""
     return today, today + timedelta(days=days)
+
+
+def get_streak_stats(db: Session, user_id: uuid.UUID, today: date) -> tuple[int, int]:
+    """(current_streak_days, longest_streak_days), for the profile page.
+
+    `daily_question_attempts` has PK (user_id, for_date) -- one row per day
+    this user answered, regardless of outcome -- so the streak is purely a
+    gap-walk over that date set, no new table needed.
+
+    Current streak starts at `today` if answered, else `today - 1`: a day
+    isn't missed until it is fully over, so an unanswered-so-far today must
+    not zero out yesterday's run. It then walks backward while consecutive
+    dates are present. Longest scans the whole history the same way.
+    """
+    dates = set(
+        db.scalars(
+            select(DailyQuestionAttempt.for_date).where(DailyQuestionAttempt.user_id == user_id)
+        )
+    )
+
+    cursor = today if today in dates else today - timedelta(days=1)
+    current = 0
+    while cursor in dates:
+        current += 1
+        cursor -= timedelta(days=1)
+
+    longest = 0
+    run = 0
+    previous: date | None = None
+    for day in sorted(dates):
+        run = run + 1 if previous is not None and day == previous + timedelta(days=1) else 1
+        longest = max(longest, run)
+        previous = day
+
+    return current, longest

@@ -1,109 +1,32 @@
-import type { MeResponse } from "@lp/contracts";
+import { computeProfileBadges } from "@lp/api-client";
 import { formatMonthYear } from "@lp/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import * as ImagePicker from "expo-image-picker";
-import { useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { supabase } from "@/lib/supabase";
+import { MetricBarChart } from "@/lib/metric-bar-chart";
+import { StatTile } from "@/lib/stat-tile";
 import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
 
-const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
-
 export default function ProfileScreen() {
-  const queryClient = useQueryClient();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
     queryFn: () => getApiClient().getMe(),
   });
 
-  const [mode, setMode] = useState<"view" | "edit">("view");
-  const [displayName, setDisplayName] = useState("");
-  const [university, setUniversity] = useState("");
-  const [avatarError, setAvatarError] = useState<string | null>(null);
-  const [avatarUploading, setAvatarUploading] = useState(false);
-
-  // Render-time state sync from freshly-loaded/refetched data — see the
-  // matching web comment for why this isn't a useEffect.
-  const [syncedFrom, setSyncedFrom] = useState<MeResponse | null>(null);
-  if (data && data !== syncedFrom) {
-    setDisplayName(data.display_name ?? "");
-    setUniversity(data.university ?? "");
-    setSyncedFrom(data);
-  }
-
-  const saveMutation = useMutation({
-    mutationFn: () =>
-      getApiClient().updateMe({
-        display_name: displayName || null,
-        university: university || null,
-      }),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(["me"], updated);
-      setMode("view");
-    },
+  // Independent of the identity query above: the stats section is secondary
+  // data that must degrade gracefully (its own loading/error state) without
+  // ever blocking the already-working identity section. Mirrors the web
+  // profile page.
+  const statsQuery = useQuery({
+    queryKey: ["me-stats"],
+    queryFn: () => getApiClient().getMyStats(),
   });
-
-  const avatarMutation = useMutation({
-    mutationFn: (avatarUrl: string) => getApiClient().updateMe({ avatar_url: avatarUrl }),
-    onSuccess: (updated) => queryClient.setQueryData(["me"], updated),
-  });
-
-  async function handlePickAvatar() {
-    if (!data) return;
-    setAvatarError(null);
-
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (permission.status !== "granted") {
-      setAvatarError("Photo library permission is required to change your picture.");
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      quality: 0.8,
-    });
-    if (result.canceled) return;
-
-    const asset = result.assets[0];
-    if (!asset) return;
-    if (asset.fileSize && asset.fileSize > MAX_AVATAR_BYTES) {
-      setAvatarError("Image must be under 5MB.");
-      return;
-    }
-
-    setAvatarUploading(true);
-    try {
-      const blob = await (await fetch(asset.uri)).blob();
-      const ext = asset.mimeType?.split("/")[1] ?? "jpg";
-      const path = `${data.id}/avatar.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(path, blob, { upsert: true, contentType: asset.mimeType ?? "image/jpeg" });
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrlData } = supabase.storage.from("avatars").getPublicUrl(path);
-      await avatarMutation.mutateAsync(publicUrlData.publicUrl);
-    } catch (err) {
-      setAvatarError(err instanceof Error ? err.message : "Failed to upload image.");
-    } finally {
-      setAvatarUploading(false);
-    }
-  }
 
   if (isPending) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, styles.centered]}>
         <Text style={styles.loading}>Loading...</Text>
       </View>
     );
@@ -111,16 +34,32 @@ export default function ProfileScreen() {
 
   if (isError) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, styles.centered]}>
         <Text style={styles.error}>Failed to load profile: {(error as Error).message}</Text>
       </View>
     );
   }
 
+  const badges = statsQuery.data ? computeProfileBadges(statsQuery.data) : null;
+
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <Text style={styles.title}>Profile</Text>
+        <View style={styles.headerIdentity}>
+          <View style={styles.avatar}>
+            {data.avatar_url ? (
+              <Image source={{ uri: data.avatar_url }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarInitial}>
+                {(data.display_name ?? data.email ?? "?").slice(0, 1).toUpperCase()}
+              </Text>
+            )}
+          </View>
+          <View>
+            <Text style={styles.name}>{data.display_name ?? data.email ?? "Unnamed"}</Text>
+            <Text style={styles.joined}>Joined {formatMonthYear(data.created_at)}</Text>
+          </View>
+        </View>
         <Pressable
           style={styles.settingsButton}
           onPress={() => router.push("/settings")}
@@ -131,94 +70,80 @@ export default function ProfileScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.avatarRow}>
-        <Pressable
-          style={styles.avatar}
-          onPress={handlePickAvatar}
-          accessibilityRole="button"
-          accessibilityLabel="Change profile picture"
-        >
-          {data.avatar_url ? (
-            <Image source={{ uri: data.avatar_url }} style={styles.avatarImage} />
-          ) : (
-            <Text style={styles.avatarInitial}>
-              {(data.display_name ?? data.email ?? "?").slice(0, 1).toUpperCase()}
-            </Text>
-          )}
-          {avatarUploading && (
-            <View style={styles.avatarOverlay}>
-              <ActivityIndicator color={colors.foreground} />
+      <Pressable
+        style={styles.editButton}
+        onPress={() => router.push("/settings/profile")}
+        accessibilityRole="button"
+      >
+        <Text style={styles.editButtonText}>Edit Profile</Text>
+      </Pressable>
+
+      <View style={styles.statsSection}>
+        {statsQuery.isPending && <Text style={styles.loading}>Loading stats...</Text>}
+        {statsQuery.data && (
+          <>
+            <View style={styles.statsGrid}>
+              <StatTile
+                emphasis
+                label="Streak"
+                value={
+                  statsQuery.data.current_streak_days > 0
+                    ? `🔥 ${statsQuery.data.current_streak_days} day streak`
+                    : "No streak yet"
+                }
+              />
+              <StatTile
+                emphasis
+                label="Lessons completed"
+                value={`${statsQuery.data.lessons_completed} of ${statsQuery.data.lessons_eligible} lessons`}
+              />
+              <StatTile
+                emphasis
+                label="Exams completed"
+                value={`${statsQuery.data.exams_completed}`}
+              />
             </View>
-          )}
-        </Pressable>
-        <Text style={styles.joined}>Joined {formatMonthYear(data.created_at)}</Text>
+
+            <View>
+              <Text style={styles.sectionTitle}>Accuracy & averages</Text>
+              <MetricBarChart
+                metrics={[
+                  { label: "Exam average", percent: statsQuery.data.exam_average_score_percent },
+                  {
+                    label: "Question accuracy",
+                    percent: statsQuery.data.question_accuracy_percent,
+                  },
+                ]}
+              />
+            </View>
+
+            {badges && (
+              <View>
+                <Text style={styles.sectionTitle}>Badges</Text>
+                <View style={styles.badgeCell}>
+                  {badges.map((badge) => (
+                    <View key={badge.id} style={styles.badge}>
+                      <View
+                        accessibilityRole="summary"
+                        accessibilityLabel={`${badge.label}: ${badge.earned ? "earned" : "locked"}`}
+                        style={[
+                          styles.badgeCircle,
+                          badge.earned ? styles.badgeCircleEarned : styles.badgeCircleLocked,
+                        ]}
+                      >
+                        <Text style={styles.badgeEmoji}>{badge.emoji}</Text>
+                      </View>
+                      <Text style={styles.badgeLabel}>{badge.label}</Text>
+                      <Text style={styles.badgeDescription}>{badge.description}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </>
+        )}
       </View>
-      {avatarError && <Text style={styles.error}>{avatarError}</Text>}
-
-      {mode === "view" ? (
-        <>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Email</Text>
-            <Text style={styles.rowValue}>{data.email ?? "—"}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Display name</Text>
-            <Text style={styles.rowValue}>{data.display_name ?? "Not set"}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>University</Text>
-            <Text style={styles.rowValue}>{data.university ?? "Not set"}</Text>
-          </View>
-          <Pressable
-            style={styles.button}
-            onPress={() => setMode("edit")}
-            accessibilityRole="button"
-          >
-            <Text style={styles.buttonText}>Edit</Text>
-          </Pressable>
-        </>
-      ) : (
-        <>
-          <Text style={styles.label}>Email</Text>
-          <Text style={styles.readOnlyValue}>{data.email ?? "—"}</Text>
-
-          <Text style={styles.label}>Display name</Text>
-          <TextInput style={styles.input} value={displayName} onChangeText={setDisplayName} />
-
-          <Text style={styles.label}>University</Text>
-          <TextInput style={styles.input} value={university} onChangeText={setUniversity} />
-
-          {saveMutation.isError && (
-            <Text style={styles.error}>
-              Failed to save: {(saveMutation.error as Error).message}
-            </Text>
-          )}
-          <View style={styles.editActions}>
-            <Pressable
-              style={[styles.button, styles.saveButton]}
-              onPress={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending}
-              accessibilityRole="button"
-            >
-              <Text style={styles.saveButtonText}>
-                {saveMutation.isPending ? "Saving..." : "Save"}
-              </Text>
-            </Pressable>
-            <Pressable
-              style={styles.button}
-              onPress={() => {
-                setDisplayName(data.display_name ?? "");
-                setUniversity(data.university ?? "");
-                setMode("view");
-              }}
-              accessibilityRole="button"
-            >
-              <Text style={styles.buttonText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </>
-      )}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -227,22 +152,25 @@ const AVATAR_SIZE = 64;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.background,
+  },
+  content: {
+    padding: spacing.xl,
+    gap: spacing.lg,
+  },
+  centered: {
     justifyContent: "center",
     padding: spacing.xl,
-    gap: spacing.sm,
-    backgroundColor: colors.background,
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    marginBottom: spacing.sm,
   },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
+  headerIdentity: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
   },
   settingsButton: {
     height: 32,
@@ -254,11 +182,6 @@ const styles = StyleSheet.create({
   settingsIcon: {
     fontSize: fontSizes.lg,
     color: colors.mutedForeground,
-  },
-  avatarRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
   },
   avatar: {
     width: AVATAR_SIZE,
@@ -280,54 +203,18 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.medium,
     color: colors.mutedForeground,
   },
-  avatarOverlay: {
-    ...StyleSheet.absoluteFill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.background + "b3",
+  name: {
+    fontSize: fontSizes.xl,
+    lineHeight: lineHeight(fontSizes.xl, "tight"),
+    fontWeight: fontWeights.semibold,
+    color: colors.foreground,
   },
   joined: {
+    marginTop: spacing.xs / 2,
     fontSize: fontSizes.sm,
     color: colors.mutedForeground,
   },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingVertical: spacing.xs,
-  },
-  rowLabel: {
-    fontSize: fontSizes.sm,
-    color: colors.mutedForeground,
-  },
-  rowValue: {
-    fontSize: fontSizes.sm,
-    color: colors.foreground,
-  },
-  label: {
-    marginTop: spacing.sm,
-    fontSize: fontSizes.sm,
-    color: colors.mutedForeground,
-  },
-  readOnlyValue: {
-    fontSize: fontSizes.base,
-    color: colors.mutedForeground,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    fontSize: fontSizes.base,
-    color: colors.foreground,
-  },
-  editActions: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  button: {
+  editButton: {
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
@@ -335,21 +222,69 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     alignItems: "center",
     alignSelf: "flex-start",
-    marginTop: spacing.md,
   },
-  buttonText: {
+  editButtonText: {
     color: colors.foreground,
     fontWeight: fontWeights.medium,
     fontSize: fontSizes.sm,
   },
-  saveButton: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+  statsSection: {
+    gap: spacing.lg,
   },
-  saveButtonText: {
-    color: colors.primaryForeground,
-    fontWeight: fontWeights.medium,
+  statsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  sectionTitle: {
+    marginBottom: spacing.xs,
     fontSize: fontSizes.sm,
+    fontWeight: fontWeights.medium,
+    color: colors.mutedForeground,
+  },
+  badgeCell: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: spacing.md,
+  },
+  badge: {
+    width: 80,
+    alignItems: "center",
+    gap: spacing.xs / 2,
+  },
+  badgeCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeCircleEarned: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + "1a",
+  },
+  badgeCircleLocked: {
+    borderColor: colors.border,
+    opacity: 0.4,
+  },
+  badgeEmoji: {
+    fontSize: fontSizes["2xl"],
+  },
+  badgeLabel: {
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.medium,
+    color: colors.foreground,
+    textAlign: "center",
+  },
+  badgeDescription: {
+    fontSize: fontSizes.xs,
+    color: colors.mutedForeground,
+    textAlign: "center",
   },
   error: {
     color: colors.danger,

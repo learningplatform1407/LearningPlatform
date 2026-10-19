@@ -7,6 +7,7 @@ test suite runs on SQLite)."""
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import NamedTuple
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -496,6 +497,35 @@ def get_results(
         points_possible=session.points_possible,
         finished_at=session.finished_at,
         questions=items,
+    )
+
+
+class ExamStats(NamedTuple):
+    completed_count: int
+    points_awarded: int
+    points_possible: int
+
+
+def get_exam_stats(db: Session, user_id: uuid.UUID) -> ExamStats:
+    """Lifetime exam activity for the profile page — completed sessions only.
+
+    Expired and cancelled sessions are excluded: an abandoned or
+    auto-expired attempt is not an achievement, and a cancelled one was
+    never graded (`_finalize(..., grade=False)`) so it has no score to fold
+    into an average anyway.
+    """
+    row = db.execute(
+        select(
+            func.count(),
+            func.coalesce(func.sum(QuizSession.points_awarded), 0),
+            func.coalesce(func.sum(QuizSession.points_possible), 0),
+        ).where(QuizSession.user_id == user_id, QuizSession.status == SessionStatus.COMPLETED)
+    ).one()
+    completed_count, points_awarded, points_possible = row
+    return ExamStats(
+        completed_count=completed_count,
+        points_awarded=points_awarded,
+        points_possible=points_possible,
     )
 
 
