@@ -27,6 +27,18 @@ export const profileUpdateRequestSchema = z.object({
   language: z.string().optional(),
 });
 
+export const profileStatsResponseSchema = z.object({
+  current_streak_days: z.number(),
+  longest_streak_days: z.number(),
+  lessons_completed: z.number(),
+  lessons_eligible: z.number(),
+  exams_completed: z.number(),
+  exam_average_score_percent: z.number().nullable(),
+  questions_attempted: z.number(),
+  questions_answered_lifetime: z.number(),
+  question_accuracy_percent: z.number().nullable(),
+});
+
 export const entitlementResponseSchema = z.object({
   feature_key: z.string(),
   limit_value: z.number().nullable(),

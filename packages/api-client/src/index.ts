@@ -32,6 +32,7 @@ import type {
   NotebookEntry,
   NotebookEntryCreateRequest,
   NotebookEntryUpdateRequest,
+  ProfileStatsResponse,
   ProfileUpdateRequest,
   Question,
   QuestionCreateRequest,
@@ -240,6 +241,52 @@ export function computeLessonCompletionPercent(counts: LessonCompletionCounts): 
   return (counts.completed_lesson_count / counts.eligible_lesson_count) * 100;
 }
 
+export interface ProfileBadge {
+  id: string;
+  emoji: string;
+  label: string;
+  description: string;
+  earned: boolean;
+}
+
+/** Placeholder achievement badges for the profile page, derived entirely
+ * from already-fetched stats — there is no badges table or endpoint yet.
+ * Shared so web and mobile render the same set from the same numbers.
+ * Streak uses `longest_streak_days`, not `current_streak_days`, so an
+ * earned badge never un-earns itself after a later gap. */
+export function computeProfileBadges(stats: ProfileStatsResponse): ProfileBadge[] {
+  return [
+    {
+      id: "joined",
+      emoji: "🎉",
+      label: "Welcome aboard",
+      description: "Joined the platform",
+      earned: true,
+    },
+    {
+      id: "first-lesson",
+      emoji: "📘",
+      label: "First lesson",
+      description: "Complete your first lesson",
+      earned: stats.lessons_completed >= 1,
+    },
+    {
+      id: "first-exam",
+      emoji: "🏆",
+      label: "First exam",
+      description: "Complete your first exam",
+      earned: stats.exams_completed >= 1,
+    },
+    {
+      id: "three-day-streak",
+      emoji: "🔥",
+      label: "On a roll",
+      description: "Reach a 3-day streak",
+      earned: stats.longest_streak_days >= 3,
+    },
+  ];
+}
+
 export interface QuizAnswerSaved {
   saved: true;
 }
@@ -433,6 +480,7 @@ export function createApiClient(config: ApiClientConfig) {
     getMe: () => request<MeResponse>("/v1/me"),
     updateMe: (data: ProfileUpdateRequest) =>
       request<MeResponse>("/v1/me", { method: "PATCH", body: JSON.stringify(data) }),
+    deleteMe: () => request<void>("/v1/me", { method: "DELETE" }),
     getMyEntitlements: () => request<EntitlementResponse[]>("/v1/me/entitlements"),
     listDocuments: (subChapterId?: string) =>
       request<DocumentSummaryResponse[]>(
@@ -471,6 +519,7 @@ export function createApiClient(config: ApiClientConfig) {
     listRecentLessons: (limit?: number) =>
       request<RecentLesson[]>(`/v1/me/recent-lessons${limit ? `?limit=${limit}` : ""}`),
     getReviewSummary: () => request<ReviewSummaryResponse>("/v1/me/review-summary"),
+    getMyStats: () => request<ProfileStatsResponse>("/v1/me/stats"),
     listSubChapters: (chapterId: string) =>
       request<SubChapter[]>(`/v1/chapters/${chapterId}/sub-chapters`),
     createSubChapter: (chapterId: string, data: SubChapterCreateRequest) =>

@@ -46,6 +46,7 @@ import type {
   notebookEntryCreateRequestSchema,
   notebookEntryResponseSchema,
   notebookEntryUpdateRequestSchema,
+  profileStatsResponseSchema,
   profileUpdateRequestSchema,
   questionCreateRequestSchema,
   questionOptionSchema,
@@ -70,6 +71,7 @@ import type {
 export type AccountSettings = z.infer<typeof accountSettingsSchema>;
 export type MeResponse = z.infer<typeof meResponseSchema>;
 export type ProfileUpdateRequest = z.infer<typeof profileUpdateRequestSchema>;
+export type ProfileStatsResponse = z.infer<typeof profileStatsResponseSchema>;
 export type EntitlementResponse = z.infer<typeof entitlementResponseSchema>;
 export type ExtractedContent = z.infer<typeof extractedContentSchema>;
 export type DocumentVersionResponse = z.infer<typeof documentVersionResponseSchema>;

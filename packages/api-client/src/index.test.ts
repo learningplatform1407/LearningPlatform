@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { ApiClientError, computeLessonCompletionPercent, createApiClient } from "./index";
+import {
+  ApiClientError,
+  computeLessonCompletionPercent,
+  computeProfileBadges,
+  createApiClient,
+} from "./index";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -772,5 +777,46 @@ describe("computeLessonCompletionPercent", () => {
     expect(
       computeLessonCompletionPercent({ eligible_lesson_count: 4, completed_lesson_count: 3 }),
     ).toBe(75);
+  });
+});
+
+describe("computeProfileBadges", () => {
+  const ZERO_STATE = {
+    current_streak_days: 0,
+    longest_streak_days: 0,
+    lessons_completed: 0,
+    lessons_eligible: 0,
+    exams_completed: 0,
+    exam_average_score_percent: null,
+    questions_attempted: 0,
+    questions_answered_lifetime: 0,
+    question_accuracy_percent: null,
+  };
+
+  test("a brand-new user has only the joined badge earned", () => {
+    const badges = computeProfileBadges(ZERO_STATE);
+    const earned = badges.filter((badge) => badge.earned).map((badge) => badge.id);
+    expect(earned).toEqual(["joined"]);
+  });
+
+  test("every badge earns once its threshold is cleared", () => {
+    const badges = computeProfileBadges({
+      ...ZERO_STATE,
+      lessons_completed: 1,
+      exams_completed: 1,
+      longest_streak_days: 3,
+    });
+    expect(badges.every((badge) => badge.earned)).toBe(true);
+  });
+
+  test("current_streak_days alone does not earn the streak badge once it has lapsed", () => {
+    // A 3-day streak that later broke: current resets, but the achievement
+    // of having once reached it must not un-earn itself.
+    const badges = computeProfileBadges({
+      ...ZERO_STATE,
+      current_streak_days: 0,
+      longest_streak_days: 3,
+    });
+    expect(badges.find((badge) => badge.id === "three-day-streak")?.earned).toBe(true);
   });
 });

@@ -11,6 +11,7 @@ import {
   clozeCardResponseSchema,
   clozeRatingRequestSchema,
   clozeReviewStateResponseSchema,
+  profileStatsResponseSchema,
   reviewSummaryResponseSchema,
   documentResponseSchema,
   documentSummaryResponseSchema,
@@ -731,6 +732,40 @@ describe("reviewSummaryResponseSchema", () => {
     expect(
       reviewSummaryResponseSchema.safeParse({ books: [], uncategorized_lessons: [] }).success,
     ).toBe(true);
+  });
+});
+
+describe("profileStatsResponseSchema", () => {
+  test("accepts a full backend-shaped payload", () => {
+    const payload = {
+      current_streak_days: 12,
+      longest_streak_days: 30,
+      lessons_completed: 4,
+      lessons_eligible: 10,
+      exams_completed: 3,
+      exam_average_score_percent: 82.5,
+      questions_attempted: 50,
+      questions_answered_lifetime: 64,
+      question_accuracy_percent: 78.0,
+    };
+
+    expect(profileStatsResponseSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("accepts the zero-state new-user payload, with nullable percentages null", () => {
+    const payload = {
+      current_streak_days: 0,
+      longest_streak_days: 0,
+      lessons_completed: 0,
+      lessons_eligible: 0,
+      exams_completed: 0,
+      exam_average_score_percent: null,
+      questions_attempted: 0,
+      questions_answered_lifetime: 0,
+      question_accuracy_percent: null,
+    };
+
+    expect(profileStatsResponseSchema.safeParse(payload).success).toBe(true);
   });
 });
 
