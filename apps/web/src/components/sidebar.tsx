@@ -22,10 +22,9 @@ const NAV_ITEMS = [
 
 const PROFILE_ITEM = { href: "/profile", label: "Profile", emoji: "👤" } as const;
 
-// A directory of the content tools, not a second home for them — authoring
-// stays inline where the content lives (books/chapters/lectures on the
-// Library page), so the parent is always already chosen. See
-// docs/architecture/README.md.
+// A directory of the content tools: the two bulk importers,
+// question-of-the-day, and (unlike mobile, where it stays inline on the
+// Library page) library authoring itself. See docs/architecture/README.md.
 const ADMIN_ITEM = { href: "/admin", label: "Admin", emoji: "🛠️" } as const;
 
 export function Sidebar() {
