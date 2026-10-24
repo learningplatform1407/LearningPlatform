@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Button } from "@/components/button";
+import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 function describeError(err: unknown): string {
@@ -134,25 +135,25 @@ export default function DailyQuestionAdminPage() {
 
   if (me.isPending) {
     return (
-      <main className="p-xl">
+      <PageMain>
         <p className="text-sm text-muted-foreground">Loading...</p>
-      </main>
+      </PageMain>
     );
   }
 
   if (me.data?.role !== "admin") {
     return (
-      <main className="p-xl">
-        <h1 className="text-2xl font-semibold text-foreground">Question of the day</h1>
-        <p className="mt-md text-sm text-muted-foreground">Admin access required.</p>
-      </main>
+      <PageMain>
+        <h1 className="text-2xl font-bold text-foreground">Question of the day</h1>
+        <p className="mt-md text-sm font-medium text-muted-foreground">Admin access required.</p>
+      </PageMain>
     );
   }
 
   return (
-    <main className="p-xl">
-      <h1 className="text-2xl font-semibold text-foreground">Question of the day</h1>
-      <p className="mt-xs max-w-[48rem] text-sm text-muted-foreground">
+    <PageMain>
+      <h1 className="text-2xl font-bold text-foreground">Question of the day</h1>
+      <p className="mt-xs max-w-[48rem] text-sm font-medium text-muted-foreground">
         Today and the next {days.data?.horizon_days ?? 14} days. A day nobody has drawn yet gets a
         random published question the first time a learner opens it, so leaving these alone is a
         valid plan. Past days never appear here: changing one would rewrite history people have
@@ -186,6 +187,6 @@ export default function DailyQuestionAdminPage() {
           })}
         </ul>
       )}
-    </main>
+    </PageMain>
   );
 }

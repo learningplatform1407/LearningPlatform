@@ -5,6 +5,7 @@ import type { MeResponse } from "@lp/contracts";
 import { useState } from "react";
 
 import { Button } from "@/components/button";
+import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 export default function NotificationsSettingsPage() {
@@ -31,25 +32,25 @@ export default function NotificationsSettingsPage() {
 
   if (isPending) {
     return (
-      <main className="p-xl">
+      <PageMain>
         <p className="text-sm text-muted-foreground">Loading...</p>
-      </main>
+      </PageMain>
     );
   }
 
   if (isError) {
     return (
-      <main className="p-xl">
+      <PageMain>
         <p role="alert" className="text-sm text-danger">
           Failed to load settings: {(error as Error).message}
         </p>
-      </main>
+      </PageMain>
     );
   }
 
   return (
-    <main className="p-xl">
-      <h1 className="text-2xl font-semibold text-foreground">Notifications</h1>
+    <PageMain>
+      <h1 className="text-2xl font-bold text-foreground">Notifications</h1>
 
       <form
         className="mt-lg flex max-w-[32rem] flex-col gap-md"
@@ -80,6 +81,6 @@ export default function NotificationsSettingsPage() {
           {saveMutation.isSuccess && <span className="text-sm text-success">Saved.</span>}
         </div>
       </form>
-    </main>
+    </PageMain>
   );
 }

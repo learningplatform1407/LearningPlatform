@@ -5,7 +5,6 @@ import { beforeEach, expect, test, vi } from "vitest";
 
 import QuestionBankPage from "./page";
 
-const getMe = vi.fn();
 const getQuestionBankTree = vi.fn();
 const listQuestionBank = vi.fn();
 const getQuizAvailableCount = vi.fn();
@@ -13,7 +12,6 @@ const answerBankQuestion = vi.fn();
 
 vi.mock("@/lib/api-client.browser", () => ({
   getBrowserApiClient: () => ({
-    getMe,
     getQuestionBankTree,
     listQuestionBank,
     getQuizAvailableCount,
@@ -58,7 +56,6 @@ const question = {
 };
 
 beforeEach(() => {
-  getMe.mockReset().mockResolvedValue({ id: "u1", role: "student" });
   getQuestionBankTree.mockReset().mockResolvedValue(emptyTree);
   listQuestionBank.mockReset().mockResolvedValue([]);
   getQuizAvailableCount.mockReset().mockResolvedValue({ available: 0 });
@@ -318,7 +315,42 @@ test("shows success/failing/pending/average-score stats per node and overall", a
   ).toHaveLength(2);
 });
 
-test("hides the admin import link from students", async () => {
+test("shows a friendly zero state when nothing has been answered yet", async () => {
+  getQuestionBankTree.mockResolvedValue({
+    ...emptyTree,
+    books: [
+      {
+        id: "b1",
+        title: "Cardiology",
+        question_count: 57,
+        answered_count: 0,
+        correct_count: 0,
+        partial_count: 0,
+        incorrect_count: 0,
+        points_awarded: 0,
+        points_possible: 0,
+        chapters: [],
+      },
+    ],
+  });
+
+  renderPage();
+
+  expect(await screen.findByText("Overall")).toBeInTheDocument();
+  expect(
+    await screen.findByText("57 questions waiting — nothing answered yet."),
+  ).toBeInTheDocument();
+
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: /Cardiology/ }));
+  expect(await screen.findAllByText("57 questions waiting — nothing answered yet.")).toHaveLength(
+    2,
+  );
+});
+
+// Importing questions is an admin tool -- it's reached from /admin now,
+// never linked inline here regardless of the viewer's role.
+test("never shows an import link", async () => {
   renderPage();
 
   expect(await screen.findByText("The question bank is empty.")).toBeInTheDocument();

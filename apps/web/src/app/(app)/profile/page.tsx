@@ -7,6 +7,7 @@ import Link from "next/link";
 
 import { Card } from "@/components/card";
 import { MetricBarChart } from "@/components/metric-bar-chart";
+import { PageMain } from "@/components/page-main";
 import { StatTile } from "@/components/stat-tile";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
@@ -46,7 +47,7 @@ export default function ProfilePage() {
   const badges = statsQuery.data ? computeProfileBadges(statsQuery.data) : null;
 
   return (
-    <main className="p-xl">
+    <PageMain>
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-md">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-lg font-medium text-muted-foreground">
@@ -97,7 +98,7 @@ export default function ProfilePage() {
 
       <Link
         href="/settings/profile"
-        className="mt-md inline-block w-fit rounded-md border border-border px-md py-xs text-sm font-medium text-foreground hover:bg-muted"
+        className="mt-md inline-block w-fit rounded-lg border border-border bg-background px-md py-sm text-sm font-semibold text-foreground hover:bg-muted"
       >
         Edit Profile
       </Link>
@@ -171,6 +172,6 @@ export default function ProfilePage() {
           </div>
         )}
       </section>
-    </main>
+    </PageMain>
   );
 }

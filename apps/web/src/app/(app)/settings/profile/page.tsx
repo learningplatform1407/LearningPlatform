@@ -5,6 +5,7 @@ import type { MeResponse } from "@lp/contracts";
 import { useState } from "react";
 
 import { Button } from "@/components/button";
+import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { createClient } from "@/lib/supabase/client";
 
@@ -100,8 +101,8 @@ export default function ProfileSettingsPage() {
   }
 
   return (
-    <main className="p-xl">
-      <h1 className="text-2xl font-semibold text-foreground">Profile Settings</h1>
+    <PageMain>
+      <h1 className="text-2xl font-bold text-foreground">Profile Settings</h1>
 
       <div className="mt-lg flex items-center gap-md">
         <label className="relative flex h-16 w-16 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-lg font-medium text-muted-foreground">
@@ -178,6 +179,6 @@ export default function ProfileSettingsPage() {
           {saveMutation.isSuccess && <span className="text-sm text-success">Saved.</span>}
         </div>
       </form>
-    </main>
+    </PageMain>
   );
 }

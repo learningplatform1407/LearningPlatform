@@ -23,14 +23,11 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div className="flex">
-      <nav aria-label="Settings sections" className="w-48 shrink-0 border-r border-border p-lg">
-        <Link
-          href="/profile"
-          className="mb-lg inline-block text-sm text-muted-foreground hover:text-foreground"
-        >
-          ← Back to profile
-        </Link>
+    <div className="flex flex-col md:flex-row">
+      <nav
+        aria-label="Settings sections"
+        className="border-b border-border p-lg md:w-48 md:shrink-0 md:border-r md:border-b-0"
+      >
         <ul className="flex flex-col gap-xs">
           {SECTIONS.map((section) => {
             const active = pathname === section.href;
@@ -51,7 +48,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
           })}
         </ul>
       </nav>
-      <div className="flex-1">{children}</div>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }

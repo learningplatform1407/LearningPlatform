@@ -1195,9 +1195,6 @@ export default function LectureScreen() {
           activeTab === "review" && styles.contentWithReviewBar,
         ]}
       >
-        <Pressable onPress={() => router.push("/learn")} accessibilityRole="button">
-          <Text style={styles.backLink}>← Learn</Text>
-        </Pressable>
         {data.sub_chapter && (
           <Pressable
             onPress={() =>

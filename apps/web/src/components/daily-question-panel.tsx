@@ -74,7 +74,7 @@ export function DailyQuestionRail({
         >
           <span aria-hidden="true">«</span>
         </button>
-        <span className="text-xs font-medium text-foreground">{grid.label}</span>
+        <span className="text-xs font-semibold text-foreground">{grid.label}</span>
         <button
           type="button"
           aria-label="Next month"
@@ -90,7 +90,10 @@ export function DailyQuestionRail({
 
       <div className="mt-md grid grid-cols-7 gap-xs" role="presentation">
         {WEEKDAY_LABELS.map((label) => (
-          <span key={label} className="text-center text-xs text-muted-foreground">
+          <span
+            key={label}
+            className="text-center text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+          >
             {label.slice(0, 1)}
           </span>
         ))}
@@ -111,7 +114,7 @@ export function DailyQuestionRail({
               <span
                 key={cell.date}
                 aria-hidden="true"
-                className={`rounded-md py-xs text-center text-xs ${
+                className={`aspect-square rounded-full py-xs text-center text-xs ${
                   cell.inMonth ? "text-muted-foreground" : "text-muted-foreground/40"
                 }`}
               >
@@ -126,9 +129,11 @@ export function DailyQuestionRail({
               type="button"
               aria-label={dayLabel(cell.date, row, cell.isToday)}
               onClick={() => onOpenDay(cell.date)}
-              className={`rounded-md py-xs text-center text-xs hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/30 ${
-                cell.isToday ? "border border-primary/50 font-semibold" : ""
-              } ${mark ? mark.className : "text-foreground"} ${cell.inMonth ? "" : "opacity-50"}`}
+              className={`aspect-square rounded-full py-xs text-center text-xs font-medium hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/30 ${
+                cell.isToday
+                  ? "bg-primary font-semibold text-primary-foreground hover:bg-primary/90"
+                  : (mark?.className ?? "text-foreground")
+              } ${cell.inMonth ? "" : "opacity-50"}`}
             >
               {cell.dayOfMonth}
               {mark && (

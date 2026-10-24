@@ -9,6 +9,7 @@ import type {
   Annotation,
   AnnotationCreateRequest,
   ClozeRating,
+  DocumentSummaryResponse,
   Flashcard,
   FlashcardCard,
   FlashcardScope,
@@ -26,6 +27,7 @@ import {
   spliceAnnotations,
   spliceClozeSpans,
 } from "@/lib/text-offset";
+import { useDismissableOverlay } from "@/lib/use-dismissable-overlay";
 
 import {
   DrawingEntryEditor,
@@ -921,56 +923,109 @@ function ReviewTab({ documentId }: { documentId: string }) {
   );
 }
 
+function TocPanelBody({
+  data,
+  isPending,
+  currentDocumentId,
+}: {
+  data: DocumentSummaryResponse[] | undefined;
+  isPending: boolean;
+  currentDocumentId: string;
+}) {
+  return (
+    <>
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Contents
+      </h2>
+      {isPending && <p className="text-sm text-muted-foreground">Loading...</p>}
+      {!isPending && (!data || data.length === 0) && (
+        <p className="text-sm text-muted-foreground">No lessons.</p>
+      )}
+      {data && data.length > 0 && (
+        <ul className="flex flex-col gap-xs">
+          {data.map((doc) => (
+            <li key={doc.id}>
+              <Link
+                href={`/learn/${doc.id}`}
+                className={`block rounded-md px-sm py-xs text-sm ${
+                  doc.id === currentDocumentId
+                    ? "bg-muted font-semibold text-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {doc.title}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
 function TocPanel({
   scopeId,
   currentDocumentId,
   activeTool,
   onToolChange,
+  mobileOpen,
+  onMobileClose,
 }: {
   scopeId: string;
   currentDocumentId: string;
   activeTool: ActiveTool;
   onToolChange: (tool: ActiveTool) => void;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
 }) {
   const { data, isPending } = useQuery({
     queryKey: ["documents", scopeId],
     queryFn: () => getBrowserApiClient().listDocuments(scopeId),
   });
 
+  useDismissableOverlay(mobileOpen, onMobileClose);
+
   return (
-    <nav
-      aria-label="Table of contents"
-      className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-border"
-    >
-      <div className="flex flex-1 flex-col gap-xs overflow-y-auto p-md">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Contents
-        </h2>
-        {isPending && <p className="text-sm text-muted-foreground">Loading...</p>}
-        {!isPending && (!data || data.length === 0) && (
-          <p className="text-sm text-muted-foreground">No lessons.</p>
-        )}
-        {data && data.length > 0 && (
-          <ul className="flex flex-col gap-xs">
-            {data.map((doc) => (
-              <li key={doc.id}>
-                <Link
-                  href={`/learn/${doc.id}`}
-                  className={`block rounded-md px-sm py-xs text-sm ${
-                    doc.id === currentDocumentId
-                      ? "bg-muted font-semibold text-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
-                >
-                  {doc.title}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <AnnotationToolbar activeTool={activeTool} onToolChange={onToolChange} />
-    </nav>
+    <>
+      {mobileOpen && (
+        <div className="fixed inset-0 z-20 md:hidden">
+          <div className="absolute inset-0 bg-foreground/40" onClick={onMobileClose} />
+          <nav
+            aria-label="Table of contents (mobile)"
+            className="absolute top-0 left-0 flex h-full w-[16rem] flex-col bg-background shadow-md"
+          >
+            <button
+              type="button"
+              onClick={onMobileClose}
+              aria-label="Close contents"
+              className="absolute top-md right-md flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+            >
+              <span aria-hidden="true" className="text-lg leading-none">
+                ×
+              </span>
+            </button>
+            <div className="flex flex-1 flex-col gap-xs overflow-y-auto p-md pr-2xl">
+              <TocPanelBody
+                data={data}
+                isPending={isPending}
+                currentDocumentId={currentDocumentId}
+              />
+            </div>
+            <AnnotationToolbar activeTool={activeTool} onToolChange={onToolChange} />
+          </nav>
+        </div>
+      )}
+
+      <nav
+        aria-label="Table of contents"
+        className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-border md:flex"
+      >
+        <div className="flex flex-1 flex-col gap-xs overflow-y-auto p-md">
+          <TocPanelBody data={data} isPending={isPending} currentDocumentId={currentDocumentId} />
+        </div>
+        <AnnotationToolbar activeTool={activeTool} onToolChange={onToolChange} />
+      </nav>
+    </>
   );
 }
 
@@ -980,7 +1035,15 @@ type NotesView =
   | { kind: "new-text" }
   | { kind: "new-drawing" };
 
-function NotesPanel({ documentId }: { documentId: string }) {
+function NotesPanel({
+  documentId,
+  mobileOpen,
+  onMobileClose,
+}: {
+  documentId: string;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
+}) {
   const [collapsed, setCollapsed] = useState(false);
   const [width, setWidth] = useState(NOTES_PANEL_DEFAULT_WIDTH);
   const [view, setView] = useState<NotesView>({ kind: "list" });
@@ -988,6 +1051,8 @@ function NotesPanel({ documentId }: { documentId: string }) {
   const entries = useNotebookEntries();
   const selectedEntry =
     view.kind === "entry" ? entries.data?.find((e) => e.id === view.entryId) : undefined;
+
+  useDismissableOverlay(mobileOpen, onMobileClose);
 
   // A 4:3 drawing canvas needs real width to be usable — temporarily widen
   // the panel to its max while a drawing is open. Derived during render
@@ -1018,111 +1083,147 @@ function NotesPanel({ documentId }: { documentId: string }) {
     window.addEventListener("mouseup", handleMouseUp);
   }
 
-  if (collapsed) {
-    return (
-      <div
-        style={{ width: NOTES_PANEL_COLLAPSED_WIDTH }}
-        className="sticky top-0 flex h-screen shrink-0 flex-col items-center border-l border-border p-xs"
-      >
-        <button
-          type="button"
-          onClick={() => setCollapsed(false)}
-          aria-label="Expand notes"
-          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-        >
-          «
-        </button>
-      </div>
-    );
-  }
+  // Shared by the desktop expanded panel and the mobile drawer -- the list/
+  // editor views and the entries query are identical either way, only the
+  // surrounding chrome (sticky resizable column vs. off-canvas drawer)
+  // differs.
+  const notesBody = (
+    <>
+      {entries.isPending && <p className="text-sm text-muted-foreground">Loading...</p>}
+      {entries.isError && (
+        <p role="alert" className="text-sm text-danger">
+          Failed to load notes.
+        </p>
+      )}
+      {entries.data && (
+        <>
+          {view.kind !== "list" && (
+            <button
+              type="button"
+              onClick={() => setView({ kind: "list" })}
+              className="self-start text-sm text-muted-foreground hover:underline"
+            >
+              ← Notes
+            </button>
+          )}
+          {view.kind === "list" && (
+            <NotebookEntryList
+              entries={entries.data}
+              onSelect={(entryId) => setView({ kind: "entry", entryId })}
+            />
+          )}
+          {view.kind === "new-text" && (
+            <TextEntryEditor
+              sourceDocumentId={documentId}
+              onCreated={(id) => setView({ kind: "entry", entryId: id })}
+            />
+          )}
+          {view.kind === "new-drawing" && (
+            <DrawingEntryEditor
+              sourceDocumentId={documentId}
+              onCreated={(id) => setView({ kind: "entry", entryId: id })}
+            />
+          )}
+          {view.kind === "entry" && selectedEntry && selectedEntry.type === "text" && (
+            <TextEntryEditor
+              key={selectedEntry.id}
+              entry={selectedEntry}
+              onDeleted={() => setView({ kind: "list" })}
+            />
+          )}
+          {view.kind === "entry" && selectedEntry && selectedEntry.type === "drawing" && (
+            <DrawingEntryEditor
+              key={selectedEntry.id}
+              entry={selectedEntry}
+              onDeleted={() => setView({ kind: "list" })}
+            />
+          )}
+        </>
+      )}
+    </>
+  );
+  const newEntryButtons = view.kind === "list" && (
+    <NewEntryButtons
+      onNewText={() => setView({ kind: "new-text" })}
+      onNewDrawing={() => setView({ kind: "new-drawing" })}
+    />
+  );
 
   return (
-    <div
-      style={{ width: effectiveWidth }}
-      className="sticky top-0 relative flex h-screen shrink-0 flex-col border-l border-border"
-    >
-      <div
-        onMouseDown={handleDragStart}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize notes panel"
-        className="absolute top-0 left-0 h-full w-2 -translate-x-1/2 cursor-col-resize"
-      />
-      <div className="flex flex-1 flex-col gap-sm overflow-y-auto p-md">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Notes
-          </h2>
+    <>
+      {mobileOpen && (
+        <div className="fixed inset-0 z-20 md:hidden">
+          <div className="absolute inset-0 bg-foreground/40" onClick={onMobileClose} />
+          <div className="absolute top-0 right-0 flex h-full w-[18rem] flex-col bg-background shadow-md">
+            <div className="flex flex-1 flex-col gap-sm overflow-y-auto p-md">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Notes
+                </h2>
+                <button
+                  type="button"
+                  onClick={onMobileClose}
+                  aria-label="Close notes"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                >
+                  <span aria-hidden="true" className="text-lg leading-none">
+                    ×
+                  </span>
+                </button>
+              </div>
+              {notesBody}
+            </div>
+            {newEntryButtons}
+          </div>
+        </div>
+      )}
+
+      {collapsed ? (
+        <div
+          style={{ width: NOTES_PANEL_COLLAPSED_WIDTH }}
+          className="sticky top-0 hidden h-screen shrink-0 flex-col items-center border-l border-border p-xs md:flex"
+        >
           <button
             type="button"
-            onClick={() => setCollapsed(true)}
-            aria-label="Collapse notes"
+            onClick={() => setCollapsed(false)}
+            aria-label="Expand notes"
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
           >
-            »
+            «
           </button>
         </div>
-
-        {entries.isPending && <p className="text-sm text-muted-foreground">Loading...</p>}
-        {entries.isError && (
-          <p role="alert" className="text-sm text-danger">
-            Failed to load notes.
-          </p>
-        )}
-        {entries.data && (
-          <>
-            {view.kind !== "list" && (
+      ) : (
+        <div
+          style={{ width: effectiveWidth }}
+          className="sticky top-0 relative hidden h-screen shrink-0 flex-col border-l border-border md:flex"
+        >
+          <div
+            onMouseDown={handleDragStart}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize notes panel"
+            className="absolute top-0 left-0 h-full w-2 -translate-x-1/2 cursor-col-resize"
+          />
+          <div className="flex flex-1 flex-col gap-sm overflow-y-auto p-md">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Notes
+              </h2>
               <button
                 type="button"
-                onClick={() => setView({ kind: "list" })}
-                className="self-start text-sm text-muted-foreground hover:underline"
+                onClick={() => setCollapsed(true)}
+                aria-label="Collapse notes"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
               >
-                ← Notes
+                »
               </button>
-            )}
-            {view.kind === "list" && (
-              <NotebookEntryList
-                entries={entries.data}
-                onSelect={(entryId) => setView({ kind: "entry", entryId })}
-              />
-            )}
-            {view.kind === "new-text" && (
-              <TextEntryEditor
-                sourceDocumentId={documentId}
-                onCreated={(id) => setView({ kind: "entry", entryId: id })}
-              />
-            )}
-            {view.kind === "new-drawing" && (
-              <DrawingEntryEditor
-                sourceDocumentId={documentId}
-                onCreated={(id) => setView({ kind: "entry", entryId: id })}
-              />
-            )}
-            {view.kind === "entry" && selectedEntry && selectedEntry.type === "text" && (
-              <TextEntryEditor
-                key={selectedEntry.id}
-                entry={selectedEntry}
-                onDeleted={() => setView({ kind: "list" })}
-              />
-            )}
-            {view.kind === "entry" && selectedEntry && selectedEntry.type === "drawing" && (
-              <DrawingEntryEditor
-                key={selectedEntry.id}
-                entry={selectedEntry}
-                onDeleted={() => setView({ kind: "list" })}
-              />
-            )}
-          </>
-        )}
-      </div>
-
-      {view.kind === "list" && (
-        <NewEntryButtons
-          onNewText={() => setView({ kind: "new-text" })}
-          onNewDrawing={() => setView({ kind: "new-drawing" })}
-        />
+            </div>
+            {notesBody}
+          </div>
+          {newEntryButtons}
+        </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -1142,6 +1243,8 @@ export default function LecturePage() {
     return TABS.some((tab) => tab.key === tabParam) ? (tabParam as TabKey) : "lesson";
   });
   const [activeTool, setActiveTool] = useState<ActiveTool>(null);
+  const [mobileTocOpen, setMobileTocOpen] = useState(false);
+  const [mobileNotesOpen, setMobileNotesOpen] = useState(false);
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["documents", params.id],
@@ -1306,6 +1409,8 @@ export default function LecturePage() {
         currentDocumentId={params.id}
         activeTool={activeTool}
         onToolChange={setActiveTool}
+        mobileOpen={mobileTocOpen}
+        onMobileClose={() => setMobileTocOpen(false)}
       />
 
       {/* pb-0 for the Review tab: its sticky bottom bar supplies its own
@@ -1313,9 +1418,30 @@ export default function LecturePage() {
           trailing p-xl bottom padding here would let the page scroll a
           bit past the bar's stuck position, dragging it up off the edge. */}
       <div className={`min-w-0 flex-1 p-xl ${activeTab === "review" ? "pb-0" : ""}`}>
-        <Link href="/learn" className="text-sm text-muted-foreground hover:underline">
-          ← Learn
-        </Link>
+        {/* Contents and the Notes panel live as sticky side columns at
+            md: and up (see TocPanel/NotesPanel); below that they're
+            off-canvas drawers, opened from here since that's the only place
+            both of them and the main reading column are all in scope
+            together. Labeled "Notebook" rather than "Notes" specifically to
+            stay distinct from the per-selection "Notes" action in the
+            floating annotation toolbar below -- same panel, two different
+            accessible names so neither button is ambiguous to find. */}
+        <div className="mt-sm flex gap-sm md:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileTocOpen(true)}
+            className="rounded-md border border-border px-sm py-xs text-xs font-medium text-foreground hover:bg-muted"
+          >
+            Contents
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileNotesOpen(true)}
+            className="rounded-md border border-border px-sm py-xs text-xs font-medium text-foreground hover:bg-muted"
+          >
+            Notebook
+          </button>
+        </div>
         {data.sub_chapter && (
           <p className="mt-xs text-xs text-muted-foreground">
             <Link
@@ -1328,7 +1454,7 @@ export default function LecturePage() {
             {data.sub_chapter.title}
           </p>
         )}
-        <h1 className="mt-xs text-2xl font-semibold text-foreground">{data.title}</h1>
+        <h1 className="mt-xs text-2xl font-bold text-foreground">{data.title}</h1>
 
         <div className="mt-lg flex w-full gap-xs border-b border-border">
           {TABS.map((tab) => (
@@ -1466,7 +1592,11 @@ export default function LecturePage() {
         )}
       </div>
 
-      <NotesPanel documentId={params.id} />
+      <NotesPanel
+        documentId={params.id}
+        mobileOpen={mobileNotesOpen}
+        onMobileClose={() => setMobileNotesOpen(false)}
+      />
     </main>
   );
 }

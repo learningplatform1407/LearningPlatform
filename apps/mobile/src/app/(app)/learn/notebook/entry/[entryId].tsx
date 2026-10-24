@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { NotebookEntryEditor } from "@/lib/notebook-entry-editor";
@@ -43,9 +43,6 @@ export default function NotebookEntryScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Pressable onPress={() => router.back()} accessibilityRole="button">
-        <Text style={styles.backLink}>← Notebook</Text>
-      </Pressable>
       <Text style={styles.title}>
         {isNew ? "New note" : (entry?.type ?? "text") === "text" ? "Note" : "Drawing"}
       </Text>
@@ -68,10 +65,6 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.xl,
     gap: spacing.md,
-  },
-  backLink: {
-    fontSize: fontSizes.sm,
-    color: colors.mutedForeground,
   },
   title: {
     fontSize: fontSizes["2xl"],

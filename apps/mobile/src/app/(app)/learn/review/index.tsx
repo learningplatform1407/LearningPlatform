@@ -145,9 +145,6 @@ export default function ReviewSummaryScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Pressable onPress={() => router.push("/learn")} accessibilityRole="button">
-        <Text style={styles.backLink}>← Learn</Text>
-      </Pressable>
       <Text style={styles.title}>Review</Text>
       <Text style={styles.hint}>
         {totalDue} {totalDue === 1 ? "word" : "words"} due today across your course.
@@ -183,10 +180,6 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.xl,
     gap: spacing.lg,
-  },
-  backLink: {
-    fontSize: fontSizes.sm,
-    color: colors.mutedForeground,
   },
   title: {
     fontSize: fontSizes["2xl"],

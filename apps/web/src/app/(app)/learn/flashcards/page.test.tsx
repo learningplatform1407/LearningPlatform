@@ -5,11 +5,10 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import FlashcardsPage from "./page";
 
-const getMe = vi.fn();
 const getFlashcardSummary = vi.fn();
 
 vi.mock("@/lib/api-client.browser", () => ({
-  getBrowserApiClient: () => ({ getMe, getFlashcardSummary }),
+  getBrowserApiClient: () => ({ getFlashcardSummary }),
 }));
 
 function lesson(overrides: Record<string, unknown> = {}) {
@@ -17,7 +16,6 @@ function lesson(overrides: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
-  getMe.mockReset().mockResolvedValue({ id: "u1", email: "a@b.c", role: "student" });
   getFlashcardSummary.mockReset().mockResolvedValue({ books: [], uncategorized_lessons: [] });
 });
 
@@ -132,16 +130,11 @@ describe("FlashcardsPage", () => {
     );
   });
 
-  test("hides the import link from a learner and shows it to an admin", async () => {
+  // Importing flashcards is an admin tool -- it's reached from /admin now,
+  // never linked inline here regardless of the viewer's role.
+  test("never shows an import link", async () => {
     renderPage();
     await screen.findByText("No lessons yet.");
     expect(screen.queryByRole("link", { name: /Import flashcards/ })).not.toBeInTheDocument();
-
-    getMe.mockResolvedValue({ id: "u1", email: "a@b.c", role: "admin" });
-    renderPage();
-    expect(await screen.findByRole("link", { name: /Import flashcards/ })).toHaveAttribute(
-      "href",
-      "/learn/flashcards/manage",
-    );
   });
 });

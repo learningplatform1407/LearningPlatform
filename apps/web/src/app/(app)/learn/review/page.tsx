@@ -11,6 +11,7 @@ import type {
   ReviewSummarySubChapter,
 } from "@lp/contracts";
 
+import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 function DueBadge({ count }: { count: number }) {
@@ -129,19 +130,19 @@ export default function ReviewSummaryPage() {
 
   if (isPending) {
     return (
-      <main className="p-xl">
+      <PageMain>
         <p className="text-sm text-muted-foreground">Loading...</p>
-      </main>
+      </PageMain>
     );
   }
 
   if (isError) {
     return (
-      <main className="p-xl">
+      <PageMain>
         <p role="alert" className="text-sm text-danger">
           Failed to load your review summary.
         </p>
-      </main>
+      </PageMain>
     );
   }
 
@@ -152,12 +153,9 @@ export default function ReviewSummaryPage() {
   const totalDue = data.books.reduce((sum, book) => sum + book.due_count, 0) + uncategorizedDue;
 
   return (
-    <main className="p-xl">
-      <Link href="/learn" className="text-sm text-muted-foreground hover:underline">
-        ← Learn
-      </Link>
-      <h1 className="mt-xs text-2xl font-semibold text-foreground">Review</h1>
-      <p className="mt-xs text-sm text-muted-foreground">
+    <PageMain>
+      <h1 className="text-2xl font-bold text-foreground">Review</h1>
+      <p className="mt-xs text-sm font-medium text-muted-foreground">
         {totalDue} {totalDue === 1 ? "word" : "words"} due today across your course.
       </p>
 
@@ -179,6 +177,6 @@ export default function ReviewSummaryPage() {
           )}
         </ul>
       )}
-    </main>
+    </PageMain>
   );
 }
