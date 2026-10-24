@@ -25,13 +25,6 @@ export default function SettingsLayout() {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.nav} contentContainerStyle={styles.navContent}>
-        <Pressable
-          onPress={() => router.push("/profile")}
-          accessibilityRole="button"
-          style={styles.backLink}
-        >
-          <Text style={styles.backLinkText}>← Back to profile</Text>
-        </Pressable>
         {SECTIONS.map((section) => {
           const active = pathname === section.href;
           return (
@@ -71,13 +64,6 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     gap: spacing.xs,
   },
-  backLink: {
-    marginBottom: spacing.sm,
-  },
-  backLinkText: {
-    fontSize: fontSizes.xs,
-    color: colors.mutedForeground,
-  },
   navItem: {
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
@@ -88,7 +74,7 @@ const styles = StyleSheet.create({
   },
   navItemText: {
     fontSize: fontSizes.xs,
-    fontWeight: fontWeights.medium,
+    fontWeight: fontWeights.semibold,
     color: colors.mutedForeground,
   },
   navItemTextActive: {

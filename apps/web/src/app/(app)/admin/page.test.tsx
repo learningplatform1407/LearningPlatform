@@ -37,11 +37,9 @@ describe("AdminPage", () => {
 
     renderPage();
 
-    // A directory, not a second home for these forms — each link points at
-    // where the content lives, so the parent is always already chosen.
     expect(
       await screen.findByRole("link", { name: /Books, chapters and lectures/ }),
-    ).toHaveAttribute("href", "/learn/library");
+    ).toHaveAttribute("href", "/admin/library");
     expect(screen.getByRole("link", { name: /Import questions/ })).toHaveAttribute(
       "href",
       "/question-bank/manage",

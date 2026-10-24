@@ -2,7 +2,7 @@ import { Drawer, DrawerContentScrollView, DrawerItem } from "expo-router/drawer"
 import { Tabs } from "expo-router/tabs";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 
-import { colors, spacing } from "@/lib/theme";
+import { colors, fontWeights, spacing } from "@/lib/theme";
 
 import type { DrawerContentComponentProps } from "expo-router/drawer";
 
@@ -32,6 +32,7 @@ function AppDrawerContent({ state, navigation, descriptors }: DrawerContentCompo
         focused={activeKey === route.key}
         activeTintColor={colors.foreground}
         inactiveTintColor={colors.mutedForeground}
+        labelStyle={styles.drawerItemLabel}
         onPress={() => navigation.navigate(route.name)}
         style={isProfile ? styles.profileItem : undefined}
       />
@@ -54,6 +55,9 @@ const styles = StyleSheet.create({
   },
   spacer: {
     flexGrow: 1,
+  },
+  drawerItemLabel: {
+    fontWeight: fontWeights.semibold,
   },
   profileItem: {
     borderTopWidth: 1,
@@ -96,6 +100,7 @@ export default function AppLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.foreground,
         tabBarInactiveTintColor: colors.mutedForeground,
+        tabBarLabelStyle: { fontWeight: fontWeights.semibold },
       }}
     >
       <Tabs.Screen name="learn" options={{ title: "Learn" }} />

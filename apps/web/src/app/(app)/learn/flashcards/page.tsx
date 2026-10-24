@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { FlashcardSummaryResponse } from "@lp/contracts";
 
 import { ExpandableRow } from "@/components/expandable-row";
+import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 // Derived from the response type rather than exporting four more schemas
@@ -108,7 +109,6 @@ function BookRow({ book }: { book: SummaryBook }) {
 
 export default function FlashcardsPage() {
   const api = getBrowserApiClient();
-  const me = useQuery({ queryKey: ["me"], queryFn: () => api.getMe() });
   const { data, isPending, isError } = useQuery({
     // Under the "flashcards" namespace on purpose: the lesson runner
     // invalidates that whole prefix after a grade or an exclusion, and these
@@ -121,19 +121,19 @@ export default function FlashcardsPage() {
 
   if (isPending) {
     return (
-      <main className="p-xl">
+      <PageMain>
         <p className="text-sm text-muted-foreground">Loading...</p>
-      </main>
+      </PageMain>
     );
   }
 
   if (isError) {
     return (
-      <main className="p-xl">
+      <PageMain>
         <p role="alert" className="text-sm text-danger">
           Failed to load your flashcard summary.
         </p>
-      </main>
+      </PageMain>
     );
   }
 
@@ -149,12 +149,9 @@ export default function FlashcardsPage() {
   const totalNew = data.books.reduce((sum, book) => sum + book.new_count, 0) + uncategorizedNew;
 
   return (
-    <main className="p-xl">
-      <Link href="/learn" className="text-sm text-muted-foreground hover:underline">
-        ← Learn
-      </Link>
-      <h1 className="mt-xs text-2xl font-semibold text-foreground">Flashcards</h1>
-      <p className="mt-xs text-sm text-muted-foreground">
+    <PageMain>
+      <h1 className="text-2xl font-bold text-foreground">Flashcards</h1>
+      <p className="mt-xs text-sm font-medium text-muted-foreground">
         {totalDue} {totalDue === 1 ? "card" : "cards"} due today · {totalNew} not studied yet.
       </p>
 
@@ -179,15 +176,6 @@ export default function FlashcardsPage() {
           )}
         </ul>
       )}
-
-      {me.data?.role === "admin" && (
-        <Link
-          href="/learn/flashcards/manage"
-          className="mt-lg inline-block text-sm text-primary hover:underline"
-        >
-          Import flashcards →
-        </Link>
-      )}
-    </main>
+    </PageMain>
   );
 }

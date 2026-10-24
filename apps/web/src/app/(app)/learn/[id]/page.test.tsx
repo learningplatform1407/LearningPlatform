@@ -1458,4 +1458,46 @@ describe("LecturePage", () => {
     await screen.findByText("Hello world");
     expect(listDocuments).toHaveBeenCalledWith("none");
   });
+
+  test("the mobile Contents button opens an off-canvas drawer with the same lesson list, dismissible via its close button", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDocuments.mockResolvedValue([
+      { id: "d1", title: "Intro to Systems", created_at: "2026-01-01", status: "ready" },
+      { id: "d2", title: "Second lesson", created_at: "2026-01-01", status: "ready" },
+    ]);
+
+    renderPage();
+    await screen.findByText("Hello world");
+    const user = userEvent.setup();
+
+    expect(screen.queryByRole("navigation", { name: "Table of contents (mobile)" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Contents" }));
+
+    const drawer = screen.getByRole("navigation", { name: "Table of contents (mobile)" });
+    expect(within(drawer).getByRole("link", { name: "Second lesson" })).toHaveAttribute(
+      "href",
+      "/learn/d2",
+    );
+
+    await user.click(within(drawer).getByRole("button", { name: "Close contents" }));
+    expect(screen.queryByRole("navigation", { name: "Table of contents (mobile)" })).toBeNull();
+  });
+
+  test("the mobile Notebook button opens an off-canvas drawer showing the same notes, dismissible via its close button", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+    renderPage();
+    await screen.findByText("Hello world");
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Notebook" }));
+
+    // Both the (CSS-hidden) desktop panel and the mobile drawer are mounted
+    // at once once it's open, so "No notes yet." legitimately appears twice.
+    expect(await screen.findAllByText("No notes yet.")).toHaveLength(2);
+
+    await user.click(screen.getByRole("button", { name: "Close notes" }));
+    expect(screen.queryByRole("button", { name: "Close notes" })).not.toBeInTheDocument();
+  });
 });

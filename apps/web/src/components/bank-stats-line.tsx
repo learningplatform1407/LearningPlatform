@@ -14,6 +14,14 @@ function formatPercent(rate: number | null): string {
  */
 export function BankStatsLine({ counts }: { counts: BankStatsCounts }) {
   if (counts.question_count === 0) return null;
+  if (counts.answered_count === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        {counts.question_count} question{counts.question_count === 1 ? "" : "s"} waiting — nothing
+        answered yet.
+      </p>
+    );
+  }
   const rates = computeBankStatsRates(counts);
   return (
     <p className="text-xs text-muted-foreground">

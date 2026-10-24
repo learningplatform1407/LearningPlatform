@@ -175,9 +175,17 @@ function MonthCalendar({
 
           if (!openable) {
             return (
-              <Text key={cell.date} style={[styles.dayCell, !cell.inMonth && styles.dayCellFaded]}>
-                {cell.dayOfMonth}
-              </Text>
+              <View key={cell.date} style={styles.dayCell}>
+                <Text
+                  style={[
+                    styles.dayCellText,
+                    styles.dayCellMuted,
+                    !cell.inMonth && styles.dayCellFaded,
+                  ]}
+                >
+                  {cell.dayOfMonth}
+                </Text>
+              </View>
             );
           }
 
@@ -190,20 +198,32 @@ function MonthCalendar({
               accessibilityState={{ selected: cell.date === selected }}
               style={[
                 styles.dayCellPressable,
-                cell.isToday && styles.dayCellToday,
                 cell.date === selected && styles.dayCellSelected,
+                // After dayCellSelected, not before: today should always read
+                // as today, even on the one day that's also the open one.
+                cell.isToday && styles.dayCellToday,
               ]}
             >
               <Text
                 style={[
                   styles.dayCellText,
-                  mark ? { color: mark.color } : null,
+                  mark && !cell.isToday ? { color: mark.color } : null,
+                  cell.isToday && { color: colors.primaryForeground },
                   !cell.inMonth && styles.dayCellFaded,
                 ]}
               >
                 {cell.dayOfMonth}
               </Text>
-              {mark && <Text style={[styles.dayMark, { color: mark.color }]}>{mark.icon}</Text>}
+              {mark && (
+                <Text
+                  style={[
+                    styles.dayMark,
+                    { color: cell.isToday ? colors.primaryForeground : mark.color },
+                  ]}
+                >
+                  {mark.icon}
+                </Text>
+              )}
             </Pressable>
           );
         })}
@@ -284,7 +304,7 @@ const styles = StyleSheet.create({
   },
   monthLabel: {
     fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
+    fontWeight: fontWeights.semibold,
     color: colors.foreground,
   },
   weekRow: {
@@ -298,27 +318,31 @@ const styles = StyleSheet.create({
     width: `${100 / 7}%`,
     textAlign: "center",
     fontSize: fontSizes.xs,
+    fontWeight: fontWeights.semibold,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
     color: colors.mutedForeground,
   },
+  // Same box as dayCellPressable (width/aspectRatio/centering) so inert days
+  // line up with pressable ones instead of drifting out of row.
   dayCell: {
     width: `${100 / 7}%`,
-    textAlign: "center",
-    // Matches dayCellPressable's vertical box, plus its 1px border, so inert
-    // days line up with pressable ones instead of drifting half a row.
-    paddingVertical: spacing.xs + 1,
-    fontSize: fontSizes.sm,
+    aspectRatio: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dayCellMuted: {
     color: colors.mutedForeground,
   },
   dayCellPressable: {
     width: `${100 / 7}%`,
+    aspectRatio: 1,
     alignItems: "center",
-    paddingVertical: spacing.xs,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: "transparent",
+    justifyContent: "center",
+    borderRadius: radii.full,
   },
   dayCellToday: {
-    borderColor: colors.primary,
+    backgroundColor: colors.primary,
   },
   dayCellSelected: {
     backgroundColor: colors.muted,

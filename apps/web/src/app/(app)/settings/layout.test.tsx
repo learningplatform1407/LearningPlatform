@@ -9,7 +9,7 @@ vi.mock("next/navigation", () => ({
   usePathname: () => mockUsePathname(),
 }));
 
-test("lists every section and links back to the profile", () => {
+test("lists every section", () => {
   mockUsePathname.mockReturnValue("/settings/account");
 
   render(
@@ -18,7 +18,6 @@ test("lists every section and links back to the profile", () => {
     </SettingsLayout>,
   );
 
-  expect(screen.getByRole("link", { name: /Back to profile/ })).toHaveAttribute("href", "/profile");
   for (const label of [
     "Account",
     "Privacy",

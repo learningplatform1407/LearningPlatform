@@ -8,11 +8,11 @@ import type {
   QuizSessionQuestion,
 } from "@lp/api-client";
 import { ApiClientError } from "@lp/api-client";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/button";
 import { ExpandableRow } from "@/components/expandable-row";
+import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 function describeError(err: unknown): string {
@@ -179,6 +179,88 @@ function TopicPicker({
   );
 }
 
+type TagOption = { id: string; label: string; question_count: number };
+
+/**
+ * A searchable checkbox dropdown for tags, replacing what used to be a flat
+ * row of checkbox pills -- fine for a handful of tags, unworkable once a
+ * course has dozens. No existing dropdown/combobox component exists
+ * anywhere in this app to build on, so this is self-contained: a transparent
+ * full-viewport backdrop to close on outside click (the same idiom the
+ * Sidebar's mobile drawer and the lesson reader's TOC/Notes drawers already
+ * use), plus a local Escape handler. Not `useDismissableOverlay` -- that
+ * hook also locks body scroll, which is more than an inline dropdown needs.
+ */
+function TagPicker({
+  tags,
+  selectedIds,
+  onToggle,
+}: {
+  tags: TagOption[];
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
+  const filtered = tags.filter((tag) => tag.label.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div className="relative">
+      <Button type="button" variant="secondary" onClick={() => setOpen((value) => !value)}>
+        {selectedIds.length === 0
+          ? "Tags"
+          : `${selectedIds.length} tag${selectedIds.length === 1 ? "" : "s"} selected`}
+      </Button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-0" onClick={() => setOpen(false)} />
+          <div className="absolute z-10 mt-xs w-80 rounded-lg border border-border bg-background shadow-md">
+            <div className="border-b border-border p-sm">
+              <input
+                type="text"
+                autoFocus
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search tags..."
+                className="w-full rounded-md border border-border px-sm py-xs text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div className="flex max-h-64 flex-col gap-xs overflow-y-auto p-sm">
+              {filtered.length === 0 ? (
+                <p className="px-sm py-xs text-sm text-muted-foreground">No matching tags.</p>
+              ) : (
+                filtered.map((tag) => (
+                  <label
+                    key={tag.id}
+                    className="flex items-center gap-xs rounded-md px-sm py-xs text-sm text-foreground hover:bg-muted"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(tag.id)}
+                      onChange={() => onToggle(tag.id)}
+                    />
+                    {tag.label} ({tag.question_count})
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function StartForm({ onStarted }: { onStarted: () => void }) {
   const api = getBrowserApiClient();
   const tags = useQuery({ queryKey: ["tags"], queryFn: () => api.listTags() });
@@ -228,29 +310,19 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
 
   // Bracket widths, not max-w-md/2xl — our --spacing-* tokens shadow
   // Tailwind's container scale, so the named keys collapse to a few pixels.
-  // See components/auth-layout.tsx.
+  // See components/auth-layout.tsx. 48rem matches the Runner/Results/History
+  // sections below and Question Bank's own width, so Exam Hub isn't the one
+  // narrower page in its own state machine.
   return (
-    <div className="mt-lg flex w-full max-w-[32rem] flex-col gap-md">
+    <div className="mt-lg flex w-full max-w-[48rem] flex-col gap-md">
       <TopicPicker topics={topics} onChange={setTopics} />
 
       <fieldset className="flex flex-col gap-xs">
         <legend className="text-sm text-foreground">
           Tags — none selected means no tag filter
         </legend>
-        <div className="mt-xs flex flex-wrap gap-sm">
-          {(tags.data ?? []).map((tag) => (
-            <label
-              key={tag.id}
-              className="flex items-center gap-xs rounded-md border border-border px-sm py-xs text-sm text-foreground"
-            >
-              <input
-                type="checkbox"
-                checked={tagIds.includes(tag.id)}
-                onChange={() => toggleTag(tag.id)}
-              />
-              {tag.label} ({tag.question_count})
-            </label>
-          ))}
+        <div className="mt-xs">
+          <TagPicker tags={tags.data ?? []} selectedIds={tagIds} onToggle={toggleTag} />
         </div>
         {tagIds.length > 1 && (
           <span className="text-xs text-muted-foreground">
@@ -696,8 +768,6 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
 export default function QuizzesPage() {
   const api = getBrowserApiClient();
   const queryClient = useQueryClient();
-  const me = useQuery({ queryKey: ["me"], queryFn: () => api.getMe() });
-  const isAdmin = me.data?.role === "admin";
 
   const current = useQuery({
     queryKey: ["quiz-session-current"],
@@ -712,9 +782,9 @@ export default function QuizzesPage() {
   }
 
   return (
-    <main className="p-xl">
-      <h1 className="text-2xl font-semibold text-foreground">Exam Hub</h1>
-      <p className="mt-xs text-sm text-muted-foreground">
+    <PageMain>
+      <h1 className="text-2xl font-bold text-foreground">Exam Hub</h1>
+      <p className="mt-xs text-sm font-medium text-muted-foreground">
         Build a custom quiz from any topics and tags. Scheduled mock exams will appear here too.
       </p>
 
@@ -747,15 +817,6 @@ export default function QuizzesPage() {
           <History onOpen={setViewingResultsFor} />
         </>
       )}
-
-      {isAdmin && (
-        <Link
-          href="/question-bank/manage"
-          className="mt-lg inline-block text-sm text-primary hover:underline"
-        >
-          Import questions →
-        </Link>
-      )}
-    </main>
+    </PageMain>
   );
 }

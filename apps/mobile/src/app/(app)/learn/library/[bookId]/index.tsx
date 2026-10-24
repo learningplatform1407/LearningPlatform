@@ -117,14 +117,7 @@ function UncategorizedLessonsScreen() {
       contentContainerStyle={styles.listContent}
       data={lessons}
       keyExtractor={(doc) => doc.id}
-      ListHeaderComponent={
-        <>
-          <Pressable onPress={() => router.push("/learn/library")} accessibilityRole="button">
-            <Text style={styles.backLink}>← Library</Text>
-          </Pressable>
-          <Text style={styles.title}>Uncategorized</Text>
-        </>
-      }
+      ListHeaderComponent={<Text style={styles.title}>Uncategorized</Text>}
       ListEmptyComponent={<Text style={styles.empty}>No lessons yet.</Text>}
       renderItem={({ item }) => (
         <View>
@@ -578,9 +571,6 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
       keyExtractor={(chapter) => chapter.id}
       ListHeaderComponent={
         <>
-          <Pressable onPress={() => router.push("/learn/library")} accessibilityRole="button">
-            <Text style={styles.backLink}>← Library</Text>
-          </Pressable>
           <Text style={styles.title}>Chapters</Text>
           {bookNode && (
             <View style={styles.overallProgress}>
@@ -658,11 +648,6 @@ const styles = StyleSheet.create({
   overallProgress: {
     marginTop: spacing.xs,
     maxWidth: 384,
-  },
-  backLink: {
-    fontSize: fontSizes.sm,
-    color: colors.mutedForeground,
-    marginBottom: spacing.xs,
   },
   title: {
     fontSize: fontSizes["2xl"],

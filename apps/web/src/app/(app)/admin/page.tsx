@@ -3,29 +3,32 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
+import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 /**
- * A directory, deliberately not a console.
+ * A directory of every admin content tool, each one linked out to where it
+ * actually lives.
  *
- * Every tool below is linked, never re-implemented here. Authoring stays
- * where the content lives — you add a chapter inside the book you are
- * looking at, and upload a lecture inside its chapter — which means the
- * parent is always already chosen and cannot be mis-picked, and there is
- * only one copy of each form to maintain. What was actually missing was
- * discoverability: each tool used to hide in a corner of a different
- * learner page.
+ * Library authoring used to be inline on the regular Library pages, gated on
+ * role -- but that put create/upload forms in front of every learner
+ * browsing the same pages, admin or not. It now lives under `/admin/library`
+ * instead, reusing the exact same browsing components (book grid, chapter
+ * list, lesson list) via a `showAdminTools` flag, so there is still only one
+ * copy of each form to maintain -- just reached from here rather than
+ * surfaced to everyone.
  *
  * Mobile has no equivalent, which is the one intentional break in web/mobile
- * parity here: the two bulk importers and the question-of-the-day schedule are
- * web-only by design, and library authoring mobile already has inline.
+ * parity here: the two bulk importers, the question-of-the-day schedule, and
+ * this `/admin/library` relocation are web-only by design -- mobile's
+ * library screens still show admin forms inline.
  */
 const TOOLS = [
   {
-    href: "/learn/library",
+    href: "/admin/library",
     title: "Books, chapters and lectures",
     description:
-      "Create books, chapters and sub-chapters, and upload lecture PDFs — inline on the Library page, inside whichever book you are viewing.",
+      "Create books, chapters and sub-chapters, and upload lecture PDFs — browse the same tree learners see, with the admin forms included.",
   },
   {
     href: "/question-bank/manage",
@@ -52,25 +55,25 @@ export default function AdminPage() {
 
   if (me.isPending) {
     return (
-      <main className="p-xl">
+      <PageMain>
         <p className="text-sm text-muted-foreground">Loading...</p>
-      </main>
+      </PageMain>
     );
   }
 
   if (me.data?.role !== "admin") {
     return (
-      <main className="p-xl">
-        <h1 className="text-2xl font-semibold text-foreground">Admin</h1>
-        <p className="mt-md text-sm text-muted-foreground">Admin access required.</p>
-      </main>
+      <PageMain>
+        <h1 className="text-2xl font-bold text-foreground">Admin</h1>
+        <p className="mt-md text-sm font-medium text-muted-foreground">Admin access required.</p>
+      </PageMain>
     );
   }
 
   return (
-    <main className="p-xl">
-      <h1 className="text-2xl font-semibold text-foreground">Admin</h1>
-      <p className="mt-xs text-sm text-muted-foreground">
+    <PageMain>
+      <h1 className="text-2xl font-bold text-foreground">Admin</h1>
+      <p className="mt-xs text-sm font-medium text-muted-foreground">
         Content tools. Each one opens where that content actually lives.
       </p>
 
@@ -87,6 +90,6 @@ export default function AdminPage() {
           </li>
         ))}
       </ul>
-    </main>
+    </PageMain>
   );
 }

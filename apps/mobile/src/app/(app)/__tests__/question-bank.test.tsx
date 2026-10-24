@@ -166,6 +166,38 @@ test("shows the Overall card and per-node success/failing/pending/average-score 
   ).toHaveLength(2);
 });
 
+test("shows a friendly zero state when nothing has been answered yet", async () => {
+  mockGetQuestionBankTree.mockResolvedValue({
+    ...TREE,
+    books: [
+      {
+        id: "b1",
+        title: "Book A",
+        question_count: 57,
+        answered_count: 0,
+        correct_count: 0,
+        partial_count: 0,
+        incorrect_count: 0,
+        points_awarded: 0,
+        points_possible: 0,
+        chapters: [],
+      },
+    ],
+  });
+  mockListQuestionBank.mockResolvedValue([]);
+  mockGetQuizAvailableCount.mockResolvedValue({ available: 57 });
+
+  renderScreen();
+
+  expect(await screen.findByText("Overall")).toBeTruthy();
+  expect(await screen.findByText("57 questions waiting — nothing answered yet.")).toBeTruthy();
+
+  fireEvent.press(screen.getByText("Book A"));
+  expect(await screen.findAllByText("57 questions waiting — nothing answered yet.")).toHaveLength(
+    2,
+  );
+});
+
 test("answering a question reveals the outcome", async () => {
   mockGetQuestionBankTree.mockResolvedValue(TREE);
   mockListQuestionBank.mockResolvedValue([QUESTION]);

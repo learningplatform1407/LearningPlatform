@@ -73,11 +73,3 @@ test("+ Text and + Drawing navigate to the sentinel new-note routes", async () =
   fireEvent.press(screen.getByText("+ Drawing"));
   expect(router.push).toHaveBeenCalledWith("/learn/notebook/entry/new-drawing");
 });
-
-test("← Learn navigates back to the Learn hub", async () => {
-  renderScreen();
-  await screen.findByText("No notes yet.");
-
-  fireEvent.press(screen.getByText("← Learn"));
-  expect(router.push).toHaveBeenCalledWith("/learn");
-});

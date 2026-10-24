@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 
 import QuizzesPage from "./page";
@@ -88,6 +89,34 @@ test("shows the real pool size, not the overlapping per-tag counts", async () =>
   expect(await screen.findByText(/2 questions available/)).toBeInTheDocument();
 });
 
+test("the tags dropdown opens on demand, filters by search, and selecting a tag re-queries the pool", async () => {
+  getMe.mockResolvedValue({ id: "u1", role: "student" });
+  listTags.mockResolvedValue([
+    { id: "t1", slug: "cardiology", label: "Cardiology", question_count: 2 },
+    { id: "t2", slug: "pharmacology", label: "Pharmacology", question_count: 3 },
+  ]);
+  getQuizAvailableCount.mockResolvedValue({ available: 2 });
+
+  renderPage();
+  const user = userEvent.setup();
+
+  // Collapsed by default: neither tag is visible until the trigger opens it.
+  expect(screen.queryByText("Cardiology")).not.toBeInTheDocument();
+  await user.click(await screen.findByRole("button", { name: "Tags" }));
+  expect(await screen.findByText(/Cardiology/)).toBeInTheDocument();
+  expect(screen.getByText(/Pharmacology/)).toBeInTheDocument();
+
+  await user.type(screen.getByPlaceholderText("Search tags..."), "card");
+  expect(screen.getByText(/Cardiology/)).toBeInTheDocument();
+  expect(screen.queryByText(/Pharmacology/)).not.toBeInTheDocument();
+
+  getQuizAvailableCount.mockResolvedValue({ available: 2 });
+  await user.click(screen.getByRole("checkbox", { name: /Cardiology/ }));
+
+  expect(await screen.findByRole("button", { name: "1 tag selected" })).toBeInTheDocument();
+  expect(getQuizAvailableCount).toHaveBeenCalledWith(expect.objectContaining({ tagIds: ["t1"] }));
+});
+
 test("blocks starting when the filter matches nothing", async () => {
   getMe.mockResolvedValue({ id: "u1", role: "student" });
   getQuizAvailableCount.mockResolvedValue({ available: 0 });
@@ -98,22 +127,15 @@ test("blocks starting when the filter matches nothing", async () => {
   expect(screen.getByRole("button", { name: "Start quiz" })).toBeDisabled();
 });
 
-test("hides the import-questions link for a non-admin", async () => {
-  getMe.mockResolvedValue({ id: "u1", role: "student" });
+// Importing questions is an admin tool -- it's reached from /admin now,
+// never linked inline here regardless of the viewer's role.
+test("never shows an import-questions link", async () => {
+  getMe.mockResolvedValue({ id: "u1", role: "admin" });
 
   renderPage();
 
   expect(await screen.findByRole("button", { name: "Start quiz" })).toBeInTheDocument();
   expect(screen.queryByText("Import questions →")).not.toBeInTheDocument();
-});
-
-test("shows the import-questions link for an admin", async () => {
-  getMe.mockResolvedValue({ id: "u1", role: "admin" });
-
-  renderPage();
-
-  const link = await screen.findByRole("link", { name: "Import questions →" });
-  expect(link).toHaveAttribute("href", "/question-bank/manage");
 });
 
 test("locks an already-answered question under immediate reveal", async () => {

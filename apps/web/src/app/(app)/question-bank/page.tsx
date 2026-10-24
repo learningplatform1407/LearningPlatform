@@ -3,10 +3,10 @@
 import { useQuery } from "@tanstack/react-query";
 import type { BankTreeChapter, BankTreeLesson, BankTreeSubChapter } from "@lp/api-client";
 import { sumBankStatsCounts } from "@lp/api-client";
-import Link from "next/link";
 
 import { BankStatsLine } from "@/components/bank-stats-line";
 import { ExpandableRow } from "@/components/expandable-row";
+import { PageMain } from "@/components/page-main";
 import { QuestionBankList } from "@/components/question-bank-list";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
@@ -88,7 +88,6 @@ function ChapterRow({ chapter }: { chapter: BankTreeChapter }) {
 
 export default function QuestionBankPage() {
   const api = getBrowserApiClient();
-  const me = useQuery({ queryKey: ["me"], queryFn: () => api.getMe() });
   const tree = useQuery({
     queryKey: ["question-bank-tree"],
     queryFn: () => api.getQuestionBankTree(),
@@ -115,9 +114,9 @@ export default function QuestionBankPage() {
     sumBankStatsCounts([...tree.data.books, ...tree.data.uncategorized_lessons, unassignedCounts]);
 
   return (
-    <main className="p-xl">
-      <h1 className="text-2xl font-semibold text-foreground">Question Bank</h1>
-      <p className="mt-xs text-sm text-muted-foreground">
+    <PageMain>
+      <h1 className="text-2xl font-bold text-foreground">Question Bank</h1>
+      <p className="mt-xs text-sm font-medium text-muted-foreground">
         The same structure as your lessons, one level deeper. Answer anything to check yourself —
         attempts are recorded, and you can retry.
       </p>
@@ -208,15 +207,6 @@ export default function QuestionBankPage() {
           )}
         </div>
       )}
-
-      {me.data?.role === "admin" && (
-        <Link
-          href="/question-bank/manage"
-          className="mt-lg inline-block text-sm text-primary hover:underline"
-        >
-          Import questions →
-        </Link>
-      )}
-    </main>
+    </PageMain>
   );
 }

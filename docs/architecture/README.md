@@ -26,11 +26,11 @@ the system grows.
 
 ## Where admin authoring lives
 
-Admin content tools stay **contextual-inline**, next to the content they
-create: books and chapters on `/learn/library`, lecture upload inside the book
-you are viewing. That way the parent is always already chosen and cannot be
-mis-picked, and there is exactly one copy of each form — which also keeps
-mobile at parity, since it has the same inline affordances.
+Admin content tools stay **contextual-inline on mobile**, next to the content
+they create: books and chapters on `/learn/library`, lecture upload inside the
+book you are viewing. On web this was the rule for everything until library
+authoring moved out (see the fourth exception below) — the feed composer, the
+two bulk importers, and question-of-the-day still follow it as described here.
 
 The two exceptions are the bulk JSON importers (`/question-bank/manage`,
 `/learn/flashcards/manage`), because a dry-run-then-commit workflow does not
@@ -49,8 +49,24 @@ third exception: it sits directly above the list it writes into, on both
 platforms, and is gated on `me.data?.role === "admin"` like every other inline
 admin form.
 
-`/admin` is a **directory, not a console**: it links to those tools and
-re-implements none of them. It exists for discoverability — each tool used to
-hide in a corner of a different learner page. Please don't move the forms into
-it; that would recreate the picker cascade the inline placement avoids, and
-either break mobile authoring parity or have to be built twice.
+Library authoring (books, chapters, sub-chapters, lecture uploads) is the
+**fourth exception, and web-only**: the four inline forms that used to live on
+`/learn/library` and `/learn/library/[bookId]` (gated on
+`me.data?.role === "admin"`) moved to new `/admin/library` and
+`/admin/library/[bookId]` routes instead, because having those forms render
+for an admin browsing the same pages every learner uses put create/upload
+controls in front of people they were never meant for. The regular Library
+pages now hide them unconditionally — admin or not. The browsing components
+(book grid, chapter list, sub-chapter list, lesson list) are reused as-is via
+a `showAdminTools` prop rather than duplicated, so there is still exactly one
+copy of each form; it is just reached from `/admin/library` instead of
+rendered inline. Mobile was not touched, so its library screens still have
+the forms inline — the inverse of the importers/question-of-the-day
+asymmetry above: **mobile admins can create/upload there and web admins
+cannot**, until mobile gets the same treatment.
+
+`/admin` is a directory for the importers and question-of-the-day, and now
+also hosts library authoring itself at `/admin/library` — which still
+re-implements nothing, since it renders the same book-grid/chapter-tree
+component the regular Library pages use, just with `showAdminTools` forced on
+after its own role gate.

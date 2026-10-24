@@ -16,6 +16,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/button";
 import { Card } from "@/components/card";
+import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { createClient } from "@/lib/supabase/client";
 
@@ -491,7 +492,7 @@ function PostCard({ post }: { post: FeedPost }) {
             <img
               src={imageUrl(post.image_path)}
               alt=""
-              className="mt-md max-h-[28rem] w-full rounded-md object-cover"
+              className="mt-md aspect-[4/3] w-full rounded-md object-cover"
             />
           ) : null}
           {/* Gated on the server-computed flags, never on the caller's own
@@ -539,19 +540,19 @@ export default function FeedPage() {
 
   if (me.isPending || feed.isPending) {
     return (
-      <main className="p-xl">
+      <PageMain>
         <p className="text-sm text-muted-foreground">Loading...</p>
-      </main>
+      </PageMain>
     );
   }
 
   if (feed.isError) {
     return (
-      <main className="p-xl">
+      <PageMain>
         <p role="alert" className="text-sm text-danger">
           Failed to load the feed: {(feed.error as Error).message}
         </p>
-      </main>
+      </PageMain>
     );
   }
 
@@ -561,11 +562,11 @@ export default function FeedPage() {
   // exactly like losing your permissions.
   if (me.isError) {
     return (
-      <main className="p-xl">
+      <PageMain>
         <p role="alert" className="text-sm text-danger">
           Failed to load your profile: {(me.error as Error).message}
         </p>
-      </main>
+      </PageMain>
     );
   }
 
@@ -573,8 +574,8 @@ export default function FeedPage() {
   const posts = feed.data ?? [];
 
   return (
-    <main className="p-xl">
-      <h1 className="text-2xl font-semibold text-foreground">Feed</h1>
+    <PageMain>
+      <h1 className="text-2xl font-bold text-foreground">Feed</h1>
 
       {isAdmin ? <Composer /> : null}
 
@@ -599,6 +600,6 @@ export default function FeedPage() {
           ) : null}
         </>
       )}
-    </main>
+    </PageMain>
   );
 }

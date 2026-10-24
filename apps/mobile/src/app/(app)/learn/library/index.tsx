@@ -88,14 +88,7 @@ export default function LibraryScreen() {
       contentContainerStyle={styles.listContent}
       data={rows}
       keyExtractor={(book) => book.id}
-      ListHeaderComponent={
-        <>
-          <Pressable onPress={() => router.push("/learn")} accessibilityRole="button">
-            <Text style={styles.backLink}>← Learn</Text>
-          </Pressable>
-          <Text style={styles.title}>Library</Text>
-        </>
-      }
+      ListHeaderComponent={<Text style={styles.title}>Library</Text>}
       ListEmptyComponent={<Text style={styles.empty}>No books yet.</Text>}
       renderItem={({ item }) => (
         <Pressable
@@ -145,11 +138,6 @@ const styles = StyleSheet.create({
   listContent: {
     padding: spacing.xl,
     gap: spacing.xs,
-  },
-  backLink: {
-    fontSize: fontSizes.sm,
-    color: colors.mutedForeground,
-    marginBottom: spacing.xs,
   },
   title: {
     fontSize: fontSizes["2xl"],

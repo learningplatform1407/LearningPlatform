@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/button";
 import { Modal } from "@/components/modal";
+import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 import { logout } from "../../actions";
@@ -27,35 +28,32 @@ export default function AccountSettingsPage() {
 
   if (isPending) {
     return (
-      <main className="p-xl">
+      <PageMain>
         <p className="text-sm text-muted-foreground">Loading...</p>
-      </main>
+      </PageMain>
     );
   }
 
   if (isError) {
     return (
-      <main className="p-xl">
+      <PageMain>
         <p role="alert" className="text-sm text-danger">
           Failed to load account: {(error as Error).message}
         </p>
-      </main>
+      </PageMain>
     );
   }
 
   return (
-    <main className="p-xl">
-      <h1 className="text-2xl font-semibold text-foreground">Account</h1>
+    <PageMain>
+      <h1 className="text-2xl font-bold text-foreground">Account</h1>
 
       <div className="mt-lg flex max-w-[32rem] flex-col gap-md">
         <p className="text-sm text-muted-foreground">{data.email}</p>
         <form action={logout}>
-          <button
-            type="submit"
-            className="rounded-md border border-border px-md py-xs text-sm font-medium text-foreground hover:bg-muted"
-          >
+          <Button type="submit" variant="secondary">
             Sign out
-          </button>
+          </Button>
         </form>
         <Button
           type="button"
@@ -86,15 +84,11 @@ export default function AccountSettingsPage() {
           >
             {deleteMutation.isPending ? "Deleting..." : "Delete my account"}
           </Button>
-          <button
-            type="button"
-            onClick={() => setDeleteOpen(false)}
-            className="rounded-md border border-border px-md py-xs text-sm font-medium text-foreground hover:bg-muted"
-          >
+          <Button type="button" variant="secondary" onClick={() => setDeleteOpen(false)}>
             Cancel
-          </button>
+          </Button>
         </div>
       </Modal>
-    </main>
+    </PageMain>
   );
 }
