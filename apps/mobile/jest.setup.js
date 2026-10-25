@@ -7,6 +7,8 @@ process.env.EXPO_PUBLIC_API_URL ??= "http://localhost:8000";
 
 // The native module backing AsyncStorage isn't available in the Jest
 // environment; the package ships an official in-memory mock for tests.
+// async-storage 2.x (the version SDK 58 pins) has no "exports" map, so the
+// mock has to be required by its real path rather than a "./jest" subpath.
 jest.mock("@react-native-async-storage/async-storage", () =>
-  require("@react-native-async-storage/async-storage/jest"),
+  require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
 );

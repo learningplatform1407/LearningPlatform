@@ -249,7 +249,13 @@ test("does not open before the dismissal marker has been read", async () => {
   // isSuccess guard the sheet would open on someone who had already
   // dismissed it today.
   let release: (value: string | null) => void = () => {};
-  const getItem = jest.spyOn(AsyncStorage, "getItem").mockReturnValue(
+  // AsyncStorage's official jest mock is built out of jest.fn()s, so
+  // jest.spyOn(...).mockRestore() here would hand back a *bare* mock and
+  // silently break the in-memory store for every test that follows. Swap the
+  // implementation and put the real one back by hand instead.
+  const getItem = AsyncStorage.getItem as jest.Mock;
+  const inMemoryGetItem = getItem.getMockImplementation();
+  getItem.mockReturnValue(
     new Promise((resolve) => {
       release = resolve;
     }),
@@ -267,7 +273,11 @@ test("does not open before the dismissal marker has been read", async () => {
     release(null);
     expect(await screen.findByText("Check answer")).toBeTruthy();
   } finally {
-    getItem.mockRestore();
+    if (inMemoryGetItem) {
+      getItem.mockImplementation(inMemoryGetItem);
+    } else {
+      getItem.mockReset();
+    }
   }
 });
 

@@ -174,7 +174,7 @@ function UncategorizedLessonsScreen() {
               )}
             </Pressable>
           </View>
-        ) : null
+        ) : undefined
       }
     />
   );
@@ -615,7 +615,7 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
               )}
             </Pressable>
           </View>
-        ) : null
+        ) : undefined
       }
     />
   );
