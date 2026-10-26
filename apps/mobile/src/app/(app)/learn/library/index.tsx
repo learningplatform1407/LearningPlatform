@@ -124,7 +124,7 @@ export default function LibraryScreen() {
               )}
             </Pressable>
           </View>
-        ) : null
+        ) : undefined
       }
     />
   );

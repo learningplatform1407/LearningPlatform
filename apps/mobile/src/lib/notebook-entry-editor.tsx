@@ -1,6 +1,6 @@
 import type { NotebookEntry, Stroke } from "@lp/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { type ComponentRef, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
@@ -96,7 +96,7 @@ export function NotebookEntryEditor({
   const textValue = textDraft ?? entry?.content ?? "";
   const strokesValue = strokesDraft ?? entry?.strokes ?? [];
   const canSave = resolvedType === "text" ? textValue.trim().length > 0 : strokesValue.length > 0;
-  const bodyInputRef = useRef<TextInput>(null);
+  const bodyInputRef = useRef<ComponentRef<typeof TextInput>>(null);
 
   // The note's first line doubles as its title (Apple Notes/Keep-style) —
   // there's no separate title field, so splitting/joining on "\n" is what

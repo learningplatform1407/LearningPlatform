@@ -626,7 +626,7 @@ export default function FeedScreen() {
       ListFooterComponent={
         (feed.data ?? []).length >= FEED_PAGE_SIZE ? (
           <Text style={styles.empty}>Showing the {FEED_PAGE_SIZE} most recent announcements.</Text>
-        ) : null
+        ) : undefined
       }
       renderItem={({ item }) => <PostCard post={item} />}
     />
