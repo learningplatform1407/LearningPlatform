@@ -27,7 +27,15 @@ http://localhost:3000/auth/confirm
 https://<preview-domain>/auth/confirm
 https://<production-domain>/auth/confirm
 learningplatform://reset-password
+exp://**
 ```
+
+**`exp://**` is for development on a device**, and it is easy to miss. In Expo
+Go the app has no custom scheme of its own, so `Linking.createURL` produces
+`exp://<lan-ip>:8081/--/reset-password` rather than `learningplatform://…`.
+Without the wildcard entry, every reset tested through Expo Go is silently
+redirected to the Site URL. `learningplatform://` only takes effect in a
+development or production build.
 
 A `redirectTo` that is not on this list is **ignored, not rejected** —
 Supabase silently substitutes the Site URL, so the user lands on the dashboard
