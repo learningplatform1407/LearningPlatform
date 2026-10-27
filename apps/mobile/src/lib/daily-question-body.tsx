@@ -171,15 +171,22 @@ const styles = StyleSheet.create({
   optionList: {
     gap: spacing.xs,
   },
+  // The whole row is the Pressable, but with no vertical padding its height
+  // was just the text's line box -- around 17pt, well under the 44pt Apple
+  // and 48dp Android minimum. It read as "not tappable" because it very
+  // nearly wasn't.
   optionRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.xs,
+    gap: spacing.sm,
+    minHeight: 44,
+    paddingVertical: spacing.xs,
   },
   optionMark: {
-    fontSize: fontSizes.base,
+    fontSize: fontSizes.xl,
     color: colors.foreground,
-    width: 20,
+    width: 28,
+    textAlign: "center",
   },
   optionText: {
     flex: 1,
