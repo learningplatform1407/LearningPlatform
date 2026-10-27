@@ -314,13 +314,30 @@ will silently half-work if skipped:
    preview, production) and `learningplatform://reset-password` for mobile.
    An unlisted `redirectTo` is ignored and the user is sent to the site root,
    where they will stare at the dashboard wondering why nothing happened.
-2. **The recovery email template.** The default body uses
-   `{{ .ConfirmationURL }}`, which assumes the client-side hash-fragment flow.
-   This app is cookie-session based, so the template must point at the route
-   handler and pass `{{ .TokenHash }}` instead.
-3. **Custom SMTP.** The built-in sender is rate-limited to a handful of mails
-   per hour and is documented as unsuitable for production. It is enough to
-   test with, and will throttle real users without an obvious error.
+2. **Custom SMTP** — before real users, not before testing. The built-in
+   sender is rate-limited to a handful of mails per hour and is documented as
+   unsuitable for production; it throttles without surfacing an error anyone
+   can act on.
+3. **The recovery email template**, which _depends_ on step 2: Supabase gates
+   template editing behind custom SMTP. That dependency is why
+   `/auth/confirm` accepts **both** link shapes rather than only the better
+   one.
+
+   - The **default** `{{ .ConfirmationURL }}` produces `?code=`, the PKCE arm.
+     `@supabase/ssr` hardcodes `flowType: "pkce"`, so this works out of the
+     box with the built-in sender and no template editing. Its limitation is
+     that PKCE keeps the code verifier in the cookies of the browser that
+     _requested_ the reset, so opening the link on a second device fails.
+   - A **custom** template passing `{{ .TokenHash }}` produces the
+     `verifyOtp` arm, which carries no browser-bound state and survives
+     "request on my laptop, click on my phone". Prefer it in production, and
+     note that a dashboard-initiated recovery mail passes no `redirectTo`, so
+     it will not work against that template — admins should use
+     `auth.admin.updateUserById` instead, which needs no email at all.
+
+   Supporting both makes the switchover a dashboard change rather than a code
+   change, and makes the feature testable on day one, which an SMTP-gated
+   template would not have been.
 
 These belong written down in `infra/supabase/README.md`, which already
 promises to hold "Auth providers" configuration and so far covers only

@@ -36,7 +36,11 @@ async function confirmUrl(): Promise<string> {
   const forwarded = headerList.get("x-forwarded-proto");
   const protocol = forwarded ?? (/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host) ? "http" : "https");
 
-  return `${protocol}://${host}/auth/confirm?next=/reset-password`;
+  // `flow=recovery` is ours, not Supabase's. It survives the round trip
+  // through the verify endpoint's redirect and is how /auth/confirm knows to
+  // issue the recovery marker on the PKCE arm, where nothing else identifies
+  // the flow — see that route's comment.
+  return `${protocol}://${host}/auth/confirm?next=/reset-password&flow=recovery`;
 }
 
 export async function requestPasswordReset(
