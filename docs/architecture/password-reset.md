@@ -223,6 +223,33 @@ The fix is a third branch, and a flag that the deep-link handler sets itself:
 <Stack.Protected guard={!!session && !isRecovering}>  {/* (app) */}
 ```
 
+### A third link shape, because mobile is not PKCE
+
+`supabase.ts` leaves `flowType` at its default, which auth-js sets to
+`implicit` — unlike `@supabase/ssr`, which hardcodes `pkce`. So the same
+default `{{ .ConfirmationURL }}` template that hands web a `?code=` hands
+mobile the session itself, in the fragment:
+
+```
+learningplatform://reset-password?flow=recovery#access_token=…&refresh_token=…
+```
+
+`lib/recovery-link.ts` therefore accepts two shapes — fragment tokens, which
+it redeems with `setSession`, and a `token_hash` from the custom template,
+which it redeems with `verifyOtp`. Same reasoning as the web handler's two
+arms: which one arrives is a dashboard setting and the app should not care.
+
+It parses the URL by hand rather than with `Linking.parse`, which does not
+surface the fragment at all, and rather than `URLSearchParams`, whose React
+Native polyfill is incomplete. Keeping parsing separate from redeeming is
+what makes it testable without a device — `recovery-link.test.ts` covers the
+Expo Go `exp://` form, percent escapes and a malformed one.
+
+The redirect comes from `Linking.createURL`, never a literal
+`learningplatform://` string: in Expo Go the app has no custom scheme and is
+reached over `exp://<lan-ip>:8081/--/…`, so a hardcoded scheme would never
+open during development. Both forms need to be on the Supabase allow-list.
+
 `isRecovering` lives in `auth-context.tsx` alongside `session`. It is set
 **explicitly** by the code that handles the incoming link and cleared once
 `updateUser` succeeds — deliberately not derived from an `onAuthStateChange`

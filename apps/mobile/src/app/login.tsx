@@ -52,6 +52,9 @@ export default function LoginScreen() {
       >
         <Text style={styles.buttonText}>{pending ? "Logging in..." : "Log in"}</Text>
       </Pressable>
+      <Link href="/forgot-password">
+        <Text style={styles.footerLink}>Forgot your password?</Text>
+      </Link>
       <Link href="/signup">
         <Text style={styles.footer}>
           Don&apos;t have an account? <Text style={styles.footerLink}>Sign up</Text>
