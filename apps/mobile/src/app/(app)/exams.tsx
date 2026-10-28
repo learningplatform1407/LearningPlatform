@@ -906,15 +906,19 @@ const styles = StyleSheet.create({
   optionList: {
     gap: spacing.xs,
   },
+  // 44pt minimum tap target -- see the same note in daily-question-body.tsx.
   optionRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.xs,
+    gap: spacing.sm,
+    minHeight: 44,
+    paddingVertical: spacing.xs,
   },
   optionMark: {
-    fontSize: fontSizes.base,
+    fontSize: fontSizes.xl,
     color: colors.foreground,
-    width: 20,
+    width: 28,
+    textAlign: "center",
   },
   optionText: {
     flex: 1,

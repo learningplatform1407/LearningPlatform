@@ -23,6 +23,12 @@ the system grows.
   model and why not per-user, why `attempt`-is-null-or-reveal is the whole
   privacy story, why the answer endpoint carries no date, and why a daily
   answer stays out of `question_progress`.
+- [`password-reset.md`](./password-reset.md) — email recovery and
+  change-password, both pure Supabase Auth with no backend involvement.
+  Records why the form deliberately cannot say whether an address is
+  registered, why `/reset-password` is **not** a public path while
+  `/auth/confirm` is, why mobile needs a third `Stack.Protected` branch, and
+  what has to be configured in the Supabase dashboard for any of it to work.
 
 ## Where admin authoring lives
 

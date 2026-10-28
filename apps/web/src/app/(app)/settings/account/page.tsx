@@ -10,6 +10,8 @@ import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 import { logout } from "../../actions";
 
+import { ChangePasswordForm } from "./change-password-form";
+
 export default function AccountSettingsPage() {
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
@@ -55,6 +57,13 @@ export default function AccountSettingsPage() {
             Sign out
           </Button>
         </form>
+      </div>
+
+      <ChangePasswordForm />
+
+      {/* Last on the page, below the password form: the only irreversible
+          action here, and it used to sit directly under Sign out. */}
+      <div className="mt-xl max-w-[32rem]">
         <Button
           type="button"
           variant="danger"

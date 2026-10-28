@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { Suspense, useActionState } from "react";
 
 import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/button";
 
 import { login, type LoginState } from "./actions";
+import { PasswordChangedNotice } from "./password-changed-notice";
 
 const initialState: LoginState = { error: null };
 
@@ -16,6 +17,9 @@ export default function LoginPage() {
   return (
     <AuthLayout>
       <h1 className="text-2xl font-semibold text-foreground">Log in</h1>
+      <Suspense fallback={null}>
+        <PasswordChangedNotice />
+      </Suspense>
       <form action={formAction} className="mt-lg flex flex-col gap-md">
         <label className="flex flex-col gap-xs text-sm text-foreground">
           Email
@@ -47,6 +51,11 @@ export default function LoginPage() {
         </Button>
       </form>
       <p className="mt-md text-sm text-muted-foreground">
+        <Link href="/forgot-password" className="text-primary hover:underline">
+          Forgot your password?
+        </Link>
+      </p>
+      <p className="mt-xs text-sm text-muted-foreground">
         Don&apos;t have an account?{" "}
         <Link href="/signup" className="text-primary hover:underline">
           Sign up

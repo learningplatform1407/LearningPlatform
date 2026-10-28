@@ -16,8 +16,12 @@ function AppDrawerContent({ state, navigation, descriptors }: DrawerContentCompo
   // renderers — since this is a custom drawerContent, they're filtered out
   // here directly instead. "settings" is reachable only via router.push
   // from the Profile screen; "question-bank" only from inside Learn.
+  // "index" joins them: it exists only to redirect `/` to Learn, so it is a
+  // route rather than a place, and would otherwise show up as a nameless
+  // drawer item above Learn.
   const visibleRoutes = state.routes.filter(
-    (route) => route.name !== "settings" && route.name !== "question-bank",
+    (route) =>
+      route.name !== "settings" && route.name !== "question-bank" && route.name !== "index",
   );
   const profileIndex = visibleRoutes.findIndex((route) => route.name === "profile");
   const topRoutes = visibleRoutes.filter((_, index) => index !== profileIndex);
@@ -79,6 +83,9 @@ export default function AppLayout() {
           drawerType: "permanent",
         }}
       >
+        {/* Answers `/` and redirects to Learn; AppDrawerContent filters it
+            out of the visible items. */}
+        <Drawer.Screen name="index" />
         <Drawer.Screen name="learn" options={{ drawerLabel: "Learn" }} />
         <Drawer.Screen name="exams" options={{ drawerLabel: "Exam Hub" }} />
         <Drawer.Screen name="assistant" options={{ drawerLabel: "AI Assistant" }} />
@@ -103,6 +110,8 @@ export default function AppLayout() {
         tabBarLabelStyle: { fontWeight: fontWeights.semibold },
       }}
     >
+      {/* Answers `/` and redirects to Learn — not a tab of its own. */}
+      <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen name="learn" options={{ title: "Learn" }} />
       <Tabs.Screen name="exams" options={{ title: "Exam Hub" }} />
       <Tabs.Screen name="assistant" options={{ title: "AI Assistant" }} />

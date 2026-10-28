@@ -16,7 +16,8 @@ from app.main import app
 from app.questions.models import Question
 from app.quizzes.models import QuizSession
 from app.sub_chapters.models import SubChapter
-from app.users.models import Profile
+from app.users.models import AccountSettings, Profile
+from app.users.service import get_or_create_profile
 
 
 def test_me_requires_auth(client: TestClient) -> None:
@@ -348,3 +349,43 @@ def test_my_stats_question_accuracy(
     assert body["questions_attempted"] == 2
     assert body["questions_answered_lifetime"] == 3
     assert body["question_accuracy_percent"] == 50.0
+
+
+def test_profile_creation_survives_a_concurrent_insert(
+    authenticated_user: AuthenticatedUser, db_session: Session
+) -> None:
+    # A first sign-in fans out several GET /v1/me at once -- every screen the
+    # mobile tab navigator mounts asks for ["me"] -- so two requests can both
+    # read "no profile" before either inserts. The loser used to surface as a
+    # 500 on profiles_pkey.
+    db_session.add(
+        Profile(
+            id=authenticated_user.id,
+            settings=AccountSettings(user_id=authenticated_user.id),
+        )
+    )
+    db_session.commit()
+    # Forget the winner's row, so the insert below reaches the database and is
+    # refused there rather than by SQLAlchemy's identity map -- an identity
+    # clash raises FlushError, which is not what production hits.
+    db_session.expunge_all()
+
+    real_get = Session.get
+    seen = {"calls": 0}
+
+    def stale_first_read(self: Session, entity: object, ident: object, **kwargs: object) -> object:
+        seen["calls"] += 1
+        if seen["calls"] == 1:
+            return None
+        return real_get(self, entity, ident, **kwargs)  # type: ignore[arg-type]
+
+    with patch.object(Session, "get", stale_first_read):
+        profile = get_or_create_profile(db_session, authenticated_user)
+
+    # The racing caller gets the winner's row back instead of an exception.
+    assert profile.id == authenticated_user.id
+    assert db_session.query(Profile).count() == 1
+    # And it got there through the IntegrityError branch, not by the insert
+    # quietly succeeding: the recovery re-read is the second `get`. Without
+    # this the test would still pass if the race never happened.
+    assert seen["calls"] == 2
