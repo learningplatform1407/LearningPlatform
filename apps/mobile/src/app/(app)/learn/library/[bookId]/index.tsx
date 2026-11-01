@@ -139,6 +139,14 @@ function UncategorizedLessonsScreen() {
               },
             )}
           />
+          {isAdmin && (
+            <LessonAdminControls
+              documentId={item.id}
+              onDone={() =>
+                queryClient.invalidateQueries({ queryKey: ["documents", "uncategorized"] })
+              }
+            />
+          )}
         </View>
       )}
       ListFooterComponent={
@@ -153,7 +161,12 @@ function UncategorizedLessonsScreen() {
               onChangeText={setTitle}
             />
 
-            <Pressable style={styles.button} onPress={handlePickFile} accessibilityRole="button">
+            <Pressable
+              testID="new-lesson-file-picker"
+              style={styles.button}
+              onPress={handlePickFile}
+              accessibilityRole="button"
+            >
               <Text style={styles.buttonText}>
                 {pickedFile ? pickedFile.name : "Choose PDF file"}
               </Text>
@@ -162,6 +175,7 @@ function UncategorizedLessonsScreen() {
             {uploadError && <Text style={styles.error}>{uploadError}</Text>}
 
             <Pressable
+              testID="new-lesson-upload-button"
               style={[styles.button, styles.uploadButton]}
               onPress={() => uploadMutation.mutate()}
               disabled={uploadMutation.isPending || !title || !pickedFile}
@@ -177,6 +191,174 @@ function UncategorizedLessonsScreen() {
         ) : undefined
       }
     />
+  );
+}
+
+/** Per-lesson admin controls for the two independent upload pipelines: the
+ * routine "lecture text" (hash-matches text blocks so highlights/notes on
+ * unchanged content carry forward) and the rare "lecture PDF" (the official
+ * reference book -- a replace always wipes every learner's ink on this
+ * lesson unconditionally, hence the two-step confirmation). */
+function LessonAdminControls({ documentId, onDone }: { documentId: string; onDone: () => void }) {
+  const [textFile, setTextFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
+  const [textError, setTextError] = useState<string | null>(null);
+  const [pdfFile, setPdfFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [confirmingPdfReplace, setConfirmingPdfReplace] = useState(false);
+
+  async function pickFile(onPicked: (asset: DocumentPicker.DocumentPickerAsset) => void) {
+    const result = await DocumentPicker.getDocumentAsync({ type: "application/pdf" });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    if (!asset) return;
+    onPicked(asset);
+  }
+
+  async function uploadAndChecksum(asset: DocumentPicker.DocumentPickerAsset) {
+    if (asset.mimeType !== "application/pdf") throw new Error("Only PDF files are supported.");
+    if (asset.size && asset.size > MAX_UPLOAD_BYTES) throw new Error("File must be under 50MB.");
+
+    const client = getApiClient();
+    const { storage_path, token } = await client.requestDocumentUploadUrl({
+      filename: asset.name,
+      mime_type: "application/pdf",
+      size_bytes: asset.size ?? 0,
+    });
+
+    const blob = await (await fetch(asset.uri)).blob();
+    const { error: uploadStorageError } = await supabase.storage
+      .from("documents")
+      .uploadToSignedUrl(storage_path, token, blob, { contentType: "application/pdf" });
+    if (uploadStorageError) throw uploadStorageError;
+
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const checksum = await sha256Hex(bytes);
+    return {
+      storage_path,
+      mime_type: "application/pdf" as const,
+      size_bytes: asset.size ?? bytes.byteLength,
+      checksum,
+    };
+  }
+
+  const replaceTextMutation = useMutation({
+    mutationFn: async () => {
+      if (!textFile) throw new Error("Choose a PDF file first.");
+      const payload = await uploadAndChecksum(textFile);
+      return getApiClient().replaceLectureText(documentId, payload);
+    },
+    onSuccess: () => {
+      setTextFile(null);
+      onDone();
+    },
+    onError: (err) => {
+      setTextError(err instanceof Error ? err.message : "Failed to replace lecture text.");
+    },
+  });
+
+  const uploadPdfMutation = useMutation({
+    mutationFn: async () => {
+      if (!pdfFile) throw new Error("Choose a PDF file first.");
+      const payload = await uploadAndChecksum(pdfFile);
+      return getApiClient().upsertLecturePdf(documentId, payload);
+    },
+    onSuccess: () => {
+      setPdfFile(null);
+      setConfirmingPdfReplace(false);
+      onDone();
+    },
+    onError: (err) => {
+      setPdfError(err instanceof Error ? err.message : "Failed to upload lecture PDF.");
+    },
+  });
+
+  return (
+    <View testID={`lesson-admin-controls-${documentId}`} style={styles.adminControls}>
+      <Text style={styles.uploadHeading}>Replace lecture text</Text>
+      <Pressable
+        testID={`lesson-text-file-picker-${documentId}`}
+        style={styles.button}
+        onPress={() =>
+          pickFile((asset) => {
+            setTextError(null);
+            setTextFile(asset);
+          })
+        }
+        accessibilityRole="button"
+      >
+        <Text style={styles.buttonText}>{textFile ? textFile.name : "Choose PDF file"}</Text>
+      </Pressable>
+      {textError && <Text style={styles.error}>{textError}</Text>}
+      <Pressable
+        style={[styles.button, styles.uploadButton]}
+        onPress={() => {
+          setTextError(null);
+          replaceTextMutation.mutate();
+        }}
+        disabled={replaceTextMutation.isPending || !textFile}
+        accessibilityRole="button"
+      >
+        {replaceTextMutation.isPending ? (
+          <ActivityIndicator color={colors.primaryForeground} />
+        ) : (
+          <Text style={styles.uploadButtonText}>Replace</Text>
+        )}
+      </Pressable>
+
+      <Text style={[styles.uploadHeading, styles.adminControlsSpaced]}>
+        Upload/replace lecture PDF
+      </Text>
+      <Pressable
+        testID={`lesson-pdf-file-picker-${documentId}`}
+        style={styles.button}
+        onPress={() =>
+          pickFile((asset) => {
+            setPdfError(null);
+            setPdfFile(asset);
+            setConfirmingPdfReplace(false);
+          })
+        }
+        accessibilityRole="button"
+      >
+        <Text style={styles.buttonText}>{pdfFile ? pdfFile.name : "Choose PDF file"}</Text>
+      </Pressable>
+      {pdfError && <Text style={styles.error}>{pdfError}</Text>}
+      {!confirmingPdfReplace ? (
+        <Pressable
+          style={[styles.button, styles.uploadButton]}
+          onPress={() => setConfirmingPdfReplace(true)}
+          disabled={!pdfFile}
+          accessibilityRole="button"
+        >
+          <Text style={styles.uploadButtonText}>Upload</Text>
+        </Pressable>
+      ) : (
+        <>
+          <Text style={styles.error}>
+            This permanently wipes every learner&apos;s ink on this lesson&apos;s PDF — there is no
+            way to get it back.
+          </Text>
+          <Pressable
+            style={[styles.button, styles.dangerButton]}
+            onPress={() => {
+              setPdfError(null);
+              uploadPdfMutation.mutate();
+            }}
+            disabled={uploadPdfMutation.isPending}
+            accessibilityRole="button"
+          >
+            {uploadPdfMutation.isPending ? (
+              <ActivityIndicator color={colors.dangerForeground} />
+            ) : (
+              <Text style={styles.uploadButtonText}>Yes, replace and wipe all ink</Text>
+            )}
+          </Pressable>
+          <Pressable onPress={() => setConfirmingPdfReplace(false)} accessibilityRole="button">
+            <Text style={styles.label}>Cancel</Text>
+          </Pressable>
+        </>
+      )}
+    </View>
   );
 }
 
@@ -291,6 +473,14 @@ function LessonList({
                 },
               )}
             />
+            {isAdmin && (
+              <LessonAdminControls
+                documentId={item.id}
+                onDone={() =>
+                  queryClient.invalidateQueries({ queryKey: ["documents", subChapterId] })
+                }
+              />
+            )}
           </View>
         ))
       )}
@@ -306,7 +496,12 @@ function LessonList({
             onChangeText={setTitle}
           />
 
-          <Pressable style={styles.button} onPress={handlePickFile} accessibilityRole="button">
+          <Pressable
+            testID="new-lesson-file-picker"
+            style={styles.button}
+            onPress={handlePickFile}
+            accessibilityRole="button"
+          >
             <Text style={styles.buttonText}>
               {pickedFile ? pickedFile.name : "Choose PDF file"}
             </Text>
@@ -315,6 +510,7 @@ function LessonList({
           {uploadError && <Text style={styles.error}>{uploadError}</Text>}
 
           <Pressable
+            testID="new-lesson-upload-button"
             style={[styles.button, styles.uploadButton]}
             onPress={() => uploadMutation.mutate()}
             disabled={uploadMutation.isPending || !title || !pickedFile}
@@ -722,6 +918,20 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
     gap: spacing.sm,
+  },
+  adminControls: {
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: 8,
+    backgroundColor: colors.muted,
+    gap: spacing.xs,
+  },
+  adminControlsSpaced: {
+    marginTop: spacing.sm,
+  },
+  dangerButton: {
+    backgroundColor: colors.danger,
+    borderColor: colors.danger,
   },
   uploadHeading: {
     fontSize: fontSizes.sm,

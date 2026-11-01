@@ -31,6 +31,7 @@ import {
   NotebookEntryList,
 } from "@/lib/notebook-entry-editor";
 import { Overlay } from "@/lib/overlay";
+import { PdfLessonView } from "@/lib/pdf-lesson-view";
 import { QuestionBankList } from "@/lib/question-bank-list";
 import { supabase } from "@/lib/supabase";
 import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
@@ -1069,6 +1070,9 @@ export default function LectureScreen() {
   const [tocOpen, setTocOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [activeTool, setActiveTool] = useState<ActiveTool>(null);
+  // Defaults to "text" -- the PDF/Text toggle itself only renders when the
+  // lesson has a lecture_pdf attached (see the tab bar below).
+  const [lessonViewMode, setLessonViewMode] = useState<"text" | "pdf">("text");
   const review = useClozeReview(id, activeTab === "review");
 
   const { data, isPending, isError, error } = useQuery({
@@ -1245,6 +1249,47 @@ export default function LectureScreen() {
           ))}
         </View>
 
+        {activeTab === "lesson" && data.lecture_pdf && (
+          <View style={styles.viewModeToggle}>
+            <Pressable
+              onPress={() => setLessonViewMode("pdf")}
+              style={[
+                styles.viewModeButton,
+                lessonViewMode === "pdf" && styles.viewModeButtonActive,
+              ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: lessonViewMode === "pdf" }}
+            >
+              <Text
+                style={[
+                  styles.viewModeButtonText,
+                  lessonViewMode === "pdf" && styles.viewModeButtonTextActive,
+                ]}
+              >
+                PDF
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setLessonViewMode("text")}
+              style={[
+                styles.viewModeButton,
+                lessonViewMode === "text" && styles.viewModeButtonActive,
+              ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: lessonViewMode === "text" }}
+            >
+              <Text
+                style={[
+                  styles.viewModeButtonText,
+                  lessonViewMode === "text" && styles.viewModeButtonTextActive,
+                ]}
+              >
+                Text
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
         {activeTab === "review" && (
           <ReviewArticle
             version={version}
@@ -1255,7 +1300,11 @@ export default function LectureScreen() {
         {activeTab === "quizzes" && <QuizzesTab documentId={id} />}
         {activeTab === "flashcards" && <FlashcardsTab documentId={id} />}
 
-        {activeTab === "lesson" && (
+        {activeTab === "lesson" && lessonViewMode === "pdf" && data.lecture_pdf && (
+          <PdfLessonView documentId={id} storagePath={data.lecture_pdf.storage_path} />
+        )}
+
+        {activeTab === "lesson" && lessonViewMode === "text" && (
           <>
             <AnnotationToolbar activeTool={activeTool} onToolChange={setActiveTool} />
 
@@ -1578,6 +1627,31 @@ const styles = StyleSheet.create({
   },
   tabButtonTextActive: {
     color: colors.foreground,
+  },
+  viewModeToggle: {
+    flexDirection: "row",
+    alignSelf: "flex-end",
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  viewModeButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  viewModeButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  viewModeButtonText: {
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.medium,
+    color: colors.mutedForeground,
+  },
+  viewModeButtonTextActive: {
+    color: colors.primaryForeground,
   },
   quizzesTab: {
     gap: spacing.md,

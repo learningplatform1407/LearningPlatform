@@ -11,9 +11,10 @@ from app.chapters.models import Chapter
 from app.cloze.models import ClozeCard, ClozeReviewState
 from app.daily.models import DailyQuestion, DailyQuestionAttempt
 from app.db.external import auth_users
-from app.documents.models import Document, DocumentVersion, LessonView
+from app.documents.models import Document, DocumentVersion, LecturePdf, LessonView
 from app.feed.models import FeedPost
 from app.flashcards.models import Flashcard, FlashcardReviewState
+from app.ink.models import LessonPageInk
 from app.notebook.models import NotebookEntry
 from app.plans.models import Subscription
 from app.progress.models import QuestionProgress
@@ -37,6 +38,8 @@ __all__ = [
     "FeedPost",
     "Flashcard",
     "FlashcardReviewState",
+    "LecturePdf",
+    "LessonPageInk",
     "LessonView",
     "NotebookEntry",
     "Profile",

@@ -6,9 +6,14 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.annotations.models import DocumentAnnotation
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
+from app.cloze.models import ClozeCard
 from app.documents.extraction import ExtractionError
+from app.documents.models import Document, DocumentVersion
+from app.flashcards.constants import FlashcardScope
+from app.flashcards.models import Flashcard
 from app.main import app
 from app.users.models import AccountSettings, Profile
 
@@ -201,3 +206,249 @@ def test_create_document_marks_failed_on_extraction_error(admin_client: TestClie
 def test_get_document_not_found(authed_client: TestClient) -> None:
     response = authed_client.get("/v1/documents/00000000-0000-0000-0000-000000000000")
     assert response.status_code == 404
+
+
+def _seed_ready_document(
+    db_session: Session, created_by: UUID, blocks: list[dict]
+) -> tuple[UUID, UUID]:
+    """Returns (document_id, version_id) for a document whose current
+    version already has `blocks` as its extracted content."""
+    document = Document(title="Replaceable Lecture", created_by=created_by)
+    db_session.add(document)
+    db_session.flush()
+
+    version = DocumentVersion(
+        document_id=document.id,
+        storage_path="original.pdf",
+        mime_type="application/pdf",
+        size_bytes=10,
+        checksum="orig-checksum",
+        status="ready",
+        extracted_content={"blocks": blocks},
+    )
+    db_session.add(version)
+    db_session.flush()
+    document.current_version_id = version.id
+    db_session.commit()
+    return document.id, version.id
+
+
+def _replace_payload(pdf_bytes: bytes) -> dict[str, str | int]:
+    return {
+        "storage_path": "replacement.pdf",
+        "mime_type": "application/pdf",
+        "size_bytes": len(pdf_bytes),
+        "checksum": hashlib.sha256(pdf_bytes).hexdigest(),
+    }
+
+
+def test_replace_lecture_text_requires_admin(authed_client: TestClient) -> None:
+    response = authed_client.post(
+        "/v1/documents/00000000-0000-0000-0000-000000000000/replace",
+        json=_replace_payload(b"whatever"),
+    )
+    assert response.status_code == 403
+
+
+def test_replace_lecture_text_carries_highlight_forward_across_shift(
+    admin_client: TestClient, admin_user: AuthenticatedUser, db_session: Session
+) -> None:
+    old_blocks = [
+        {"type": "paragraph", "text": "First paragraph.", "page": 1},
+        {"type": "paragraph", "text": "Second paragraph.", "page": 1},
+    ]
+    document_id, old_version_id = _seed_ready_document(db_session, admin_user.id, old_blocks)
+
+    # A highlight on "First paragraph." (block_index 0).
+    db_session.add(
+        DocumentAnnotation(
+            document_version_id=old_version_id,
+            user_id=admin_user.id,
+            type="highlight",
+            block_index=0,
+            start_offset=0,
+            end_offset=5,
+            color="yellow",
+        )
+    )
+    db_session.commit()
+
+    new_pdf_bytes = b"%PDF-1.4 replacement"
+    new_blocks = [
+        {"type": "paragraph", "text": "Inserted paragraph.", "page": 1},
+        {"type": "paragraph", "text": "First paragraph.", "page": 1},
+        {"type": "paragraph", "text": "Second paragraph.", "page": 1},
+    ]
+    with (
+        patch("app.documents.service.download_object", return_value=new_pdf_bytes),
+        patch("app.documents.service.extract_pdf", return_value=new_blocks),
+    ):
+        response = admin_client.post(
+            f"/v1/documents/{document_id}/replace", json=_replace_payload(new_pdf_bytes)
+        )
+    assert response.status_code == 200
+    body = response.json()
+    new_version_id = body["current_version"]["id"]
+    assert new_version_id != str(old_version_id)
+    assert body["current_version"]["extracted_content"]["blocks"] == new_blocks
+
+    annotations = admin_client.get(f"/v1/documents/{document_id}/annotations").json()
+    assert len(annotations) == 1
+    assert annotations[0]["block_index"] == 1  # shifted from 0 -> 1
+    assert annotations[0]["document_version_id"] == new_version_id
+
+
+def test_replace_lecture_text_drops_annotation_on_changed_block(
+    admin_client: TestClient, admin_user: AuthenticatedUser, db_session: Session
+) -> None:
+    old_blocks = [{"type": "paragraph", "text": "Original wording.", "page": 1}]
+    document_id, old_version_id = _seed_ready_document(db_session, admin_user.id, old_blocks)
+    db_session.add(
+        DocumentAnnotation(
+            document_version_id=old_version_id,
+            user_id=admin_user.id,
+            type="highlight",
+            block_index=0,
+            start_offset=0,
+            end_offset=5,
+            color="yellow",
+        )
+    )
+    db_session.commit()
+
+    new_pdf_bytes = b"%PDF-1.4 edited"
+    new_blocks = [{"type": "paragraph", "text": "Edited wording.", "page": 1}]
+    with (
+        patch("app.documents.service.download_object", return_value=new_pdf_bytes),
+        patch("app.documents.service.extract_pdf", return_value=new_blocks),
+    ):
+        response = admin_client.post(
+            f"/v1/documents/{document_id}/replace", json=_replace_payload(new_pdf_bytes)
+        )
+    assert response.status_code == 200
+
+    annotations = admin_client.get(f"/v1/documents/{document_id}/annotations").json()
+    assert annotations == []
+
+
+def test_replace_lecture_text_drops_annotation_on_image_block(
+    admin_client: TestClient, admin_user: AuthenticatedUser, db_session: Session
+) -> None:
+    old_blocks = [{"type": "image", "page": 1, "image_path": "x/images/1.png"}]
+    document_id, old_version_id = _seed_ready_document(db_session, admin_user.id, old_blocks)
+    db_session.add(
+        DocumentAnnotation(
+            document_version_id=old_version_id,
+            user_id=admin_user.id,
+            type="margin_note",
+            block_index=0,
+            start_offset=None,
+            end_offset=None,
+            note_text="a note on the figure",
+        )
+    )
+    db_session.commit()
+
+    new_pdf_bytes = b"%PDF-1.4 same image"
+    # Raw extract_pdf shape for an image block (pre-persistence) -- still
+    # never matched, by design, even though it's visually unchanged.
+    new_raw_blocks = [
+        {"type": "image", "page": 1, "image_bytes": b"\x89PNG-fake-bytes", "ext": "png"}
+    ]
+    with (
+        patch("app.documents.service.download_object", return_value=new_pdf_bytes),
+        patch("app.documents.service.extract_pdf", return_value=new_raw_blocks),
+        patch("app.documents.service.upload_object"),
+    ):
+        response = admin_client.post(
+            f"/v1/documents/{document_id}/replace", json=_replace_payload(new_pdf_bytes)
+        )
+    assert response.status_code == 200
+    assert admin_client.get(f"/v1/documents/{document_id}/annotations").json() == []
+
+
+def test_replace_lecture_text_deletes_old_version(
+    admin_client: TestClient, admin_user: AuthenticatedUser, db_session: Session
+) -> None:
+    old_blocks = [{"type": "paragraph", "text": "Hello.", "page": 1}]
+    document_id, old_version_id = _seed_ready_document(db_session, admin_user.id, old_blocks)
+
+    new_pdf_bytes = b"%PDF-1.4 new"
+    new_blocks = [{"type": "paragraph", "text": "Hello.", "page": 1}]
+    with (
+        patch("app.documents.service.download_object", return_value=new_pdf_bytes),
+        patch("app.documents.service.extract_pdf", return_value=new_blocks),
+        patch("app.documents.service.delete_object") as mock_delete,
+    ):
+        response = admin_client.post(
+            f"/v1/documents/{document_id}/replace", json=_replace_payload(new_pdf_bytes)
+        )
+    assert response.status_code == 200
+    mock_delete.assert_any_call("original.pdf")
+    assert db_session.get(DocumentVersion, old_version_id) is None
+
+
+def test_replace_lecture_text_failed_extraction_leaves_old_version_untouched(
+    admin_client: TestClient, admin_user: AuthenticatedUser, db_session: Session
+) -> None:
+    old_blocks = [{"type": "paragraph", "text": "Hello.", "page": 1}]
+    document_id, old_version_id = _seed_ready_document(db_session, admin_user.id, old_blocks)
+
+    with (
+        patch("app.documents.service.download_object", return_value=b"bad"),
+        patch(
+            "app.documents.service.extract_pdf",
+            side_effect=ExtractionError("No extractable text found"),
+        ),
+    ):
+        response = admin_client.post(
+            f"/v1/documents/{document_id}/replace", json=_replace_payload(b"bad")
+        )
+    assert response.status_code == 422
+
+    document = db_session.get(Document, document_id)
+    assert document is not None
+    assert document.current_version_id == old_version_id
+    assert db_session.get(DocumentVersion, old_version_id) is not None
+
+
+def test_replace_lecture_text_leaves_flashcards_and_cloze_cards_untouched(
+    admin_client: TestClient, admin_user: AuthenticatedUser, db_session: Session
+) -> None:
+    old_blocks = [{"type": "paragraph", "text": "Hello world.", "page": 1}]
+    document_id, _ = _seed_ready_document(db_session, admin_user.id, old_blocks)
+
+    cloze_card = ClozeCard(
+        document_id=document_id,
+        block_index=0,
+        start_offset=0,
+        end_offset=5,
+        answer_text="Hello",
+    )
+    flashcard = Flashcard(
+        document_id=document_id,
+        scope=FlashcardScope.PERSONAL,
+        front_text="Q",
+        back_text="A",
+        created_by=admin_user.id,
+    )
+    db_session.add_all([cloze_card, flashcard])
+    db_session.commit()
+    cloze_card_id, flashcard_id = cloze_card.id, flashcard.id
+
+    new_pdf_bytes = b"%PDF-1.4 totally different content"
+    new_blocks = [{"type": "paragraph", "text": "Completely different text.", "page": 1}]
+    with (
+        patch("app.documents.service.download_object", return_value=new_pdf_bytes),
+        patch("app.documents.service.extract_pdf", return_value=new_blocks),
+    ):
+        response = admin_client.post(
+            f"/v1/documents/{document_id}/replace", json=_replace_payload(new_pdf_bytes)
+        )
+    assert response.status_code == 200
+
+    # Deliberate: no reset, no regeneration -- these stay exactly as they
+    # were, keyed on document_id alone, even though the underlying text the
+    # cloze card's offsets referred to no longer exists.
+    assert db_session.get(ClozeCard, cloze_card_id) is not None
+    assert db_session.get(Flashcard, flashcard_id) is not None

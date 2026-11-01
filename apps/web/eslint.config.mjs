@@ -15,6 +15,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored static assets served as-is -- not source, never meant to be
+    // linted (e.g. public/pdf.worker.min.mjs, a committed copy of
+    // pdfjs-dist's build output).
+    "public/**",
   ]),
 ]);
 

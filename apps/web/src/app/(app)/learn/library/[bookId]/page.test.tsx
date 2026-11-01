@@ -202,7 +202,7 @@ describe("BookPage (real book)", () => {
     await user.click(await screen.findByRole("button", { name: /Sub A/ }));
     await screen.findByText("Lesson 1");
 
-    expect(screen.queryByText("Upload a lesson")).not.toBeInTheDocument();
+    expect(screen.queryByText("Upload a new lesson")).not.toBeInTheDocument();
   });
 });
 
@@ -307,7 +307,7 @@ describe("BookPage (Uncategorized)", () => {
     expect(await screen.findByText("Loose lesson")).toBeInTheDocument();
     expect(listDocuments).toHaveBeenCalledWith("none");
     expect(listChapters).not.toHaveBeenCalled();
-    expect(screen.queryByText("Upload a lesson")).not.toBeInTheDocument();
+    expect(screen.queryByText("Upload a new lesson")).not.toBeInTheDocument();
   });
 
   test("status labels render for each lesson status", async () => {

@@ -31,6 +31,14 @@ class SubChapterSummary(BaseModel):
     chapter: ChapterSummary
 
 
+class LecturePdfResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    status: str
+    error_message: str | None
+    storage_path: str
+
+
 class DocumentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -41,6 +49,7 @@ class DocumentResponse(BaseModel):
     updated_at: datetime
     current_version: DocumentVersionResponse | None
     sub_chapter: SubChapterSummary | None = None
+    lecture_pdf: LecturePdfResponse | None = None
 
 
 class DocumentSummaryResponse(BaseModel):
@@ -70,6 +79,20 @@ class DocumentCreateRequest(BaseModel):
     size_bytes: int
     checksum: str
     sub_chapter_id: UUID | None = None
+
+
+class ReplaceLectureTextRequest(BaseModel):
+    storage_path: str
+    mime_type: Literal["application/pdf"]
+    size_bytes: int
+    checksum: str
+
+
+class UpsertLecturePdfRequest(BaseModel):
+    storage_path: str
+    mime_type: Literal["application/pdf"]
+    size_bytes: int
+    checksum: str
 
 
 class RecentLessonResponse(BaseModel):

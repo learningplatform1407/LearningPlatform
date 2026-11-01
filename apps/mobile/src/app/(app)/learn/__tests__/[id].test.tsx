@@ -57,6 +57,26 @@ jest.mock("@/lib/supabase", () => ({
   supabase: { storage: { from: () => ({ createSignedUrl: mockCreateSignedUrl }) } },
 }));
 
+// PdfLessonView drives react-native-pdf (native view, no Jest build) --
+// stubbed here so these tests can verify the screen's mode toggle wiring
+// (which component renders, with which props) without exercising real PDF
+// rendering at all.
+jest.mock("@/lib/pdf-lesson-view", () => {
+  // jest.mock()'s factory is hoisted above the module's imports and may not
+  // reference an out-of-scope variable, so a top-level `import { Text }`
+  // can't be used here -- require() inside the factory is the standard way
+  // around that restriction.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { Text } = require("react-native");
+  return {
+    PdfLessonView: ({ documentId, storagePath }: { documentId: string; storagePath: string }) => (
+      <Text testID="pdf-lesson-view">
+        {documentId}:{storagePath}
+      </Text>
+    ),
+  };
+});
+
 let mockTabParam: string | undefined;
 
 jest.mock("expo-router", () => ({
@@ -170,6 +190,36 @@ test("renders extracted headings and paragraphs when ready", async () => {
   expect(await screen.findByText("Intro to Systems")).toBeTruthy();
   expect(await screen.findByText("Introduction")).toBeTruthy();
   expect(screen.getByText("This is the body text.")).toBeTruthy();
+});
+
+test("the PDF/Text toggle does not appear when the lesson has no lecture PDF", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+  renderScreen();
+
+  expect(await screen.findByText("Hello world")).toBeTruthy();
+  expect(screen.queryByText("PDF")).toBeNull();
+});
+
+test("switching to PDF mode renders the lecture PDF and hides the text content", async () => {
+  mockGetDocument.mockResolvedValue({
+    ...readyDocumentWithParagraph("Hello world"),
+    lecture_pdf: { status: "ready", error_message: null, storage_path: "lectures/book.pdf" },
+  });
+
+  renderScreen();
+
+  expect(await screen.findByText("Hello world")).toBeTruthy();
+  const pdfToggle = screen.getByText("PDF");
+
+  fireEvent.press(pdfToggle);
+
+  expect(await screen.findByText("d1:lectures/book.pdf")).toBeTruthy();
+  expect(screen.queryByText("Hello world")).toBeNull();
+
+  fireEvent.press(screen.getByText("Text"));
+  expect(await screen.findByText("Hello world")).toBeTruthy();
+  expect(screen.queryByTestId("pdf-lesson-view")).toBeNull();
 });
 
 test("shows a processing message while still processing", async () => {

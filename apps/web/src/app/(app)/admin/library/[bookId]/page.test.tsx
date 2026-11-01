@@ -30,6 +30,8 @@ const createSubChapter = vi.fn();
 const listDocuments = vi.fn();
 const requestDocumentUploadUrl = vi.fn();
 const createDocument = vi.fn();
+const replaceLectureText = vi.fn();
+const upsertLecturePdf = vi.fn();
 const uploadToSignedUrl = vi.fn();
 const getQuestionBankTree = vi.fn();
 
@@ -45,6 +47,8 @@ vi.mock("@/lib/api-client.browser", () => ({
     listDocuments,
     requestDocumentUploadUrl,
     createDocument,
+    replaceLectureText,
+    upsertLecturePdf,
     getQuestionBankTree,
   }),
 }));
@@ -103,6 +107,8 @@ beforeEach(() => {
   listDocuments.mockReset().mockResolvedValue([]);
   requestDocumentUploadUrl.mockReset();
   createDocument.mockReset();
+  replaceLectureText.mockReset();
+  upsertLecturePdf.mockReset();
   uploadToSignedUrl.mockReset();
   getQuestionBankTree.mockReset().mockResolvedValue(EMPTY_TREE);
 });
@@ -173,7 +179,7 @@ describe("AdminBookPage", () => {
 
     await user.click(await screen.findByRole("button", { name: /Intro to Systems/ }));
     await user.click(await screen.findByRole("button", { name: /Sub A/ }));
-    const heading = await screen.findByText("Upload a lesson");
+    const heading = await screen.findByText("Upload a new lesson");
     const form = within(heading.closest("form")!);
     await user.type(form.getByLabelText("Title"), "New Lesson");
 
@@ -189,6 +195,69 @@ describe("AdminBookPage", () => {
     expect(createCall.checksum.length).toBe(64);
   });
 
+  test("an admin can replace an existing lesson's lecture text", async () => {
+    getMe.mockResolvedValue(ADMIN_ME);
+    listSubChapters.mockResolvedValue([
+      { id: "sc1", chapter_id: "c1", title: "Sub A", order_index: 0, lesson_count: 1 },
+    ]);
+    listDocuments.mockResolvedValue([
+      { id: "d1", title: "Existing Lesson", created_at: "2026-01-01", status: "ready" },
+    ]);
+    requestDocumentUploadUrl.mockResolvedValue({ storage_path: "new.pdf", token: "tok" });
+    uploadToSignedUrl.mockResolvedValue({ data: {}, error: null });
+    replaceLectureText.mockResolvedValue({ id: "d1" });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /Intro to Systems/ }));
+    await user.click(await screen.findByRole("button", { name: /Sub A/ }));
+    await screen.findByText("Existing Lesson");
+
+    const textInput = screen.getByLabelText("Lecture text PDF");
+    selectFile(textInput, new File(["%PDF-1.4"], "text.pdf", { type: "application/pdf" }));
+    submitForm(textInput);
+
+    await waitFor(() => expect(replaceLectureText).toHaveBeenCalledTimes(1));
+    expect(replaceLectureText.mock.calls[0]![0]).toBe("d1");
+  });
+
+  test("replacing a lesson's lecture PDF requires a second confirmation before calling the API", async () => {
+    getMe.mockResolvedValue(ADMIN_ME);
+    listSubChapters.mockResolvedValue([
+      { id: "sc1", chapter_id: "c1", title: "Sub A", order_index: 0, lesson_count: 1 },
+    ]);
+    listDocuments.mockResolvedValue([
+      { id: "d1", title: "Existing Lesson", created_at: "2026-01-01", status: "ready" },
+    ]);
+    requestDocumentUploadUrl.mockResolvedValue({ storage_path: "book.pdf", token: "tok" });
+    uploadToSignedUrl.mockResolvedValue({ data: {}, error: null });
+    upsertLecturePdf.mockResolvedValue({
+      status: "ready",
+      error_message: null,
+      storage_path: "book.pdf",
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /Intro to Systems/ }));
+    await user.click(await screen.findByRole("button", { name: /Sub A/ }));
+    await screen.findByText("Existing Lesson");
+
+    const pdfInput = screen.getByLabelText("Lecture PDF");
+    selectFile(pdfInput, new File(["%PDF-1.4"], "book.pdf", { type: "application/pdf" }));
+    const form = pdfInput.closest("form")!;
+
+    fireEvent.submit(form);
+    expect(upsertLecturePdf).not.toHaveBeenCalled();
+    expect(await within(form).findByText(/permanently wipes/)).toBeInTheDocument();
+
+    fireEvent.submit(form);
+    await waitFor(() => expect(upsertLecturePdf).toHaveBeenCalledTimes(1));
+    expect(upsertLecturePdf.mock.calls[0]![0]).toBe("d1");
+  });
+
   test("shows an error if the storage upload fails", async () => {
     getMe.mockResolvedValue(ADMIN_ME);
     listSubChapters.mockResolvedValue([
@@ -202,7 +271,7 @@ describe("AdminBookPage", () => {
 
     await user.click(await screen.findByRole("button", { name: /Intro to Systems/ }));
     await user.click(await screen.findByRole("button", { name: /Sub A/ }));
-    const heading = await screen.findByText("Upload a lesson");
+    const heading = await screen.findByText("Upload a new lesson");
     const form = within(heading.closest("form")!);
     await user.type(form.getByLabelText("Title"), "New Lesson");
     selectFile(
@@ -226,7 +295,7 @@ describe("AdminBookPage", () => {
 
     await user.click(await screen.findByRole("button", { name: /Intro to Systems/ }));
     await user.click(await screen.findByRole("button", { name: /Sub A/ }));
-    const heading = await screen.findByText("Upload a lesson");
+    const heading = await screen.findByText("Upload a new lesson");
     const form = within(heading.closest("form")!);
     await user.type(form.getByLabelText("Title"), "New Lesson");
     selectFile(

@@ -28,6 +28,8 @@ import type {
   FlashcardUpdateRequest,
   QuestionImportRequest,
   QuestionImportResult,
+  LessonPageInk,
+  LessonPageInkUpdateRequest,
   MeResponse,
   NotebookEntry,
   NotebookEntryCreateRequest,
@@ -38,6 +40,7 @@ import type {
   QuestionCreateRequest,
   QuestionUpdateRequest,
   RecentLesson,
+  ReplaceLectureTextRequest,
   ReviewRating,
   ReviewSummaryResponse,
   SubChapter,
@@ -45,6 +48,8 @@ import type {
   Tag,
   UploadUrlRequest,
   UploadUrlResponse,
+  LecturePdf,
+  UpsertLecturePdfRequest,
 } from "@lp/contracts";
 
 // Minimal quiz-session types, defined inline here rather than threaded
@@ -496,6 +501,23 @@ export function createApiClient(config: ApiClientConfig) {
       }),
     createDocument: (data: DocumentCreateRequest) =>
       request<DocumentResponse>("/v1/documents", { method: "POST", body: JSON.stringify(data) }),
+    replaceLectureText: (documentId: string, data: ReplaceLectureTextRequest) =>
+      request<DocumentResponse>(`/v1/documents/${documentId}/replace`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    upsertLecturePdf: (documentId: string, data: UpsertLecturePdfRequest) =>
+      request<LecturePdf>(`/v1/documents/${documentId}/pdf`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    getPageInk: (documentId: string, pageNumber: number) =>
+      request<LessonPageInk>(`/v1/documents/${documentId}/pages/${pageNumber}/ink`),
+    updatePageInk: (documentId: string, pageNumber: number, data: LessonPageInkUpdateRequest) =>
+      request<LessonPageInk>(`/v1/documents/${documentId}/pages/${pageNumber}/ink`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
     listAnnotations: (documentId: string) =>
       request<Annotation[]>(`/v1/documents/${documentId}/annotations`),
     createAnnotation: (documentId: string, data: AnnotationCreateRequest) =>

@@ -74,7 +74,13 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - any file with an extension (images, etc.)
+     *
+     * `mjs` covers public/pdf.worker.min.mjs -- pdf.js's worker is loaded as
+     * a plain subresource fetch of this static file, same as an image, and
+     * must never be bounced through the session check: a redirect response
+     * here hands the Worker an HTML login page instead of JS, which it can't
+     * parse, surfacing to the user as "Failed to load the lecture PDF."
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mjs)$).*)",
   ],
 };

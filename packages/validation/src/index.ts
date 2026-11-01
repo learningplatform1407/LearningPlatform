@@ -79,6 +79,17 @@ export const subChapterSummarySchema = z.object({
   chapter: chapterSummarySchema,
 });
 
+export const lecturePdfStatusSchema = z.enum(["processing", "ready", "failed"]);
+
+/** `storage_path` is what the client resolves to a signed URL and hands to
+ * pdf.js (web) or react-native-pdf (mobile) -- the backend never
+ * text-extracts or rasterizes this artifact. */
+export const lecturePdfResponseSchema = z.object({
+  status: lecturePdfStatusSchema,
+  error_message: z.string().nullable(),
+  storage_path: z.string(),
+});
+
 export const documentResponseSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -87,6 +98,9 @@ export const documentResponseSchema = z.object({
   updated_at: z.string(),
   current_version: documentVersionResponseSchema.nullable(),
   sub_chapter: subChapterSummarySchema.nullable().optional(),
+  /** null means this lesson has no reference PDF attached -- hide the
+   * PDF/Text toggle entirely in that case. */
+  lecture_pdf: lecturePdfResponseSchema.nullable().optional(),
 });
 
 export const documentSummaryResponseSchema = z.object({
@@ -114,6 +128,26 @@ export const documentCreateRequestSchema = z.object({
   size_bytes: z.number(),
   checksum: z.string(),
   sub_chapter_id: z.string().nullable().optional(),
+});
+
+/** Replaces a lesson's lecture text -- highlights/margin-notes on unchanged
+ * text blocks carry forward; flashcards/cloze/question-bank questions are
+ * untouched. */
+export const replaceLectureTextRequestSchema = z.object({
+  storage_path: z.string(),
+  mime_type: z.literal("application/pdf"),
+  size_bytes: z.number(),
+  checksum: z.string(),
+});
+
+/** Attaches or replaces a lesson's reference-book PDF. Always a full
+ * wipe-and-recreate -- no matching, drops all ink on this lesson
+ * unconditionally. */
+export const upsertLecturePdfRequestSchema = z.object({
+  storage_path: z.string(),
+  mime_type: z.literal("application/pdf"),
+  size_bytes: z.number(),
+  checksum: z.string(),
 });
 
 export const recentLessonResponseSchema = z.object({
@@ -389,6 +423,16 @@ export const strokeSchema = z.object({
   color: z.string(),
   width: z.number(),
   points: z.array(strokePointSchema),
+});
+
+/** One user's freehand ink on one page of a lesson's lecture PDF. A PUT
+ * replaces the whole array, same convention as notebook drawings. */
+export const lessonPageInkResponseSchema = z.object({
+  strokes: z.array(strokeSchema),
+});
+
+export const lessonPageInkUpdateRequestSchema = z.object({
+  strokes: z.array(strokeSchema),
 });
 
 export const notebookEntryTypeSchema = z.enum(["text", "drawing"]);

@@ -36,6 +36,7 @@ import {
   TextEntryEditor,
   useNotebookEntries,
 } from "../notebook/notebook-entries";
+import { PdfLessonView } from "./pdf-lesson-view";
 
 function ExtractedImage({ path }: { path: string }) {
   const {
@@ -1242,6 +1243,9 @@ export default function LecturePage() {
     const tabParam = searchParams.get("tab");
     return TABS.some((tab) => tab.key === tabParam) ? (tabParam as TabKey) : "lesson";
   });
+  // Defaults to "text" -- the PDF/Text toggle itself only renders when the
+  // lesson has a lecture_pdf attached (see the tabs row below).
+  const [lessonViewMode, setLessonViewMode] = useState<"text" | "pdf">("text");
   const [activeTool, setActiveTool] = useState<ActiveTool>(null);
   const [mobileTocOpen, setMobileTocOpen] = useState(false);
   const [mobileNotesOpen, setMobileNotesOpen] = useState(false);
@@ -1456,21 +1460,51 @@ export default function LecturePage() {
         )}
         <h1 className="mt-xs text-2xl font-bold text-foreground">{data.title}</h1>
 
-        <div className="mt-lg flex w-full gap-xs border-b border-border">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-md py-sm text-sm font-medium ${
-                activeTab === tab.key
-                  ? "border-b-2 border-primary text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="mt-lg flex w-full items-center justify-between gap-xs border-b border-border">
+          <div className="flex gap-xs">
+            {TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`px-md py-sm text-sm font-medium ${
+                  activeTab === tab.key
+                    ? "border-b-2 border-primary text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          {activeTab === "lesson" && data.lecture_pdf && (
+            <div role="group" aria-label="Lesson view mode" className="mb-sm flex gap-xs">
+              <button
+                type="button"
+                aria-pressed={lessonViewMode === "pdf"}
+                onClick={() => setLessonViewMode("pdf")}
+                className={`rounded-md border border-border px-sm py-xs text-xs font-medium ${
+                  lessonViewMode === "pdf"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                PDF
+              </button>
+              <button
+                type="button"
+                aria-pressed={lessonViewMode === "text"}
+                onClick={() => setLessonViewMode("text")}
+                className={`rounded-md border border-border px-sm py-xs text-xs font-medium ${
+                  lessonViewMode === "text"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Text
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="mt-lg">
@@ -1478,7 +1512,11 @@ export default function LecturePage() {
           {activeTab === "quizzes" && <QuizzesTab documentId={params.id} />}
           {activeTab === "flashcards" && <FlashcardsTab documentId={params.id} />}
 
-          {activeTab === "lesson" && (
+          {activeTab === "lesson" && lessonViewMode === "pdf" && data.lecture_pdf && (
+            <PdfLessonView documentId={params.id} storagePath={data.lecture_pdf.storage_path} />
+          )}
+
+          {activeTab === "lesson" && lessonViewMode === "text" && (
             <>
               {!version && <p className="text-sm text-muted-foreground">Not processed yet.</p>}
               {version?.status === "processing" && (
