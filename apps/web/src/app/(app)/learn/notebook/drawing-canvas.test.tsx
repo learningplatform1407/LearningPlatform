@@ -101,6 +101,58 @@ describe("DrawingCanvas", () => {
     expect(onChange.mock.calls[1]![0]).toEqual(existing);
   });
 
+  test("changing pageKey drops undo history so Undo can't resurrect another page's ink", () => {
+    stubCanvasRect();
+    const onChange = vi.fn();
+    const pageOneInk: Stroke[] = [
+      {
+        color: "#000",
+        width: 0.01,
+        points: [
+          { x: 0, y: 0 },
+          { x: 0.1, y: 0.1 },
+        ],
+      },
+    ];
+    const { rerender } = render(
+      <DrawingCanvas strokes={pageOneInk} onChange={onChange} pageKey={1} />,
+    );
+
+    // Draw on page 1, which pushes page 1's prior ink onto the undo stack.
+    const canvas = screen.getByRole("img", { name: "Drawing canvas" });
+    fireEvent.pointerDown(canvas, { clientX: 40, clientY: 30 });
+    fireEvent.pointerMove(canvas, { clientX: 80, clientY: 60 });
+    fireEvent.pointerUp(canvas, { clientX: 80, clientY: 60 });
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    // Turn to page 2, which has no ink of its own.
+    rerender(<DrawingCanvas strokes={[]} onChange={onChange} pageKey={2} />);
+
+    // Undo must be inert here. Before pageKey existed it stayed enabled and
+    // fired onChange with page 1's strokes, which the parent then saved to
+    // page 2 -- silently copying one page's ink onto another.
+    const undo = screen.getByRole("button", { name: "Undo" });
+    expect(undo).toBeDisabled();
+    fireEvent.click(undo);
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  test("changing pageKey keeps the selected pen colour and tool", () => {
+    stubCanvasRect();
+    const { rerender } = render(<DrawingCanvas strokes={[]} onChange={vi.fn()} pageKey={1} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Eraser" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pen color — blue" }));
+
+    rerender(<DrawingCanvas strokes={[]} onChange={vi.fn()} pageKey={2} />);
+
+    expect(screen.getByRole("button", { name: "Eraser" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Pen color — blue" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
   test("the eraser tool removes points near the drag path, splitting the stroke", () => {
     stubCanvasRect();
     const onChange = vi.fn();

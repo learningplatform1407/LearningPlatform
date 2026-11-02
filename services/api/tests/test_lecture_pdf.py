@@ -2,6 +2,7 @@ import hashlib
 import uuid
 from unittest.mock import patch
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
 from app.documents.extraction import ExtractionError
-from app.documents.models import Document
+from app.documents.models import Document, LecturePdf
 from app.ink.models import LessonPageInk
 from app.main import app
 from app.users.models import AccountSettings, Profile
@@ -62,6 +63,44 @@ def test_upsert_lecture_pdf_requires_admin(
 ) -> None:
     response = authed_client.put(f"/v1/documents/{document_id}/pdf", json=_upsert_payload())
     assert response.status_code == 403
+
+
+def test_replacing_lecture_pdf_survives_a_failing_storage_delete(
+    admin_client: TestClient, document_id: uuid.UUID, db_session: Session
+) -> None:
+    """Discarding the superseded PDF from Storage must never fail the request.
+
+    `delete_object` raises RuntimeError when Storage is unconfigured and
+    httpx ConnectError/ReadTimeout when it's unreachable -- none of which
+    subclass StorageError, so the original `suppress(StorageError)` let all
+    three escape as a 500 on a replace that had otherwise succeeded. Each
+    stand-in below is a type that guard would have missed.
+    """
+    fake_pdf_bytes = b"%PDF-1.4 fake"
+    with (
+        patch("app.documents.service.download_object", return_value=fake_pdf_bytes),
+        patch("app.documents.service.validate_pdf", return_value=3),
+    ):
+        first = admin_client.put(
+            f"/v1/documents/{document_id}/pdf", json=_upsert_payload(fake_pdf_bytes)
+        )
+    assert first.status_code == 200
+
+    for boom in (RuntimeError("SUPABASE_URL is not configured"), httpx.ConnectError("unreachable")):
+        other_bytes = b"%PDF-1.4 another edition"
+        with (
+            patch("app.documents.service.download_object", return_value=other_bytes),
+            patch("app.documents.service.validate_pdf", return_value=5),
+            patch("app.documents.service.delete_object", side_effect=boom),
+        ):
+            response = admin_client.put(
+                f"/v1/documents/{document_id}/pdf", json=_upsert_payload(other_bytes)
+            )
+        assert response.status_code == 200, f"{type(boom).__name__} escaped as {response.text}"
+        assert response.json()["status"] == "ready"
+
+    # The replace still happened: one row, pointing at the newest upload.
+    assert db_session.query(LecturePdf).count() == 1
 
 
 def test_upsert_lecture_pdf_validates_and_stores(

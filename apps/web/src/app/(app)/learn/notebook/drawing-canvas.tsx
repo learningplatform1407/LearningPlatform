@@ -75,6 +75,13 @@ interface DrawingCanvasProps {
    * ResizeObserver sizing the standalone notebook drawing box uses. */
   width?: number;
   height?: number;
+  /** Identifies which surface is being drawn on, for parents that reuse one
+   * canvas across several (e.g. the pages of a PDF). Undo history and any
+   * in-flight gesture are scoped to a single surface, so both are discarded
+   * when this changes; pen colour and tool are user preferences and
+   * survive. Without it, pressing Undo after a page turn pushed the
+   * *previous* page's strokes onto the page now showing. */
+  pageKey?: string | number;
 }
 
 export function DrawingCanvas({
@@ -83,6 +90,7 @@ export function DrawingCanvas({
   readOnly = false,
   width,
   height,
+  pageKey,
 }: DrawingCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -99,6 +107,24 @@ export function DrawingCanvas({
   // A stack of full Stroke[] snapshots, one per completed draw or erase, so
   // both are undoable step by step -- not just "pop the last whole stroke".
   const [history, setHistory] = useState<Stroke[][]>([]);
+
+  // Discard surface-scoped state the moment `pageKey` changes, rather than
+  // in an effect: an effect runs *after* the render that already showed the
+  // new page, leaving one frame in which Undo would apply the old page's
+  // history to it. Setting state during render is the supported way to
+  // adjust state on a prop change, as long as it's guarded like this.
+  // The gesture refs are deliberately not touched here: refs must not be
+  // written during render, and they don't need to be. Every gesture seeds
+  // them on pointerdown and clears them on pointerup/pointerleave, and the
+  // canvas holds pointer capture in between, so a page can't change
+  // mid-gesture and leave a stale one behind.
+  const [trackedPageKey, setTrackedPageKey] = useState(pageKey);
+  if (pageKey !== trackedPageKey) {
+    setTrackedPageKey(pageKey);
+    setHistory([]);
+    setDrawingStroke(null);
+    setErasingPreview(null);
+  }
 
   useEffect(() => {
     if (explicitSize) return;

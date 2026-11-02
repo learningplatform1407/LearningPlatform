@@ -1,7 +1,14 @@
 import type { Stroke } from "@lp/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Dimensions, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  type LayoutChangeEvent,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import Pdf from "react-native-pdf";
 
 import { getApiClient } from "@/lib/api-client";
@@ -9,7 +16,12 @@ import { DrawingCanvas } from "@/lib/notebook-drawing-canvas";
 import { supabase } from "@/lib/supabase";
 import { colors, fontSizes, spacing } from "@/lib/theme";
 
-const { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } = Dimensions.get("window");
+// react-native-pdf downloads the whole file before rendering, so unlike
+// pdf.js on web this URL only has to outlive the initial fetch. Kept in step
+// with the web TTL anyway, and with staleTime below for the same reason:
+// react-query's default window-focus refetch mints a fresh token, which
+// changes `source.uri` and makes the native view re-download the whole PDF.
+const SIGNED_URL_TTL_SECONDS = 8 * 60 * 60;
 
 interface PdfLessonViewProps {
   documentId: string;
@@ -42,10 +54,17 @@ interface PdfLessonViewProps {
  */
 export function PdfLessonView({ documentId, storagePath }: PdfLessonViewProps) {
   const queryClient = useQueryClient();
+  const { height: windowHeight } = useWindowDimensions();
   const [pageNumber, setPageNumber] = useState(1);
   const [numPages, setNumPages] = useState(0);
   const [pageAspect, setPageAspect] = useState(1.4); // height / width, refined by onLoadComplete
   const [drawMode, setDrawMode] = useState(false);
+  const [renderFailed, setRenderFailed] = useState(false);
+  // Measured rather than derived from window width minus an assumed parent
+  // padding: the overlay has to match the native view's real rendered width
+  // exactly, and hardcoding the lesson screen's padding silently misaligns
+  // the ink the moment that padding changes (or the device rotates).
+  const [boxWidth, setBoxWidth] = useState(0);
 
   const {
     data: signedUrl,
@@ -56,10 +75,12 @@ export function PdfLessonView({ documentId, storagePath }: PdfLessonViewProps) {
     queryFn: async () => {
       const { data, error } = await supabase.storage
         .from("documents")
-        .createSignedUrl(storagePath, 3600);
+        .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
       if (error) throw error;
       return data.signedUrl;
     },
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 
   const { data: ink } = useQuery({
@@ -74,10 +95,14 @@ export function PdfLessonView({ documentId, storagePath }: PdfLessonViewProps) {
     onSuccess: (result) => queryClient.setQueryData(["page-ink", documentId, pageNumber], result),
   });
 
-  const overlayWidth = WINDOW_WIDTH - spacing.lg * 2;
+  const overlayWidth = boxWidth;
   const overlayHeight = overlayWidth * pageAspect;
 
-  if (urlError) {
+  function handleBoxLayout(event: LayoutChangeEvent) {
+    setBoxWidth(event.nativeEvent.layout.width);
+  }
+
+  if (urlError || renderFailed) {
     return <Text style={styles.error}>Failed to load the lecture PDF.</Text>;
   }
 
@@ -120,7 +145,12 @@ export function PdfLessonView({ documentId, storagePath }: PdfLessonViewProps) {
         </Pressable>
       </View>
 
-      <View style={drawMode ? styles.pdfBoxLocked : styles.pdfBoxFree}>
+      <View
+        onLayout={handleBoxLayout}
+        style={
+          drawMode ? styles.pdfBoxLocked : [styles.pdfBoxFree, { height: windowHeight * 0.65 }]
+        }
+      >
         <Pdf
           source={{ uri: signedUrl }}
           page={pageNumber}
@@ -141,9 +171,12 @@ export function PdfLessonView({ documentId, storagePath }: PdfLessonViewProps) {
             if (size.width > 0) setPageAspect(size.height / size.width);
           }}
           onPageChanged={(page) => setPageNumber(page)}
-          onError={() => {}}
+          // An empty handler here meant every native render failure showed
+          // an empty box and no message -- urlError only covers minting the
+          // signed URL, not anything that happens after.
+          onError={() => setRenderFailed(true)}
         />
-        {drawMode && (
+        {drawMode && overlayWidth > 0 && (
           <View
             style={[styles.inkOverlay, { width: overlayWidth, height: overlayHeight }]}
             pointerEvents="box-none"
@@ -153,6 +186,7 @@ export function PdfLessonView({ documentId, storagePath }: PdfLessonViewProps) {
               onChange={(strokes) => updateInkMutation.mutate(strokes)}
               width={overlayWidth}
               height={overlayHeight}
+              pageKey={pageNumber}
             />
           </View>
         )}
@@ -190,9 +224,10 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.xs,
     color: colors.mutedForeground,
   },
+  // Height is applied at the call site from useWindowDimensions, so it
+  // tracks rotation instead of freezing at the value read on first import.
   pdfBoxFree: {
     width: "100%",
-    height: WINDOW_HEIGHT * 0.65,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,

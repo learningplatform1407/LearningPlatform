@@ -94,6 +94,54 @@ test("Undo reverts the most recently drawn stroke", () => {
   expect(onChange.mock.calls[1]![0]).toEqual(existing);
 });
 
+test("changing pageKey drops undo history so Undo can't resurrect another page's ink", () => {
+  const onChange = jest.fn();
+  const pageOneInk: Stroke[] = [
+    {
+      color: "#000",
+      width: 0.01,
+      points: [
+        { x: 0, y: 0 },
+        { x: 0.1, y: 0.1 },
+      ],
+    },
+  ];
+  const { rerender } = render(
+    <DrawingCanvas strokes={pageOneInk} onChange={onChange} width={400} height={300} pageKey={1} />,
+  );
+
+  // Draw on page 1, which pushes page 1's prior ink onto the undo stack.
+  const canvas = screen.getByLabelText("Drawing canvas");
+  fireEvent(canvas, "responderGrant", { nativeEvent: { locationX: 40, locationY: 30 } });
+  fireEvent(canvas, "responderMove", { nativeEvent: { locationX: 80, locationY: 60 } });
+  fireEvent(canvas, "responderRelease", { nativeEvent: { locationX: 80, locationY: 60 } });
+  expect(onChange).toHaveBeenCalledTimes(1);
+
+  // Turn to page 2, which has no ink of its own.
+  rerender(<DrawingCanvas strokes={[]} onChange={onChange} width={400} height={300} pageKey={2} />);
+
+  // Undo must be inert here. Before pageKey existed it stayed enabled and
+  // fired onChange with page 1's strokes, which the parent then saved to
+  // page 2 -- silently copying one page's ink onto another.
+  fireEvent.press(screen.getByText("Undo"));
+  expect(onChange).toHaveBeenCalledTimes(1);
+});
+
+test("changing pageKey keeps the selected pen colour and tool", () => {
+  const { rerender } = render(
+    <DrawingCanvas strokes={[]} onChange={jest.fn()} width={400} height={300} pageKey={1} />,
+  );
+
+  fireEvent.press(screen.getByText("Eraser"));
+  rerender(
+    <DrawingCanvas strokes={[]} onChange={jest.fn()} width={400} height={300} pageKey={2} />,
+  );
+
+  expect(screen.getByRole("button", { name: "Eraser" }).props.accessibilityState?.selected).toBe(
+    true,
+  );
+});
+
 test("the eraser tool removes points near the drag path, splitting the stroke", () => {
   const onChange = jest.fn();
   const strokes: Stroke[] = [

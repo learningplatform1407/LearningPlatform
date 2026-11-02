@@ -1,6 +1,6 @@
 import hashlib
+import logging
 import uuid
-from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Any
 
@@ -23,13 +23,31 @@ from app.documents.schemas import (
     UpsertLecturePdfRequest,
 )
 from app.documents.storage import (
-    StorageError,
     create_signed_upload_url,
     delete_object,
     download_object,
     upload_object,
 )
 from app.sub_chapters.models import SubChapter
+
+logger = logging.getLogger(__name__)
+
+
+def _discard_object(path: str) -> None:
+    """Best-effort Storage delete. Deliberately broad, for the same reason
+    app/feed/service.py::_discard_image is: `delete_object` raises
+    RuntimeError on misconfiguration and httpx ConnectError/ReadTimeout from
+    the transport, none of which subclass StorageError. An earlier
+    `suppress(StorageError)` here let all three escape -- and both callers
+    run *after* their commit, so an unreachable or unconfigured Storage
+    500'd a request whose database work had already succeeded. Enumerating
+    failure types means re-deriving httpx's hierarchy correctly forever; the
+    contract is simply "never fail the caller".
+    """
+    try:
+        delete_object(path)
+    except Exception:
+        logger.warning("Failed to delete object %s", path, exc_info=True)
 
 
 def create_upload_url(data: UploadUrlRequest) -> tuple[str, str]:
@@ -137,8 +155,7 @@ def _delete_version_storage(version: DocumentVersion) -> None:
         if block.get("type") == "image" and block.get("image_path"):
             paths.append(block["image_path"])
     for path in paths:
-        with suppress(StorageError):
-            delete_object(path)
+        _discard_object(path)
 
 
 def replace_lecture_text(
@@ -220,8 +237,7 @@ def upsert_lecture_pdf(
 
     existing = db.scalar(select(LecturePdf).where(LecturePdf.document_id == document_id))
     if existing is not None:
-        with suppress(StorageError):
-            delete_object(existing.storage_path)
+        _discard_object(existing.storage_path)
         # This cascades away every user's LessonPageInk for this lesson.
         db.delete(existing)
         db.flush()

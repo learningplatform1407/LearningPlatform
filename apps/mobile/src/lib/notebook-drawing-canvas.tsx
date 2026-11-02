@@ -79,6 +79,13 @@ interface DrawingCanvasProps {
    * onLayout sizing the standalone notebook drawing box uses. */
   width?: number;
   height?: number;
+  /** Identifies which surface is being drawn on, for parents that reuse one
+   * canvas across several (e.g. the pages of a PDF). Undo history and any
+   * in-flight gesture are scoped to a single surface, so both are discarded
+   * when this changes; pen colour and tool are user preferences and
+   * survive. Without it, pressing Undo after a page turn pushed the
+   * *previous* page's strokes onto the page now showing. */
+  pageKey?: string | number;
 }
 
 export function DrawingCanvas({
@@ -87,6 +94,7 @@ export function DrawingCanvas({
   readOnly = false,
   width,
   height,
+  pageKey,
 }: DrawingCanvasProps) {
   const explicitSize = width !== undefined && height !== undefined;
   const [autoSize, setAutoSize] = useState({ width: 0, height: 0 });
@@ -99,6 +107,20 @@ export function DrawingCanvas({
   // A stack of full Stroke[] snapshots, one per completed draw or erase, so
   // both are undoable step by step -- not just "pop the last whole stroke".
   const [history, setHistory] = useState<Stroke[][]>([]);
+
+  // Discard surface-scoped state the moment `pageKey` changes, rather than
+  // in an effect: an effect runs *after* the render that already showed the
+  // new page, leaving one frame in which Undo would apply the old page's
+  // history to it. Setting state during render is the supported way to
+  // adjust state on a prop change, as long as it's guarded like this.
+  const [trackedPageKey, setTrackedPageKey] = useState(pageKey);
+  if (pageKey !== trackedPageKey) {
+    setTrackedPageKey(pageKey);
+    setHistory([]);
+    setDrawingStroke(null);
+    setErasingPreview(null);
+    setEraseBase(null);
+  }
 
   function handleLayout(event: LayoutChangeEvent) {
     if (explicitSize) return;

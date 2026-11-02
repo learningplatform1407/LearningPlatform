@@ -1,6 +1,7 @@
 "use client";
 
 import * as pdfjsLib from "pdfjs-dist";
+import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { useEffect, useRef, useState } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -27,6 +28,14 @@ const ZOOM_STEP = 0.25;
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 3;
 
+// pdf.js range-fetches the file lazily for the whole life of the document,
+// not just during the initial load, so this URL has to outlive the reading
+// session -- on a shorter TTL an expired token surfaces hours in as pages
+// that silently refuse to render. Paired with `staleTime: Infinity` below so
+// exactly one URL is minted per mount and never swapped out from under a
+// document that's already loaded.
+const SIGNED_URL_TTL_SECONDS = 8 * 60 * 60;
+
 interface PdfLessonViewProps {
   documentId: string;
   storagePath: string;
@@ -38,6 +47,14 @@ export function PdfLessonView({ documentId, storagePath }: PdfLessonViewProps) {
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1);
   const [viewportSize, setViewportSize] = useState<{ width: number; height: number } | null>(null);
+  const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
+  // Both failures record *what* failed rather than a bare boolean, so each
+  // is derived below by comparing against what's current. A boolean would
+  // have to be cleared at the top of the effect that retries, and a
+  // synchronous setState in an effect body is exactly the cascading-render
+  // pattern react-hooks/set-state-in-effect rejects.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const [failedRender, setFailedRender] = useState<string | null>(null);
 
   const {
     data: signedUrl,
@@ -49,44 +66,80 @@ export function PdfLessonView({ documentId, storagePath }: PdfLessonViewProps) {
       const supabase = createClient();
       const { data, error } = await supabase.storage
         .from("documents")
-        .createSignedUrl(storagePath, 3600);
+        .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
       if (error) throw error;
       return data.signedUrl;
     },
+    // Under react-query's defaults (staleTime 0, refetchOnWindowFocus true)
+    // every window focus re-minted this URL. Supabase returns a fresh token
+    // each call, so the string changed, which tore down the loaded document
+    // and re-downloaded the entire PDF -- once per focus.
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 
-  const {
-    data: pdfDoc,
-    isPending: docPending,
-    isError: docError,
-  } = useQuery({
-    queryKey: ["lecture-pdf-doc", signedUrl],
-    queryFn: () => pdfjsLib.getDocument({ url: signedUrl }).promise,
-    enabled: !!signedUrl,
-    // The document proxy is a long-lived handle holding a worker
-    // connection, not plain data -- never treat it as stale and refetch it.
-    staleTime: Infinity,
-  });
+  // The document is a disposable handle holding a worker connection, not
+  // plain data, so this effect owns its whole lifecycle rather than a
+  // useQuery: it has to be destroyed when the URL changes or the component
+  // unmounts, and a cache that may hand the same proxy back afterwards
+  // can't safely be the thing that decides when to do that.
+  useEffect(() => {
+    if (!signedUrl) return;
+    let cancelled = false;
+    const loadingTask = pdfjsLib.getDocument({ url: signedUrl });
+    loadingTask.promise.then(
+      (doc) => {
+        if (!cancelled) setPdfDoc(doc);
+      },
+      () => {
+        if (!cancelled) setFailedUrl(signedUrl);
+      },
+    );
+    return () => {
+      cancelled = true;
+      setPdfDoc(null);
+      // Destroys the document as well, and aborts the load if it's still in
+      // flight.
+      void loadingTask.destroy();
+    };
+  }, [signedUrl]);
 
   const numPages = pdfDoc?.numPages ?? 0;
+  const renderKey = `${pageNumber}@${scale}`;
+  const loadFailed =
+    (signedUrl !== undefined && failedUrl === signedUrl) || failedRender === renderKey;
 
   useEffect(() => {
     if (!pdfDoc) return;
     let cancelled = false;
+    let renderTask: RenderTask | null = null;
     void (async () => {
-      const page = await pdfDoc.getPage(pageNumber);
-      const viewport = page.getViewport({ scale });
-      const canvas = canvasRef.current;
-      if (!canvas || cancelled) return;
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      await page.render({ canvas, viewport }).promise;
-      if (!cancelled) setViewportSize({ width: viewport.width, height: viewport.height });
+      try {
+        const page = await pdfDoc.getPage(pageNumber);
+        const canvas = canvasRef.current;
+        if (!canvas || cancelled) return;
+        const viewport = page.getViewport({ scale });
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        renderTask = page.render({ canvas, viewport });
+        await renderTask.promise;
+        if (!cancelled) setViewportSize({ width: viewport.width, height: viewport.height });
+      } catch (error) {
+        // Cancelling in the cleanup below rejects the task's promise. That's
+        // the expected path on a fast page/zoom change, not a failure.
+        if ((error as { name?: string }).name === "RenderingCancelledException") return;
+        if (!cancelled) setFailedRender(renderKey);
+      }
     })();
     return () => {
       cancelled = true;
+      // pdf.js tracks in-use canvases in a module-level set and throws
+      // "Cannot use the same canvas during multiple render() operations" if
+      // a second render starts before the first finishes or is cancelled.
+      // Two quick Zoom or Next clicks was enough to leave the page blank.
+      renderTask?.cancel();
     };
-  }, [pdfDoc, pageNumber, scale]);
+  }, [pdfDoc, pageNumber, scale, renderKey]);
 
   const { data: ink } = useQuery({
     queryKey: ["page-ink", documentId, pageNumber],
@@ -99,7 +152,7 @@ export function PdfLessonView({ documentId, storagePath }: PdfLessonViewProps) {
     onSuccess: (result) => queryClient.setQueryData(["page-ink", documentId, pageNumber], result),
   });
 
-  if (urlError || docError) {
+  if (urlError || loadFailed) {
     return (
       <p role="alert" className="text-sm text-danger">
         Failed to load the lecture PDF.
@@ -107,7 +160,7 @@ export function PdfLessonView({ documentId, storagePath }: PdfLessonViewProps) {
     );
   }
 
-  if (urlPending || docPending || !pdfDoc) {
+  if (urlPending || !pdfDoc) {
     return <p className="text-sm text-muted-foreground">Loading PDF...</p>;
   }
 
@@ -163,6 +216,7 @@ export function PdfLessonView({ documentId, storagePath }: PdfLessonViewProps) {
               onChange={(strokes) => updateInkMutation.mutate(strokes)}
               width={viewportSize.width}
               height={viewportSize.height}
+              pageKey={pageNumber}
             />
           </div>
         )}
