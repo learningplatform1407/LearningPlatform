@@ -74,6 +74,12 @@ class LecturePdf(Base):
     mime_type: Mapped[str] = mapped_column(String)
     size_bytes: Mapped[int] = mapped_column(Integer)
     checksum: Mapped[str] = mapped_column(String)
+    # Counted by `validate_pdf` at upload -- the only page metadata stored.
+    # It bounds which `page_number` may carry ink (without it any integer
+    # could, negatives and 2^31 included) and lets a client label "page 1 of
+    # N" before the PDF has finished downloading. Page rendering and page
+    # indexing still belong entirely to the clients.
+    page_count: Mapped[int] = mapped_column(Integer, server_default="1")
     status: Mapped[str] = mapped_column(String, default="processing")
     error_message: Mapped[str | None] = mapped_column(String, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

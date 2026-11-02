@@ -88,6 +88,9 @@ export const lecturePdfResponseSchema = z.object({
   status: lecturePdfStatusSchema,
   error_message: z.string().nullable(),
   storage_path: z.string(),
+  /** Counted server-side at upload. Bounds which page may carry ink, and
+   * lets a client label "page 1 of N" before the PDF has downloaded. */
+  page_count: z.number(),
 });
 
 export const documentResponseSchema = z.object({

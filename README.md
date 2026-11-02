@@ -172,6 +172,21 @@ classDiagram
         +string type
         +string note_text
     }
+    class LecturePdf {
+        +UUID id
+        +UUID document_id
+        +string storage_path
+        +int page_count
+        +string status
+        +string error_message
+    }
+    class LessonPageInk {
+        +UUID id
+        +UUID lecture_pdf_id
+        +int page_number
+        +UUID user_id
+        +json strokes
+    }
     class LessonView {
         +UUID user_id
         +UUID document_id
@@ -316,6 +331,9 @@ classDiagram
     Document "1" -- "*" DocumentVersion
     Document "1" -- "1" DocumentVersion : current_version
     DocumentVersion "1" -- "*" DocumentAnnotation
+    Document "0..1" -- "1" LecturePdf : reference book, never text-extracted
+    LecturePdf "1" -- "*" LessonPageInk : CASCADE, so a replace wipes all ink
+    Profile "1" -- "*" LessonPageInk : one row per (pdf, page, user)
     Document "1" -- "*" LessonView
     Document "1" -- "*" Flashcard
     Document "0..1" -- "*" NotebookEntry : source_document_id

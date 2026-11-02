@@ -262,7 +262,16 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
       const payload = await uploadAndChecksum(pdfFile);
       return getApiClient().upsertLecturePdf(documentId, payload);
     },
-    onSuccess: () => {
+    // Processing happens inline, so a PDF that fails validation still comes
+    // back 200 with status "failed". Treating every 200 as success meant an
+    // admin uploading a corrupt file saw nothing wrong here, while learners
+    // silently never got the PDF/Text toggle. `error_message` carries the
+    // backend's own reason (e.g. a checksum mismatch).
+    onSuccess: (lecturePdf) => {
+      if (lecturePdf.status !== "ready") {
+        setPdfError(lecturePdf.error_message ?? "The PDF could not be processed.");
+        return;
+      }
       setPdfFile(null);
       setConfirmingPdfReplace(false);
       onDone();

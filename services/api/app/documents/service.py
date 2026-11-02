@@ -172,6 +172,9 @@ def replace_lecture_text(
     feature's plan settled: dropped for annotations, untouched entirely for
     flashcards/cloze/questions, which stay keyed on `document_id` alone.
     """
+    if data.size_bytes > MAX_UPLOAD_BYTES:
+        raise ApiError(422, "file_too_large", "File exceeds the 50MB upload limit")
+
     document = db.get(Document, document_id)
     if document is None or document.current_version_id is None:
         raise ApiError(404, "not_found", "Document not found")
@@ -231,6 +234,9 @@ def upsert_lecture_pdf(
     book" event, always a full wipe-and-recreate with no content matching
     at all: replacing it drops every user's ink on this lesson
     unconditionally, by design."""
+    if data.size_bytes > MAX_UPLOAD_BYTES:
+        raise ApiError(422, "file_too_large", "File exceeds the 50MB upload limit")
+
     document = db.get(Document, document_id)
     if document is None:
         raise ApiError(404, "not_found", "Document not found")
@@ -258,7 +264,7 @@ def upsert_lecture_pdf(
         actual_checksum = hashlib.sha256(pdf_bytes).hexdigest()
         if actual_checksum != lecture_pdf.checksum:
             raise ExtractionError("Checksum mismatch — upload may be corrupted")
-        validate_pdf(pdf_bytes)
+        lecture_pdf.page_count = validate_pdf(pdf_bytes)
         lecture_pdf.status = "ready"
     except ExtractionError as exc:
         lecture_pdf.status = "failed"

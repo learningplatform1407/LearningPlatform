@@ -195,7 +195,12 @@ describe("LecturePage", () => {
   test("switching to PDF mode renders the lecture PDF and hides the text content", async () => {
     getDocument.mockResolvedValue({
       ...readyDocumentWithParagraph("Hello world"),
-      lecture_pdf: { status: "ready", error_message: null, storage_path: "lectures/book.pdf" },
+      lecture_pdf: {
+        status: "ready",
+        error_message: null,
+        storage_path: "lectures/book.pdf",
+        page_count: 12,
+      },
     });
 
     renderPage();
@@ -212,6 +217,30 @@ describe("LecturePage", () => {
     expect(await screen.findByText("Hello world")).toBeInTheDocument();
     expect(screen.queryByTestId("pdf-lesson-view")).not.toBeInTheDocument();
   });
+
+  test.each(["failed", "processing"] as const)(
+    "the PDF/Text toggle does not appear when the lecture PDF is %s",
+    async (status) => {
+      getDocument.mockResolvedValue({
+        ...readyDocumentWithParagraph("Hello world"),
+        lecture_pdf: {
+          status,
+          error_message: status === "failed" ? "Checksum mismatch" : null,
+          storage_path: "lectures/book.pdf",
+          page_count: 1,
+        },
+      });
+
+      renderPage();
+
+      // Offering the toggle for a PDF that never processed dead-ends the
+      // learner in "Failed to load the lecture PDF." The text lesson is
+      // still perfectly readable, so the PDF simply isn't offered.
+      expect(await screen.findByText("Hello world")).toBeInTheDocument();
+      expect(screen.queryByRole("group", { name: "Lesson view mode" })).not.toBeInTheDocument();
+      expect(screen.queryByTestId("pdf-lesson-view")).not.toBeInTheDocument();
+    },
+  );
 
   test("shows a processing message while still processing", async () => {
     getDocument.mockResolvedValue({

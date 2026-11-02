@@ -118,6 +118,9 @@ def test_upsert_lecture_pdf_validates_and_stores(
     body = response.json()
     assert body["status"] == "ready"
     assert body["storage_path"] == "lecture.pdf"
+    # Taken from validate_pdf's return value, patched to 3 above -- that
+    # return used to be discarded, leaving nothing to bound page_number by.
+    assert body["page_count"] == 3
 
     detail = admin_client.get(f"/v1/documents/{document_id}")
     assert detail.status_code == 200
@@ -125,6 +128,7 @@ def test_upsert_lecture_pdf_validates_and_stores(
         "status": "ready",
         "error_message": None,
         "storage_path": "lecture.pdf",
+        "page_count": 3,
     }
 
 

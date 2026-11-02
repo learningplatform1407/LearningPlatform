@@ -26,6 +26,10 @@ const SIGNED_URL_TTL_SECONDS = 8 * 60 * 60;
 interface PdfLessonViewProps {
   documentId: string;
   storagePath: string;
+  /** The server's own page count for this PDF, from `lecture_pdf`. Known
+   * before the file downloads, so the page label never has to read
+   * "page 1 of ?". */
+  pageCount: number;
 }
 
 /**
@@ -52,11 +56,17 @@ interface PdfLessonViewProps {
  * annotation plan) before shipping, the same way the no-pan-offset finding
  * above was confirmed against the real package rather than assumed.
  */
-export function PdfLessonView({ documentId, storagePath }: PdfLessonViewProps) {
+export function PdfLessonView({ documentId, storagePath, pageCount }: PdfLessonViewProps) {
   const queryClient = useQueryClient();
   const { height: windowHeight } = useWindowDimensions();
   const [pageNumber, setPageNumber] = useState(1);
-  const [numPages, setNumPages] = useState(0);
+  // Seeded from the server's count so the page label is correct immediately,
+  // then narrowed to the lower of the two once the native view reports its
+  // own: the ink endpoint refuses a write past the server's page_count, so
+  // navigating beyond it would offer a page that can be drawn on but not
+  // saved.
+  const [nativePages, setNativePages] = useState(0);
+  const numPages = nativePages > 0 ? Math.min(nativePages, pageCount) : pageCount;
   const [pageAspect, setPageAspect] = useState(1.4); // height / width, refined by onLoadComplete
   const [drawMode, setDrawMode] = useState(false);
   const [renderFailed, setRenderFailed] = useState(false);
@@ -122,15 +132,12 @@ export function PdfLessonView({ documentId, storagePath }: PdfLessonViewProps) {
           <Text style={styles.toolButtonText}>Previous</Text>
         </Pressable>
         <Text style={styles.pageLabel}>
-          Page {pageNumber} of {numPages || "?"}
+          Page {pageNumber} of {numPages}
         </Text>
         <Pressable
-          onPress={() => setPageNumber((n) => Math.min(numPages || n, n + 1))}
-          disabled={numPages > 0 && pageNumber >= numPages}
-          style={[
-            styles.toolButton,
-            numPages > 0 && pageNumber >= numPages && styles.toolButtonDisabled,
-          ]}
+          onPress={() => setPageNumber((n) => Math.min(numPages, n + 1))}
+          disabled={pageNumber >= numPages}
+          style={[styles.toolButton, pageNumber >= numPages && styles.toolButtonDisabled]}
           accessibilityRole="button"
         >
           <Text style={styles.toolButtonText}>Next</Text>
@@ -167,7 +174,7 @@ export function PdfLessonView({ documentId, storagePath }: PdfLessonViewProps) {
           // matching the ink overlay it's pinned under instead.
           style={drawMode ? [styles.pdf, { height: overlayHeight }] : [styles.pdf, styles.pdfFree]}
           onLoadComplete={(pages, _path, size) => {
-            setNumPages(pages);
+            setNativePages(pages);
             if (size.width > 0) setPageAspect(size.height / size.width);
           }}
           onPageChanged={(page) => setPageNumber(page)}

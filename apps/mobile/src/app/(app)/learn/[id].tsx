@@ -1071,7 +1071,7 @@ export default function LectureScreen() {
   const [notesOpen, setNotesOpen] = useState(false);
   const [activeTool, setActiveTool] = useState<ActiveTool>(null);
   // Defaults to "text" -- the PDF/Text toggle itself only renders when the
-  // lesson has a lecture_pdf attached (see the tab bar below).
+  // lesson has a *ready* lecture_pdf attached (see `readyLecturePdf` below).
   const [lessonViewMode, setLessonViewMode] = useState<"text" | "pdf">("text");
   const review = useClozeReview(id, activeTab === "review");
 
@@ -1080,6 +1080,12 @@ export default function LectureScreen() {
     queryFn: () => getApiClient().getDocument(id),
   });
   const version = data?.current_version;
+  // Only a PDF that actually processed is offered. `status` and
+  // `error_message` used to be plumbed through the whole stack and read by
+  // nobody, so a failed upload still rendered the toggle and dead-ended in
+  // "Failed to load the lecture PDF." The admin who uploaded it sees the
+  // real reason on the library screen instead, where the upload happens.
+  const readyLecturePdf = data?.lecture_pdf?.status === "ready" ? data.lecture_pdf : null;
 
   const { data: annotations = [] } = useQuery({
     queryKey: ["annotations", id],
@@ -1249,7 +1255,7 @@ export default function LectureScreen() {
           ))}
         </View>
 
-        {activeTab === "lesson" && data.lecture_pdf && (
+        {activeTab === "lesson" && readyLecturePdf && (
           <View style={styles.viewModeToggle}>
             <Pressable
               onPress={() => setLessonViewMode("pdf")}
@@ -1300,8 +1306,12 @@ export default function LectureScreen() {
         {activeTab === "quizzes" && <QuizzesTab documentId={id} />}
         {activeTab === "flashcards" && <FlashcardsTab documentId={id} />}
 
-        {activeTab === "lesson" && lessonViewMode === "pdf" && data.lecture_pdf && (
-          <PdfLessonView documentId={id} storagePath={data.lecture_pdf.storage_path} />
+        {activeTab === "lesson" && lessonViewMode === "pdf" && readyLecturePdf && (
+          <PdfLessonView
+            documentId={id}
+            storagePath={readyLecturePdf.storage_path}
+            pageCount={readyLecturePdf.page_count}
+          />
         )}
 
         {activeTab === "lesson" && lessonViewMode === "text" && (

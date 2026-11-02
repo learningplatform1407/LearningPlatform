@@ -39,9 +39,11 @@ const SIGNED_URL_TTL_SECONDS = 8 * 60 * 60;
 interface PdfLessonViewProps {
   documentId: string;
   storagePath: string;
+  /** The server's own page count for this PDF, from `lecture_pdf`. */
+  pageCount: number;
 }
 
-export function PdfLessonView({ documentId, storagePath }: PdfLessonViewProps) {
+export function PdfLessonView({ documentId, storagePath, pageCount }: PdfLessonViewProps) {
   const queryClient = useQueryClient();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -104,7 +106,12 @@ export function PdfLessonView({ documentId, storagePath }: PdfLessonViewProps) {
     };
   }, [signedUrl]);
 
-  const numPages = pdfDoc?.numPages ?? 0;
+  // The lower of what pdf.js parsed and what the server counted. The ink
+  // endpoint refuses a write past the server's page_count, so navigating
+  // past it would hand the user a page they can draw on but can't save. The
+  // two agree for any PDF both can open; this just makes the disagreement
+  // harmless instead of silently lossy.
+  const numPages = pdfDoc ? Math.min(pdfDoc.numPages, pageCount) : 0;
   const renderKey = `${pageNumber}@${scale}`;
   const loadFailed =
     (signedUrl !== undefined && failedUrl === signedUrl) || failedRender === renderKey;

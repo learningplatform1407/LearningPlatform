@@ -37,6 +37,7 @@ class LecturePdfResponse(BaseModel):
     status: str
     error_message: str | None
     storage_path: str
+    page_count: int
 
 
 class DocumentResponse(BaseModel):
