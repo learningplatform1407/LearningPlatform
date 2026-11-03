@@ -31,7 +31,7 @@ Everything else in the app works in Expo Go. For the PDF reader you need a **dev
 
 ```bash
 npx expo prebuild            # generates ios/ and android/ (gitignored)
-npx expo run:ios             # or: npx expo run:android
+npx expo run:android         # verified working
 ```
 
 `expo-dev-client` is a dependency so those builds get the dev launcher. Neither native module needs
@@ -40,8 +40,21 @@ New Architecture that React Native 0.88 requires.
 
 Re-run `npx expo prebuild --clean` after adding or upgrading any native dependency.
 
-See [`docs/architecture/lecture-pdf-ink.md`](../../docs/architecture/lecture-pdf-ink.md) §8 for what
-to verify on a real device the first time.
+Android also needs `ANDROID_HOME` exported and an SDK current enough to offer **API 37**, which Expo
+SDK 58's own modules require. See
+[`docs/architecture/lecture-pdf-ink.md`](../../docs/architecture/lecture-pdf-ink.md) §8.1 — four
+separate things sit between a successful `prebuild` and a rendered page, and that section lists all
+of them.
+
+### iOS has not been run
+
+`npx expo run:ios` has **never been executed** for this app. It needs **full Xcode** — if
+`xcode-select -p` prints `/Library/Developer/CommandLineTools`, then `xcodebuild` does not exist and
+the build cannot start, regardless of whether CocoaPods is installed.
+
+Everything in the PDF reader was verified on Android only. §8.3 of the design doc lists the four
+things known to differ on iOS (networking, overlay geometry, safe-area insets, Keychain-backed
+session storage), none of which have been exercised.
 
 ## Checks
 

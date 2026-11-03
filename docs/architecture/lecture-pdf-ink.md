@@ -173,7 +173,7 @@ Running or shipping it needs a custom dev client:
 ```bash
 cd apps/mobile
 npx expo prebuild        # generates ios/ and android/
-npx expo run:ios         # or: npx expo run:android
+npx expo run:android     # verified; iOS is untested -- see §8.3
 ```
 
 Both packages support the New Architecture, which RN 0.88 / Expo SDK 58 require —
@@ -214,9 +214,35 @@ own **measured** width (`onLayout`), because react-native-pdf does not expose th
 rendered page bounds to JS. Deriving it from window width minus an assumed parent padding looks
 equivalent and silently misaligns the ink as soon as that padding changes or the device rotates.
 
-Verified on an Android emulator: ink drawn on web renders in the right place inside the native view.
-That is the real test of the `[0, 1]` normalisation in §2 — two renderers, one storage format, no
+Verified on an Android emulator: ink drawn on web renders in the right place inside the native view,
+and ink drawn on the emulator renders in the right place on web. That round-trip in both directions
+is the real test of the `[0, 1]` normalisation in §2 — two renderers, one storage format, no
 conversion layer.
+
+### 8.3 iOS is unverified
+
+**Everything above was confirmed on Android only.** The reader has never been built or run on iOS,
+so treat this section as a checklist rather than a description.
+
+Building it needs **full Xcode**, not just the Command Line Tools — `xcode-select -p` pointing at
+`/Library/Developer/CommandLineTools` means `xcodebuild` does not exist and `expo run:ios` cannot
+work. CocoaPods is a separate prerequisite and is not sufficient on its own.
+
+Four things are known to differ, and none of them have been exercised:
+
+- **The `trustAllCerts` failure was diagnosed in `ReactNativeBlobUtilUtils.java`** — Android-specific
+  code. iOS has its own networking implementation, so that exception may not arise there at all. The
+  prop is set to `false` for both platforms regardless, because trusting every certificate is wrong
+  on either, but whether iOS _needed_ it is unknown.
+- **Overlay geometry** (§8.2) depends on what react-native-pdf's native view reports to
+  `onLoadComplete` and what the container measures via `onLayout`. The JS is shared; the native
+  view is not. Misalignment between ink and page is the thing to look for first.
+- **Safe-area insets.** `edgeToEdgeEnabled` is an Android Gradle property, so the specific mechanism
+  in HARDEN-9 does not apply — but nothing in `apps/mobile/src` handles insets at all, and a notch
+  or Dynamic Island makes iOS _more_ likely to clip the reader's top control row, not less.
+- **Session storage.** `LargeSecureStore` keeps its AES key in `expo-secure-store`, which is the iOS
+  Keychain rather than the Android Keystore. The pattern is cross-platform but has only run against
+  the Keystore.
 
 ## 9. Storage cleanup never fails the caller
 
