@@ -39,6 +39,11 @@ export default function LoginScreen() {
         style={styles.input}
         placeholder="Password"
         secureTextEntry
+        // Without this, Android's soft keyboard reports CapSentences for the
+        // field and capitalises the first character, so a password starting
+        // lowercase is submitted wrong and Supabase answers "Invalid login
+        // credentials". The email field above already sets it.
+        autoCapitalize="none"
         autoComplete="current-password"
         value={password}
         onChangeText={setPassword}

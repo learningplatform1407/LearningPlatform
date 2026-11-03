@@ -86,7 +86,13 @@ export function PdfLessonView({ documentId, storagePath, pageCount }: PdfLessonV
       const { data, error } = await supabase.storage
         .from("documents")
         .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
-      if (error) throw error;
+      if (error) {
+        // Same reasoning as onError below: the UI stays generic, but the
+        // Storage error (bucket policy, missing object, expired session) is
+        // the only thing that says which of those it was.
+        console.warn("[lecture-pdf] signed URL failed:", storagePath, error);
+        throw error;
+      }
       return data.signedUrl;
     },
     staleTime: Infinity,
@@ -165,6 +171,16 @@ export function PdfLessonView({ documentId, storagePath, pageCount }: PdfLessonV
           minScale={1}
           maxScale={3}
           fitPolicy={0}
+          // react-native-pdf defaults `trustAllCerts` to true, which routes
+          // the download through react-native-blob-util's
+          // getUnsafeOkHttpClient -- an all-trusting TrustManager plus a
+          // hostnameVerifier that returns true for every host. On Android
+          // that path throws outright ("Use of own trust manager but none
+          // defined") because the shared trust manager is never set, so the
+          // PDF simply never loads. Turning it off is the fix *and* the
+          // correct posture: this is a signed HTTPS URL to Supabase and its
+          // certificate should be verified normally.
+          trustAllCerts={false}
           scrollEnabled={!drawMode}
           enableDoubleTapZoom={!drawMode}
           horizontal={false}
@@ -180,8 +196,14 @@ export function PdfLessonView({ documentId, storagePath, pageCount }: PdfLessonV
           onPageChanged={(page) => setPageNumber(page)}
           // An empty handler here meant every native render failure showed
           // an empty box and no message -- urlError only covers minting the
-          // signed URL, not anything that happens after.
-          onError={() => setRenderFailed(true)}
+          // signed URL, not anything that happens after. The learner still
+          // gets a generic message, but the reason is logged rather than
+          // discarded: it comes from the native view and is the only
+          // description of what actually went wrong.
+          onError={(error) => {
+            console.warn("[lecture-pdf] native render failed:", error);
+            setRenderFailed(true);
+          }}
         />
         {drawMode && overlayWidth > 0 && (
           <View

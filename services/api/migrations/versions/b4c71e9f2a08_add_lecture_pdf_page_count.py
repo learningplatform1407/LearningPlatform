@@ -23,10 +23,23 @@ depends_on: str | Sequence[str] | None = None
 # nothing left to upgrade.
 #
 # server_default="1" exists so NOT NULL can be added without a rewrite on any
-# row predating the column. Every insert sets page_count explicitly from
-# `validate_pdf` (see upsert_lecture_pdf), so the default is never the value
-# stored for a real upload. It stays on the column rather than being dropped
-# afterwards, so the same reasoning holds for any future backfill.
+# row predating the column.
+#
+# Every *future* insert sets page_count explicitly from `validate_pdf` (see
+# upsert_lecture_pdf) -- but rows predating this migration keep the default,
+# and 1 is wrong for all but a single-page PDF. Not hypothetical: the one
+# lecture_pdfs row in dev was a 9-page document left claiming 1, which
+# silently clamped both clients to "Page 1 of 1" and made upsert_ink reject
+# pages 2-9 as out of range.
+#
+# The true count can only come from the PDF itself, which means Storage I/O,
+# which does not belong in a migration. So pre-existing rows need a one-off
+# backfill that downloads each `storage_path` and writes `validate_pdf`'s
+# result. Dev has been backfilled; any other environment that ran this
+# migration needs the same before its lecture PDFs behave.
+#
+# A nullable column would have represented "unknown" honestly rather than
+# asserting a wrong 1 -- see docs/architecture/lecture-pdf-ink.md §5.
 #
 # Note: autogenerate again proposed alter_column('document_versions',
 # 'extracted_content', JSONB -> JSON) and dropping ix_feed_posts_author_id /

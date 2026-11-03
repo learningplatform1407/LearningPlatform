@@ -181,10 +181,42 @@ Both packages support the New Architecture, which RN 0.88 / Expo SDK 58 require 
 rather than assumed. Neither needs an Expo config plugin; standard autolinking picks them up during
 prebuild.
 
-The overlay geometry in draw mode is computed from `onLoadComplete`'s reported page size and the
-container's own measured width, because react-native-pdf does not expose the native view's actual
-rendered page bounds to JS. **That arithmetic has only been reasoned about, not observed on a
-device** — it is the first thing to check in a dev client.
+### 8.1 What `prebuild` alone does not get you
+
+Three things sit between "prebuild succeeded" and a rendered page. All found the hard way.
+
+**`trustAllCerts={false}` is mandatory, not a preference.** `react-native-pdf` defaults
+`trustAllCerts` to `true` (`index.js:103`) and forwards it as `trusty` to react-native-blob-util,
+which routes the download through `getUnsafeOkHttpClient`. That function throws outright —
+`IllegalStateException: Use of own trust manager but none defined` — because its shared trust
+manager is never initialised. **Every HTTPS PDF fails to load under the default prop.** Turning it
+off is also the correct posture: that path installs an all-trusting `TrustManager` plus a
+`hostnameVerifier` returning `true` for every host, defeating TLS on a signed Supabase URL.
+
+**`ANDROID_HOME` must be set, and the SDK must be current.** Gradle reports `SDK location not found`
+without it, and `spawn emulator ENOENT` has the same cause. Separately, Expo SDK 58's own modules
+require **`compileSdk 37`**: `checkDebugAarMetadata` fails naming 20+ dependencies
+(`expo.modules.router`, `expo.modules.image`, AndroidX Compose…) if you compile against 36. Pinning
+lower through `expo-build-properties` does not work — 37 is a floor, not a default worth overriding.
+An Android Studio more than a release or two old will not list API 37 at all, which makes it look
+preview-only when it is not.
+
+**`EXPO_PUBLIC_API_URL` must be reachable from the device.** On a physical phone that is the host's
+LAN IP; on an emulator, `10.0.2.2` is the host alias. `localhost` means the device itself. The
+backend must also bind `--host 0.0.0.0`, as uvicorn's default `127.0.0.1` is unreachable either way.
+Login works regardless — it talks to Supabase directly — so a wrong API URL presents as "logged in,
+every lesson fails", which points away from the real cause.
+
+### 8.2 Overlay geometry
+
+The overlay size in draw mode comes from `onLoadComplete`'s reported page size and the container's
+own **measured** width (`onLayout`), because react-native-pdf does not expose the native view's
+rendered page bounds to JS. Deriving it from window width minus an assumed parent padding looks
+equivalent and silently misaligns the ink as soon as that padding changes or the device rotates.
+
+Verified on an Android emulator: ink drawn on web renders in the right place inside the native view.
+That is the real test of the `[0, 1]` normalisation in §2 — two renderers, one storage format, no
+conversion layer.
 
 ## 9. Storage cleanup never fails the caller
 
