@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -6,19 +7,47 @@ from typing import Any
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from app.annotations.models import DocumentAnnotation
 from app.chapters.models import Chapter
 from app.common.errors import ApiError
 from app.documents.constants import ALLOWED_MIME_TYPES, MAX_UPLOAD_BYTES
-from app.documents.extraction import ExtractedBlock, ExtractionError, extract_pdf
-from app.documents.models import Document, DocumentVersion, LessonView
+from app.documents.diffing import match_blocks_by_text
+from app.documents.extraction import ExtractedBlock, ExtractionError, extract_pdf, validate_pdf
+from app.documents.models import Document, DocumentVersion, LecturePdf, LessonView
 from app.documents.schemas import (
     ChapterSummary,
     DocumentCreateRequest,
+    ReplaceLectureTextRequest,
     SubChapterSummary,
     UploadUrlRequest,
+    UpsertLecturePdfRequest,
 )
-from app.documents.storage import create_signed_upload_url, download_object, upload_object
+from app.documents.storage import (
+    create_signed_upload_url,
+    delete_object,
+    download_object,
+    upload_object,
+)
 from app.sub_chapters.models import SubChapter
+
+logger = logging.getLogger(__name__)
+
+
+def _discard_object(path: str) -> None:
+    """Best-effort Storage delete. Deliberately broad, for the same reason
+    app/feed/service.py::_discard_image is: `delete_object` raises
+    RuntimeError on misconfiguration and httpx ConnectError/ReadTimeout from
+    the transport, none of which subclass StorageError. An earlier
+    `suppress(StorageError)` here let all three escape -- and both callers
+    run *after* their commit, so an unreachable or unconfigured Storage
+    500'd a request whose database work had already succeeded. Enumerating
+    failure types means re-deriving httpx's hierarchy correctly forever; the
+    contract is simply "never fail the caller".
+    """
+    try:
+        delete_object(path)
+    except Exception:
+        logger.warning("Failed to delete object %s", path, exc_info=True)
 
 
 def create_upload_url(data: UploadUrlRequest) -> tuple[str, str]:
@@ -114,6 +143,139 @@ def _persist_images(
         upload_object(image_path, block["image_bytes"], f"image/{ext}")
         blocks.append({"type": "image", "page": block["page"], "image_path": image_path})
     return blocks
+
+
+def _delete_version_storage(version: DocumentVersion) -> None:
+    """Best-effort cleanup of a version's Storage objects (its own PDF plus
+    any extracted images) -- failures are non-fatal, same posture as
+    `delete_object`'s own docstring: an orphaned object is benign, whereas
+    failing a request the database already committed is not."""
+    paths = [version.storage_path]
+    for block in (version.extracted_content or {}).get("blocks", []):
+        if block.get("type") == "image" and block.get("image_path"):
+            paths.append(block["image_path"])
+    for path in paths:
+        _discard_object(path)
+
+
+def replace_lecture_text(
+    db: Session, document_id: uuid.UUID, data: ReplaceLectureTextRequest
+) -> Document:
+    """Replaces a lesson's admin-authored lecture text (the block-extracted
+    content Text mode renders) with a new PDF -- a routine, expected-to-
+    happen-often operation, unlike `upsert_lecture_pdf` below.
+
+    Highlights/margin-notes on text blocks whose content didn't change
+    survive the replace, even if their position shifted -- everything else
+    (changed blocks, anything on an image block, flashcards/cloze cards/
+    question-bank questions) is left exactly as the decisions in this
+    feature's plan settled: dropped for annotations, untouched entirely for
+    flashcards/cloze/questions, which stay keyed on `document_id` alone.
+    """
+    if data.size_bytes > MAX_UPLOAD_BYTES:
+        raise ApiError(422, "file_too_large", "File exceeds the 50MB upload limit")
+
+    document = db.get(Document, document_id)
+    if document is None or document.current_version_id is None:
+        raise ApiError(404, "not_found", "Document not found")
+    old_version = document.current_version
+    if old_version is None:  # mirrors current_version_id's own null-check above for mypy
+        raise ApiError(404, "not_found", "Document not found")
+
+    new_version = DocumentVersion(
+        document_id=document.id,
+        storage_path=data.storage_path,
+        mime_type=data.mime_type,
+        size_bytes=data.size_bytes,
+        checksum=data.checksum,
+        status="processing",
+    )
+    db.add(new_version)
+    db.flush()
+
+    _process_version(db, new_version)
+
+    if new_version.status != "ready":
+        # A bad replace must not touch the old, working content.
+        error_message = new_version.error_message
+        db.rollback()
+        raise ApiError(422, "extraction_failed", error_message or "Could not process the new PDF")
+
+    old_blocks = (old_version.extracted_content or {}).get("blocks", [])
+    new_blocks = (new_version.extracted_content or {}).get("blocks", [])
+    for old_index, new_index in match_blocks_by_text(old_blocks, new_blocks):
+        db.execute(
+            update(DocumentAnnotation)
+            .where(
+                DocumentAnnotation.document_version_id == old_version.id,
+                DocumentAnnotation.block_index == old_index,
+            )
+            .values(document_version_id=new_version.id, block_index=new_index)
+        )
+
+    document.current_version_id = new_version.id
+    db.commit()
+
+    # Everything left pointing at old_version (annotations on changed/image
+    # blocks that weren't reassigned above) cascades away with it.
+    _delete_version_storage(old_version)
+    db.delete(old_version)
+    db.commit()
+
+    db.refresh(document)
+    return document
+
+
+def upsert_lecture_pdf(
+    db: Session, document_id: uuid.UUID, data: UpsertLecturePdfRequest
+) -> LecturePdf:
+    """Attaches or replaces a lesson's lecture PDF (the reference book
+    rendered client-side for ink annotation) -- a rare, "new edition of the
+    book" event, always a full wipe-and-recreate with no content matching
+    at all: replacing it drops every user's ink on this lesson
+    unconditionally, by design."""
+    if data.size_bytes > MAX_UPLOAD_BYTES:
+        raise ApiError(422, "file_too_large", "File exceeds the 50MB upload limit")
+
+    document = db.get(Document, document_id)
+    if document is None:
+        raise ApiError(404, "not_found", "Document not found")
+
+    existing = db.scalar(select(LecturePdf).where(LecturePdf.document_id == document_id))
+    if existing is not None:
+        _discard_object(existing.storage_path)
+        # This cascades away every user's LessonPageInk for this lesson.
+        db.delete(existing)
+        db.flush()
+
+    lecture_pdf = LecturePdf(
+        document_id=document.id,
+        storage_path=data.storage_path,
+        mime_type=data.mime_type,
+        size_bytes=data.size_bytes,
+        checksum=data.checksum,
+        status="processing",
+    )
+    db.add(lecture_pdf)
+    db.flush()
+
+    try:
+        pdf_bytes = download_object(lecture_pdf.storage_path)
+        actual_checksum = hashlib.sha256(pdf_bytes).hexdigest()
+        if actual_checksum != lecture_pdf.checksum:
+            raise ExtractionError("Checksum mismatch — upload may be corrupted")
+        lecture_pdf.page_count = validate_pdf(pdf_bytes)
+        lecture_pdf.status = "ready"
+    except ExtractionError as exc:
+        lecture_pdf.status = "failed"
+        lecture_pdf.error_message = str(exc)
+    except Exception as exc:  # any validation failure should land as "failed", not a 500
+        lecture_pdf.status = "failed"
+        lecture_pdf.error_message = f"Unexpected error during processing: {exc}"
+
+    db.commit()
+    db.refresh(lecture_pdf)
+    return lecture_pdf
 
 
 def list_documents(

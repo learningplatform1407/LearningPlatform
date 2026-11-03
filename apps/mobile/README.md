@@ -1,56 +1,74 @@
-# Welcome to your Expo app 👋
+# @lp/mobile
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+The Expo (React Native) client. See [`/README.md`](../../README.md) for the monorepo and
+[`/PLAN.md`](../../PLAN.md) for the architecture.
 
-## Get started
+## Prerequisites
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+Install workspace dependencies from the **repo root**, not from here — this is a pnpm workspace and
+the app depends on `@lp/contracts`, `@lp/validation` and friends via `workspace:*`:
 
 ```bash
-npm run reset-project
+pnpm install          # from the repo root
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Copy `.env.example` to `.env` and fill in the Supabase values.
 
-### Other setup steps
+## Running
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```bash
+pnpm dev:mobile       # from the repo root, or `pnpm start` from here
+```
 
-## Learn more
+### Expo Go is not enough
 
-To learn more about developing your project with Expo, look at the following resources:
+The lesson reader's PDF mode depends on two **bare native modules**, `react-native-pdf` and
+`react-native-blob-util`. [Expo Go](https://expo.dev/go) ships a fixed set of native modules and
+cannot load them, so opening a lesson that has a lecture PDF fails at the native boundary there — it
+does not degrade gracefully.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Everything else in the app works in Expo Go. For the PDF reader you need a **development build**:
 
-## Join the community
+```bash
+npx expo prebuild            # generates ios/ and android/ (gitignored)
+npx expo run:android         # verified working
+```
 
-Join our community of developers creating universal apps.
+`expo-dev-client` is a dependency so those builds get the dev launcher. Neither native module needs
+an Expo config plugin — standard autolinking picks both up during `prebuild` — and both support the
+New Architecture that React Native 0.88 requires.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Re-run `npx expo prebuild --clean` after adding or upgrading any native dependency.
+
+Android also needs `ANDROID_HOME` exported and an SDK current enough to offer **API 37**, which Expo
+SDK 58's own modules require. See
+[`docs/architecture/lecture-pdf-ink.md`](../../docs/architecture/lecture-pdf-ink.md) §8.1 — four
+separate things sit between a successful `prebuild` and a rendered page, and that section lists all
+of them.
+
+### iOS has not been run
+
+`npx expo run:ios` has **never been executed** for this app. It needs **full Xcode** — if
+`xcode-select -p` prints `/Library/Developer/CommandLineTools`, then `xcodebuild` does not exist and
+the build cannot start, regardless of whether CocoaPods is installed.
+
+Everything in the PDF reader was verified on Android only. §8.3 of the design doc lists the four
+things known to differ on iOS (networking, overlay geometry, safe-area insets, Keychain-backed
+session storage), none of which have been exercised.
+
+## Checks
+
+Run from the repo root to cover every workspace, or from here for this app alone:
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test
+```
+
+## Layout
+
+```text
+src/app/      expo-router routes (file-based); (app)/ is the authenticated shell
+src/lib/      shared clients, contexts, theme, and reusable components
+```

@@ -23,6 +23,14 @@ the system grows.
   model and why not per-user, why `attempt`-is-null-or-reveal is the whole
   privacy story, why the answer endpoint carries no date, and why a daily
   answer stays out of `question_progress`.
+- [`lecture-pdf-ink.md`](./lecture-pdf-ink.md) — the official reference PDF a
+  lesson carries alongside its lecture text, and per-learner freehand ink on
+  it. Records why it is a separate table rather than a `DocumentVersion`
+  variant, why replacing the PDF wipes all ink while replacing the lecture
+  text carries annotations forward, why the `page_number` bound is enforced on
+  write but not on read, why mobile has separate read and draw modes when web
+  does not, and that mobile needs a dev client because Expo Go cannot load
+  `react-native-pdf`.
 - [`password-reset.md`](./password-reset.md) — email recovery and
   change-password, both pure Supabase Auth with no backend involvement.
   Records why the form deliberately cannot say whether an address is

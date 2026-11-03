@@ -55,6 +55,36 @@ class DocumentVersion(Base):
     )
 
 
+class LecturePdf(Base):
+    """The lesson's reference-book PDF, rendered client-side (pdf.js on web,
+    react-native-pdf on mobile) and drawn on directly -- unlike
+    `DocumentVersion`, which holds the admin-authored lecture text that
+    `extract_pdf` turns into blocks. One per document (enforced by the
+    unique FK): attaching or replacing it is a full wipe-and-recreate, never
+    a partial update -- see app/documents/service.py::upsert_lecture_pdf.
+    No `extracted_content` here; this artifact is never text-extracted."""
+
+    __tablename__ = "lecture_pdfs"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), unique=True
+    )
+    storage_path: Mapped[str] = mapped_column(String)
+    mime_type: Mapped[str] = mapped_column(String)
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    checksum: Mapped[str] = mapped_column(String)
+    # Counted by `validate_pdf` at upload -- the only page metadata stored.
+    # It bounds which `page_number` may carry ink (without it any integer
+    # could, negatives and 2^31 included) and lets a client label "page 1 of
+    # N" before the PDF has finished downloading. Page rendering and page
+    # indexing still belong entirely to the clients.
+    page_count: Mapped[int] = mapped_column(Integer, server_default="1")
+    status: Mapped[str] = mapped_column(String, default="processing")
+    error_message: Mapped[str | None] = mapped_column(String, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class LessonView(Base):
     """Tracks the last time a user opened a lesson (document) — one row per
     (user, document), upserted on each view. Powers "continue where you left

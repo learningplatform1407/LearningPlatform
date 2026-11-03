@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
@@ -9,14 +10,17 @@ from app.cloze.service import ensure_cloze_cards
 from app.common.errors import ApiError
 from app.db.session import get_db
 from app.documents.dependencies import require_admin
-from app.documents.models import Document
+from app.documents.models import Document, LecturePdf
 from app.documents.schemas import (
     DocumentCreateRequest,
     DocumentResponse,
     DocumentSummaryResponse,
     DocumentVersionResponse,
+    LecturePdfResponse,
+    ReplaceLectureTextRequest,
     UploadUrlRequest,
     UploadUrlResponse,
+    UpsertLecturePdfRequest,
 )
 from app.documents.service import (
     create_upload_url,
@@ -25,6 +29,8 @@ from app.documents.service import (
     list_documents,
     record_lesson_view,
     register_document,
+    replace_lecture_text,
+    upsert_lecture_pdf,
 )
 from app.users.service import get_or_create_profile
 
@@ -41,6 +47,7 @@ def _to_summary(document: Document) -> DocumentSummaryResponse:
 
 
 def _to_document_response(db: Session, document: Document) -> DocumentResponse:
+    lecture_pdf = db.scalar(select(LecturePdf).where(LecturePdf.document_id == document.id))
     return DocumentResponse(
         id=document.id,
         title=document.title,
@@ -51,6 +58,7 @@ def _to_document_response(db: Session, document: Document) -> DocumentResponse:
         if document.current_version
         else None,
         sub_chapter=get_sub_chapter_summary(db, document.sub_chapter_id),
+        lecture_pdf=LecturePdfResponse.model_validate(lecture_pdf) if lecture_pdf else None,
     )
 
 
@@ -113,6 +121,31 @@ def read_document(
     get_or_create_profile(db, user)
     record_lesson_view(db, user.id, document_id)
     return _to_document_response(db, document)
+
+
+@router.post("/{document_id}/replace", response_model=DocumentResponse)
+def replace_lecture_text_route(
+    document_id: UUID,
+    data: ReplaceLectureTextRequest,
+    _admin: AuthenticatedUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> DocumentResponse:
+    # Deliberately no ensure_cloze_cards call here, unlike create_document --
+    # flashcards/cloze cards/question-bank questions stay keyed on
+    # document_id alone and are left untouched by a lecture-text replace.
+    document = replace_lecture_text(db, document_id, data)
+    return _to_document_response(db, document)
+
+
+@router.put("/{document_id}/pdf", response_model=LecturePdfResponse)
+def upsert_lecture_pdf_route(
+    document_id: UUID,
+    data: UpsertLecturePdfRequest,
+    _admin: AuthenticatedUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> LecturePdfResponse:
+    lecture_pdf = upsert_lecture_pdf(db, document_id, data)
+    return LecturePdfResponse.model_validate(lecture_pdf)
 
 
 # GET /{document_id}/flashcards now lives in app/flashcards/router.py, which

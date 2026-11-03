@@ -12,3 +12,19 @@ process.env.EXPO_PUBLIC_API_URL ??= "http://localhost:8000";
 jest.mock("@react-native-async-storage/async-storage", () =>
   require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
 );
+
+// react-native-pdf (and its native-code dependency react-native-blob-util)
+// have no Jest-compatible build -- requiring the real module throws
+// ("the native module is not available") the instant anything imports it.
+// Stub it with a plain View so pdf-lesson-view.tsx can be imported under
+// Jest; no test renders real PDF content through it, only the surrounding
+// toggle/mode-switching logic.
+jest.mock("react-native-pdf", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+  const MockPdf = React.forwardRef((props, ref) =>
+    React.createElement(View, { ...props, ref, testID: "mock-pdf" }),
+  );
+  MockPdf.displayName = "Pdf";
+  return { __esModule: true, default: MockPdf };
+});

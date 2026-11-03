@@ -63,6 +63,18 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+// PdfLessonView drives pdfjs-dist (worker, canvas rendering) which has no
+// place in jsdom -- stubbed here so these tests can verify the page's mode
+// toggle wiring (which component renders, with which props) without
+// exercising real PDF rendering at all.
+vi.mock("./pdf-lesson-view", () => ({
+  PdfLessonView: ({ documentId, storagePath }: { documentId: string; storagePath: string }) => (
+    <div data-testid="pdf-lesson-view">
+      {documentId}:{storagePath}
+    </div>
+  ),
+}));
+
 function readyDocumentWithParagraph(text: string) {
   return {
     id: "d1",
@@ -170,6 +182,65 @@ describe("LecturePage", () => {
     expect(await screen.findByRole("heading", { name: "Introduction" })).toBeInTheDocument();
     expect(screen.getByText("This is the body text.")).toBeInTheDocument();
   });
+
+  test("the PDF/Text toggle does not appear when the lesson has no lecture PDF", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+    renderPage();
+
+    expect(await screen.findByText("Hello world")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Lesson view mode" })).not.toBeInTheDocument();
+  });
+
+  test("switching to PDF mode renders the lecture PDF and hides the text content", async () => {
+    getDocument.mockResolvedValue({
+      ...readyDocumentWithParagraph("Hello world"),
+      lecture_pdf: {
+        status: "ready",
+        error_message: null,
+        storage_path: "lectures/book.pdf",
+        page_count: 12,
+      },
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Hello world")).toBeInTheDocument();
+    const toggle = screen.getByRole("group", { name: "Lesson view mode" });
+
+    fireEvent.click(within(toggle).getByRole("button", { name: "PDF" }));
+
+    expect(await screen.findByTestId("pdf-lesson-view")).toHaveTextContent("d1:lectures/book.pdf");
+    expect(screen.queryByText("Hello world")).not.toBeInTheDocument();
+
+    fireEvent.click(within(toggle).getByRole("button", { name: "Text" }));
+    expect(await screen.findByText("Hello world")).toBeInTheDocument();
+    expect(screen.queryByTestId("pdf-lesson-view")).not.toBeInTheDocument();
+  });
+
+  test.each(["failed", "processing"] as const)(
+    "the PDF/Text toggle does not appear when the lecture PDF is %s",
+    async (status) => {
+      getDocument.mockResolvedValue({
+        ...readyDocumentWithParagraph("Hello world"),
+        lecture_pdf: {
+          status,
+          error_message: status === "failed" ? "Checksum mismatch" : null,
+          storage_path: "lectures/book.pdf",
+          page_count: 1,
+        },
+      });
+
+      renderPage();
+
+      // Offering the toggle for a PDF that never processed dead-ends the
+      // learner in "Failed to load the lecture PDF." The text lesson is
+      // still perfectly readable, so the PDF simply isn't offered.
+      expect(await screen.findByText("Hello world")).toBeInTheDocument();
+      expect(screen.queryByRole("group", { name: "Lesson view mode" })).not.toBeInTheDocument();
+      expect(screen.queryByTestId("pdf-lesson-view")).not.toBeInTheDocument();
+    },
+  );
 
   test("shows a processing message while still processing", async () => {
     getDocument.mockResolvedValue({

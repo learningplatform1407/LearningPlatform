@@ -49,6 +49,22 @@ class ExtractionError(Exception):
     pass
 
 
+def validate_pdf(pdf_bytes: bytes) -> int:
+    """Confirms `pdf_bytes` is an openable PDF with at least one page, for
+    the lecture-PDF pipeline, which never runs text extraction -- a lecture
+    PDF is a reference document to render and draw on, not to read as
+    blocks, so a scanned/image-only PDF (which `extract_pdf` rejects) is
+    perfectly valid here. Returns the page count."""
+    try:
+        doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+    except Exception as exc:
+        raise ExtractionError(f"Could not open PDF: {exc}") from exc
+    page_count: int = doc.page_count
+    if page_count == 0:
+        raise ExtractionError("PDF has no pages")
+    return page_count
+
+
 def extract_pdf(pdf_bytes: bytes) -> list[ExtractedBlock]:
     try:
         doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")

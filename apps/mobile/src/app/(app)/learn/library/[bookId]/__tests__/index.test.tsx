@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import * as DocumentPicker from "expo-document-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { TextInput } from "react-native";
@@ -14,6 +14,8 @@ const mockCreateSubChapter = jest.fn();
 const mockListDocuments = jest.fn();
 const mockRequestDocumentUploadUrl = jest.fn();
 const mockCreateDocument = jest.fn();
+const mockReplaceLectureText = jest.fn();
+const mockUpsertLecturePdf = jest.fn();
 const mockUploadToSignedUrl = jest.fn();
 const mockGetQuestionBankTree = jest.fn();
 
@@ -29,6 +31,8 @@ jest.mock("@/lib/api-client", () => ({
     listDocuments: mockListDocuments,
     requestDocumentUploadUrl: mockRequestDocumentUploadUrl,
     createDocument: mockCreateDocument,
+    replaceLectureText: mockReplaceLectureText,
+    upsertLecturePdf: mockUpsertLecturePdf,
     getQuestionBankTree: mockGetQuestionBankTree,
   }),
 }));
@@ -143,6 +147,8 @@ beforeEach(() => {
   mockListDocuments.mockReset().mockResolvedValue([]);
   mockRequestDocumentUploadUrl.mockReset();
   mockCreateDocument.mockReset();
+  mockReplaceLectureText.mockReset();
+  mockUpsertLecturePdf.mockReset();
   mockUploadToSignedUrl.mockReset();
   mockGetQuestionBankTree.mockReset().mockResolvedValue(EMPTY_TREE);
   (DocumentPicker.getDocumentAsync as jest.Mock).mockReset();
@@ -313,6 +319,78 @@ describe("BookScreen (real book)", () => {
     expect(createCall.checksum).toBe("a".repeat(64));
   });
 
+  test("an admin can replace an existing lesson's lecture text", async () => {
+    mockGetMe.mockResolvedValue(ADMIN_ME);
+    mockListDocuments.mockResolvedValue([
+      { id: "d1", title: "Existing Lesson", created_at: "2026-01-01", status: "ready" },
+    ]);
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+      canceled: false,
+      assets: [
+        { uri: "file:///text.pdf", name: "text.pdf", size: 1234, mimeType: "application/pdf" },
+      ],
+    });
+    mockRequestDocumentUploadUrl.mockResolvedValue({ storage_path: "new.pdf", token: "tok" });
+    mockUploadToSignedUrl.mockResolvedValue({ data: {}, error: null });
+    mockReplaceLectureText.mockResolvedValue({ id: "d1" });
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      blob: () => Promise.resolve({ arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)) }),
+    }) as unknown as typeof fetch;
+
+    renderScreen();
+    fireEvent.press(await screen.findByText("Intro to Systems"));
+    fireEvent.press(await screen.findByText("Sub A"));
+    await screen.findByText("Existing Lesson");
+
+    const controls = within(screen.getByTestId("lesson-admin-controls-d1"));
+    fireEvent.press(controls.getByTestId("lesson-text-file-picker-d1"));
+    await controls.findByText("text.pdf");
+    fireEvent.press(controls.getByText("Replace"));
+
+    await waitFor(() => expect(mockReplaceLectureText).toHaveBeenCalledTimes(1));
+    expect(mockReplaceLectureText.mock.calls[0]![0]).toBe("d1");
+  });
+
+  test("replacing a lesson's lecture PDF requires a second confirmation before calling the API", async () => {
+    mockGetMe.mockResolvedValue(ADMIN_ME);
+    mockListDocuments.mockResolvedValue([
+      { id: "d1", title: "Existing Lesson", created_at: "2026-01-01", status: "ready" },
+    ]);
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+      canceled: false,
+      assets: [
+        { uri: "file:///book.pdf", name: "book.pdf", size: 1234, mimeType: "application/pdf" },
+      ],
+    });
+    mockRequestDocumentUploadUrl.mockResolvedValue({ storage_path: "book.pdf", token: "tok" });
+    mockUploadToSignedUrl.mockResolvedValue({ data: {}, error: null });
+    mockUpsertLecturePdf.mockResolvedValue({
+      status: "ready",
+      error_message: null,
+      storage_path: "book.pdf",
+    });
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      blob: () => Promise.resolve({ arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)) }),
+    }) as unknown as typeof fetch;
+
+    renderScreen();
+    fireEvent.press(await screen.findByText("Intro to Systems"));
+    fireEvent.press(await screen.findByText("Sub A"));
+    await screen.findByText("Existing Lesson");
+
+    const controls = within(screen.getByTestId("lesson-admin-controls-d1"));
+    fireEvent.press(controls.getByTestId("lesson-pdf-file-picker-d1"));
+    await controls.findByText("book.pdf");
+
+    fireEvent.press(controls.getByRole("button", { name: "Upload" }));
+    expect(mockUpsertLecturePdf).not.toHaveBeenCalled();
+    expect(await controls.findByText(/permanently wipes/)).toBeTruthy();
+
+    fireEvent.press(controls.getByText("Yes, replace and wipe all ink"));
+    await waitFor(() => expect(mockUpsertLecturePdf).toHaveBeenCalledTimes(1));
+    expect(mockUpsertLecturePdf.mock.calls[0]![0]).toBe("d1");
+  });
+
   test("rejects a non-PDF file before calling the API", async () => {
     mockGetMe.mockResolvedValue(ADMIN_ME);
     (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
@@ -462,9 +540,9 @@ describe("BookScreen (Uncategorized)", () => {
     expect(mockListChapters).not.toHaveBeenCalled();
 
     fireEvent.changeText(screen.getByTestId("lesson-title-input"), "Another loose lesson");
-    fireEvent.press(screen.getByText("Choose PDF file"));
+    fireEvent.press(screen.getByTestId("new-lesson-file-picker"));
     await screen.findByText("lesson.pdf");
-    fireEvent.press(screen.getByRole("button", { name: "Upload" }));
+    fireEvent.press(screen.getByTestId("new-lesson-upload-button"));
 
     await waitFor(() => expect(mockCreateDocument).toHaveBeenCalledTimes(1));
     expect(mockCreateDocument.mock.calls[0]![0].sub_chapter_id).toBeUndefined();

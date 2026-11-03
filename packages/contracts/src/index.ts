@@ -42,6 +42,9 @@ import type {
   questionImportErrorSchema,
   questionImportRequestSchema,
   questionImportResultSchema,
+  lecturePdfResponseSchema,
+  lessonPageInkResponseSchema,
+  lessonPageInkUpdateRequestSchema,
   meResponseSchema,
   notebookEntryCreateRequestSchema,
   notebookEntryResponseSchema,
@@ -53,6 +56,7 @@ import type {
   questionResponseSchema,
   questionUpdateRequestSchema,
   recentLessonResponseSchema,
+  replaceLectureTextRequestSchema,
   reviewRatingSchema,
   reviewSummaryBookSchema,
   reviewSummaryChapterSchema,
@@ -66,6 +70,7 @@ import type {
   tagResponseSchema,
   uploadUrlRequestSchema,
   uploadUrlResponseSchema,
+  upsertLecturePdfRequestSchema,
 } from "@lp/validation";
 
 export type AccountSettings = z.infer<typeof accountSettingsSchema>;
@@ -80,6 +85,11 @@ export type DocumentSummaryResponse = z.infer<typeof documentSummaryResponseSche
 export type UploadUrlRequest = z.infer<typeof uploadUrlRequestSchema>;
 export type UploadUrlResponse = z.infer<typeof uploadUrlResponseSchema>;
 export type DocumentCreateRequest = z.infer<typeof documentCreateRequestSchema>;
+export type LecturePdf = z.infer<typeof lecturePdfResponseSchema>;
+export type ReplaceLectureTextRequest = z.infer<typeof replaceLectureTextRequestSchema>;
+export type UpsertLecturePdfRequest = z.infer<typeof upsertLecturePdfRequestSchema>;
+export type LessonPageInk = z.infer<typeof lessonPageInkResponseSchema>;
+export type LessonPageInkUpdateRequest = z.infer<typeof lessonPageInkUpdateRequestSchema>;
 export type Annotation = z.infer<typeof annotationResponseSchema>;
 export type AnnotationCreateRequest = z.infer<typeof annotationCreateRequestSchema>;
 export type Book = z.infer<typeof bookResponseSchema>;

@@ -47,7 +47,7 @@ test("does not emit a stroke for a single tap with no drag", () => {
   expect(onChange).not.toHaveBeenCalled();
 });
 
-test("Undo last stroke removes only the most recent stroke", () => {
+test("Undo has nothing to undo until a stroke or erase happens in this session", () => {
   const onChange = jest.fn();
   const strokes: Stroke[] = [
     {
@@ -58,20 +58,136 @@ test("Undo last stroke removes only the most recent stroke", () => {
         { x: 0.1, y: 0.1 },
       ],
     },
+  ];
+  render(<DrawingCanvas strokes={strokes} onChange={onChange} />);
+
+  expect(screen.getByRole("button", { name: "Undo" }).props.accessibilityState?.disabled).toBe(
+    true,
+  );
+});
+
+test("Undo reverts the most recently drawn stroke", () => {
+  const onChange = jest.fn();
+  const existing: Stroke[] = [
     {
-      color: "#fff",
+      color: "#000",
       width: 0.01,
       points: [
-        { x: 0.2, y: 0.2 },
-        { x: 0.3, y: 0.3 },
+        { x: 0, y: 0 },
+        { x: 0.1, y: 0.1 },
+      ],
+    },
+  ];
+  render(<DrawingCanvas strokes={existing} onChange={onChange} />);
+
+  const canvas = screen.getByLabelText("Drawing canvas");
+  fireEvent(canvas, "layout", layoutEvent(400, 300));
+  fireEvent(canvas, "responderGrant", { nativeEvent: { locationX: 40, locationY: 30 } });
+  fireEvent(canvas, "responderMove", { nativeEvent: { locationX: 80, locationY: 60 } });
+  fireEvent(canvas, "responderRelease", { nativeEvent: { locationX: 80, locationY: 60 } });
+  expect(onChange).toHaveBeenCalledTimes(1);
+  const [afterDraw] = onChange.mock.calls[0] as [Stroke[]];
+  expect(afterDraw).toHaveLength(2);
+
+  fireEvent.press(screen.getByText("Undo"));
+  expect(onChange).toHaveBeenCalledTimes(2);
+  expect(onChange.mock.calls[1]![0]).toEqual(existing);
+});
+
+test("changing pageKey drops undo history so Undo can't resurrect another page's ink", () => {
+  const onChange = jest.fn();
+  const pageOneInk: Stroke[] = [
+    {
+      color: "#000",
+      width: 0.01,
+      points: [
+        { x: 0, y: 0 },
+        { x: 0.1, y: 0.1 },
+      ],
+    },
+  ];
+  const { rerender } = render(
+    <DrawingCanvas strokes={pageOneInk} onChange={onChange} width={400} height={300} pageKey={1} />,
+  );
+
+  // Draw on page 1, which pushes page 1's prior ink onto the undo stack.
+  const canvas = screen.getByLabelText("Drawing canvas");
+  fireEvent(canvas, "responderGrant", { nativeEvent: { locationX: 40, locationY: 30 } });
+  fireEvent(canvas, "responderMove", { nativeEvent: { locationX: 80, locationY: 60 } });
+  fireEvent(canvas, "responderRelease", { nativeEvent: { locationX: 80, locationY: 60 } });
+  expect(onChange).toHaveBeenCalledTimes(1);
+
+  // Turn to page 2, which has no ink of its own.
+  rerender(<DrawingCanvas strokes={[]} onChange={onChange} width={400} height={300} pageKey={2} />);
+
+  // Undo must be inert here. Before pageKey existed it stayed enabled and
+  // fired onChange with page 1's strokes, which the parent then saved to
+  // page 2 -- silently copying one page's ink onto another.
+  fireEvent.press(screen.getByText("Undo"));
+  expect(onChange).toHaveBeenCalledTimes(1);
+});
+
+test("changing pageKey keeps the selected pen colour and tool", () => {
+  const { rerender } = render(
+    <DrawingCanvas strokes={[]} onChange={jest.fn()} width={400} height={300} pageKey={1} />,
+  );
+
+  fireEvent.press(screen.getByText("Eraser"));
+  rerender(
+    <DrawingCanvas strokes={[]} onChange={jest.fn()} width={400} height={300} pageKey={2} />,
+  );
+
+  expect(screen.getByRole("button", { name: "Eraser" }).props.accessibilityState?.selected).toBe(
+    true,
+  );
+});
+
+test("the eraser tool removes points near the drag path, splitting the stroke", () => {
+  const onChange = jest.fn();
+  const strokes: Stroke[] = [
+    {
+      color: "#000",
+      width: 0.01,
+      points: [
+        { x: 0, y: 0 },
+        { x: 0.1, y: 0.1 },
+        { x: 0.5, y: 0.5 },
+        { x: 0.9, y: 0.9 },
+        { x: 1, y: 1 },
       ],
     },
   ];
   render(<DrawingCanvas strokes={strokes} onChange={onChange} />);
 
-  fireEvent.press(screen.getByText("Undo last stroke"));
+  const canvas = screen.getByLabelText("Drawing canvas");
+  fireEvent(canvas, "layout", layoutEvent(400, 300));
+  fireEvent.press(screen.getByText("Eraser"));
+  // 0.5/0.5 normalizes to locationX/locationY 200/150 against the 400x300 box.
+  fireEvent(canvas, "responderGrant", { nativeEvent: { locationX: 200, locationY: 150 } });
+  fireEvent(canvas, "responderRelease", { nativeEvent: { locationX: 200, locationY: 150 } });
 
-  expect(onChange).toHaveBeenCalledWith([strokes[0]]);
+  expect(onChange).toHaveBeenCalledTimes(1);
+  const [result] = onChange.mock.calls[0] as [Stroke[]];
+  // The middle point is erased, splitting the run into two 2-point strokes.
+  expect(result).toHaveLength(2);
+  expect(result[0]!.points).toEqual([
+    { x: 0, y: 0 },
+    { x: 0.1, y: 0.1 },
+  ]);
+  expect(result[1]!.points).toEqual([
+    { x: 0.9, y: 0.9 },
+    { x: 1, y: 1 },
+  ]);
+});
+
+test("an explicit width/height sizes the canvas instead of the fixed aspect ratio", () => {
+  const onChange = jest.fn();
+  render(<DrawingCanvas strokes={[]} onChange={onChange} width={600} height={800} />);
+
+  const canvas = screen.getByLabelText("Drawing canvas");
+  expect(canvas.props.style).toEqual(
+    expect.arrayContaining([expect.objectContaining({ width: 600, height: 800 })]),
+  );
 });
 
 test("Clear removes all strokes", () => {
@@ -97,7 +213,7 @@ test("readOnly hides the toolbar and doesn't attach a touch handler", () => {
   render(<DrawingCanvas strokes={[]} readOnly />);
 
   expect(screen.queryByText("Clear")).toBeNull();
-  expect(screen.queryByText("Undo last stroke")).toBeNull();
+  expect(screen.queryByText("Undo")).toBeNull();
   const canvas = screen.getByLabelText("Drawing canvas");
   expect(canvas.props.onResponderGrant).toBeUndefined();
 });
