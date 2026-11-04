@@ -6,7 +6,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { getApiClient } from "@/lib/api-client";
 import { DailyQuestionCard } from "@/lib/daily-question-card";
 import { DailyQuestionOverlay, useDailyQuestion } from "@/lib/daily-question-overlay";
-import { fontSizes, fontWeights, radii, shadows, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, shadows, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
 
@@ -185,12 +185,12 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.lg,
   },
   continueCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
+    borderWidth: 0,
+    borderRadius: 0,
     padding: spacing.lg,
-    ...shadows.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: 0,
   },
   cardPressed: {
     opacity: 0.85,
@@ -210,9 +210,11 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.sm,
   },
   sectionHeading: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    color: colors.mutedForeground,
   },
   list: {
     gap: spacing.xs,
@@ -221,11 +223,12 @@ const useStyles = makeStyles((colors) => ({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderWidth: 0,
+    borderRadius: 0,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 0,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   rowTitle: {
     fontSize: fontSizes.sm,
@@ -246,7 +249,7 @@ const useStyles = makeStyles((colors) => ({
     flexBasis: "45%",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.md,
+    borderRadius: 16,
     backgroundColor: colors.background,
     padding: spacing.lg,
     ...shadows.sm,

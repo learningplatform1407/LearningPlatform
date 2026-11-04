@@ -115,7 +115,7 @@ const useStyles = makeStyles((colors) => ({
   button: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",
@@ -129,7 +129,7 @@ const useStyles = makeStyles((colors) => ({
   dangerButton: {
     borderWidth: 1,
     borderColor: colors.danger,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",

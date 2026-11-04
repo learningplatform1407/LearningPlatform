@@ -208,7 +208,7 @@ const useStyles = makeStyles((colors) => ({
     alignSelf: "flex-start",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",

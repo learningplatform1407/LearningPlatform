@@ -228,12 +228,13 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.xs,
   },
   row: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderWidth: 0,
+    borderRadius: 0,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 0,
     gap: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   rowActive: {
     backgroundColor: colors.muted,
@@ -259,7 +260,7 @@ const useStyles = makeStyles((colors) => ({
     flex: 1,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 999,
     paddingVertical: spacing.sm,
     alignItems: "center",
   },
@@ -301,7 +302,7 @@ const useStyles = makeStyles((colors) => ({
   button: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",
@@ -310,6 +311,7 @@ const useStyles = makeStyles((colors) => ({
   buttonPrimary: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
+    borderRadius: 10,
   },
   buttonPrimaryText: {
     color: colors.primaryForeground,

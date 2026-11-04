@@ -98,7 +98,7 @@ const useStyles = makeStyles((colors) => ({
     flexDirection: "row",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 999,
     padding: spacing.xs / 2,
     alignSelf: "flex-start",
   },
@@ -119,7 +119,7 @@ const useStyles = makeStyles((colors) => ({
     fontWeight: fontWeights.medium,
   },
   saveButton: {
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",

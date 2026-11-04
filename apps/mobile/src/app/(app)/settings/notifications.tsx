@@ -90,7 +90,7 @@ const useStyles = makeStyles((colors) => ({
     color: colors.foreground,
   },
   saveButton: {
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",

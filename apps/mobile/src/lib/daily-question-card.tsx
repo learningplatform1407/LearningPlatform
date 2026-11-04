@@ -2,7 +2,7 @@ import type { DailyQuestion } from "@lp/api-client";
 import { Pressable, Text } from "react-native";
 
 import { OUTCOME_MARKS } from "@/lib/question-reveal";
-import { fontSizes, fontWeights, radii, shadows, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, shadows, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 
 /** One line describing today. The same wording as the web rail and card. */
@@ -47,7 +47,7 @@ const useStyles = makeStyles((colors) => ({
     flexBasis: "45%",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.md,
+    borderRadius: 16,
     backgroundColor: colors.background,
     padding: spacing.lg,
     ...shadows.sm,

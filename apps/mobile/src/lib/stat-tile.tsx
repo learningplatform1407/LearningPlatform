@@ -1,6 +1,6 @@
 import { Text, View } from "react-native";
 
-import { fontSizes, fontWeights, radii, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 
 /**
@@ -38,7 +38,7 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.xs,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.md,
+    borderRadius: 16,
     backgroundColor: colors.background,
     padding: spacing.md,
   },

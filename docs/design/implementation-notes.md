@@ -66,8 +66,9 @@ built, so every item below, and the screens generally, need a look on Android.
 - Text marking on mobile is two taps (first word, then last) rather than a drag: nested `Text`
   can't report where a finger is mid-drag. It snaps to whole words, like the web.
 - No resizable panel (fixed-width side sheets) and no keyboard shortcuts.
-- Screens beyond the shared pieces (headers, tree rows, tags, question options, lesson screen) keep
-  their existing layouts in themed colours; they have not had a screen-by-screen visual pass.
+- The screen-by-screen pass on mobile was done from the code, by the same roles as the web (ruled
+  rows, 16px tiles, 10px fields and buttons, round pills, uppercase section labels). The Expo web
+  export can't pre-render to check it visually (a native module needs a device).
 - iOS has never been run (INK-10).
 
 ## Follow-ups

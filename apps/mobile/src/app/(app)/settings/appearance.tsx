@@ -99,7 +99,7 @@ const useStyles = makeStyles((colors) => ({
     color: colors.mutedForeground,
   },
   saveButton: {
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",

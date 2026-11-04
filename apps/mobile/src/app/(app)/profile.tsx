@@ -7,7 +7,7 @@ import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { getApiClient } from "@/lib/api-client";
 import { MetricBarChart } from "@/lib/metric-bar-chart";
 import { StatTile } from "@/lib/stat-tile";
-import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 
 export default function ProfileScreen() {
@@ -58,7 +58,10 @@ export default function ProfileScreen() {
             )}
           </View>
           <View>
-            <Text style={styles.name}>{data.display_name ?? data.email ?? "Unnamed"}</Text>
+            <Text style={styles.kicker}>Profile</Text>
+            <Text style={styles.name} accessibilityRole="header">
+              {data.display_name ?? data.email ?? "Unnamed"}
+            </Text>
             <Text style={styles.joined}>Joined {formatMonthYear(data.created_at)}</Text>
           </View>
         </View>
@@ -205,10 +208,17 @@ const useStyles = makeStyles((colors) => ({
     fontWeight: fontWeights.medium,
     color: colors.mutedForeground,
   },
+  kicker: {
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.7,
+    textTransform: "uppercase",
+    color: colors.mutedForeground,
+  },
   name: {
-    fontSize: fontSizes.xl,
-    lineHeight: lineHeight(fontSizes.xl, "tight"),
-    fontWeight: fontWeights.semibold,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: fontWeights.extrabold,
     color: colors.foreground,
   },
   joined: {
@@ -219,7 +229,7 @@ const useStyles = makeStyles((colors) => ({
   editButton: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",
@@ -240,8 +250,10 @@ const useStyles = makeStyles((colors) => ({
   },
   sectionTitle: {
     marginBottom: spacing.xs,
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
     color: colors.mutedForeground,
   },
   badgeCell: {
