@@ -186,6 +186,7 @@ classDiagram
         +int page_number
         +UUID user_id
         +json strokes
+        +json highlights
     }
     class LessonView {
         +UUID user_id

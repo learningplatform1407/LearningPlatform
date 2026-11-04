@@ -430,12 +430,24 @@ export const strokeSchema = z.object({
 
 /** One user's freehand ink on one page of a lesson's lecture PDF. A PUT
  * replaces the whole array, same convention as notebook drawings. */
+const pageUnitSchema = z.number().min(0).max(1);
+
+/** A word highlight on a PDF page: one rectangle per run of words on a
+ * line, each [x0, y0, x1, y1] as fractions of the page's size. */
+export const pageHighlightSchema = z.object({
+  color: z.string(),
+  rects: z.array(z.tuple([pageUnitSchema, pageUnitSchema, pageUnitSchema, pageUnitSchema])).min(1),
+});
+
 export const lessonPageInkResponseSchema = z.object({
   strokes: z.array(strokeSchema),
+  highlights: z.array(pageHighlightSchema),
 });
 
 export const lessonPageInkUpdateRequestSchema = z.object({
   strokes: z.array(strokeSchema),
+  /** Omit to leave the page's highlights as they are (a strokes-only save). */
+  highlights: z.array(pageHighlightSchema).optional(),
 });
 
 export const notebookEntryTypeSchema = z.enum(["text", "drawing"]);

@@ -44,6 +44,7 @@ import type {
   questionImportResultSchema,
   lecturePdfResponseSchema,
   lessonPageInkResponseSchema,
+  pageHighlightSchema,
   lessonPageInkUpdateRequestSchema,
   meResponseSchema,
   notebookEntryCreateRequestSchema,
@@ -88,6 +89,7 @@ export type DocumentCreateRequest = z.infer<typeof documentCreateRequestSchema>;
 export type LecturePdf = z.infer<typeof lecturePdfResponseSchema>;
 export type ReplaceLectureTextRequest = z.infer<typeof replaceLectureTextRequestSchema>;
 export type UpsertLecturePdfRequest = z.infer<typeof upsertLecturePdfRequestSchema>;
+export type PageHighlight = z.infer<typeof pageHighlightSchema>;
 export type LessonPageInk = z.infer<typeof lessonPageInkResponseSchema>;
 export type LessonPageInkUpdateRequest = z.infer<typeof lessonPageInkUpdateRequestSchema>;
 export type Annotation = z.infer<typeof annotationResponseSchema>;

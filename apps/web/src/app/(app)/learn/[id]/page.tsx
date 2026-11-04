@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Annotation, AnnotationCreateRequest } from "@lp/contracts";
 
@@ -25,7 +25,7 @@ import {
   type TextScale,
 } from "./lesson-tools";
 import { LESSON_TABS, LessonMobileDots, LessonTopNotch } from "./lesson-top-notch";
-import { PdfLessonView } from "./pdf-lesson-view";
+import { PdfLessonView, type PdfLessonHandle, type PdfOutlineItem } from "./pdf-lesson-view";
 import { QuizzesTab } from "./quizzes-tab";
 import { ReviewTab } from "./review-tab";
 import { SidePanel, type SidePanelTab } from "./side-panel";
@@ -36,6 +36,7 @@ import { useLessonKeys } from "./use-lesson-keys";
 
 const TEXT_SCALE_KEY = "lp-text-scale";
 const UNDO_LIMIT = 80;
+const ZOOM_STEPS = [50, 75, 100, 125, 150, 200, 250, 300] as const;
 
 /** One undoable change to this lesson's text annotations. Highlights have no
  * update endpoint, so every change is creations and deletions, and undoing
@@ -91,6 +92,11 @@ export default function LecturePage() {
   const [activeHeadingId, setActiveHeadingId] = useState<string | null>(null);
   const undoStack = useRef<UndoOp[]>([]);
   const [undoDepth, setUndoDepth] = useState(0);
+  const pdfRef = useRef<PdfLessonHandle>(null);
+  const [pdfCanUndo, setPdfCanUndo] = useState(false);
+  const [pdfOutline, setPdfOutline] = useState<PdfOutlineItem[]>([]);
+  const [zoom, setZoom] = useState(100);
+  const handleOutline = useCallback((items: PdfOutlineItem[]) => setPdfOutline(items), []);
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["documents", params.id],
@@ -142,6 +148,11 @@ export default function LecturePage() {
   }
 
   async function undo() {
+    // PDF pages keep their own history (ink and highlights live per page).
+    if (mode === "pdf") {
+      if (!pdfRef.current?.undo()) toast("Nothing to undo.");
+      return;
+    }
     const op = undoStack.current.pop();
     setUndoDepth(undoStack.current.length);
     if (!op) {
@@ -309,6 +320,7 @@ export default function LecturePage() {
 
   // -- Scroll-linked state ----------------------------------------------
 
+  // In PDF mode the book's own outline (if it has one) is the contents.
   const headings: TocHeading[] =
     mode === "text"
       ? blocks.flatMap((block, index) =>
@@ -316,7 +328,7 @@ export default function LecturePage() {
             ? [{ id: headingId(index), label: block.text }]
             : [],
         )
-      : [];
+      : pdfOutline.map((item) => ({ id: item.id, label: item.label }));
   const headingKey = headings.map((h) => h.id).join(",");
 
   // The title line appears in the top notch once the page's own h1 has
@@ -351,7 +363,8 @@ export default function LecturePage() {
 
   function jumpToHeading(id: string) {
     setActiveTab("lesson");
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (mode === "pdf") pdfRef.current?.jumpTo(id);
+    else document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
     if (!window.matchMedia("(min-width: 721px)").matches) setTocOpen(false);
   }
 
@@ -383,6 +396,14 @@ export default function LecturePage() {
     viewMode: mode,
     onViewMode: changeViewMode,
     showViewMode: activeTab === "lesson" && readyLecturePdf !== null,
+    zoom:
+      activeTab === "lesson" && mode === "pdf"
+        ? {
+            percent: zoom,
+            onOut: () => setZoom((z) => ZOOM_STEPS.findLast((step) => step < z) ?? z),
+            onIn: () => setZoom((z) => ZOOM_STEPS.find((step) => step > z) ?? z),
+          }
+        : undefined,
   };
 
   return (
@@ -401,7 +422,7 @@ export default function LecturePage() {
         tool={tool}
         viewMode={mode}
         onLessonTab={activeTab === "lesson"}
-        canUndo={undoDepth > 0}
+        canUndo={mode === "pdf" ? pdfCanUndo : undoDepth > 0}
         tocOpen={tocOpen}
         onToggleToc={() => setTocOpen((open) => !open)}
         onSwatch={chooseSwatch}
@@ -472,9 +493,14 @@ export default function LecturePage() {
 
           {activeTab === "lesson" && mode === "pdf" && readyLecturePdf && (
             <PdfLessonView
+              ref={pdfRef}
               documentId={params.id}
               storagePath={readyLecturePdf.storage_path}
               pageCount={readyLecturePdf.page_count}
+              tool={tool}
+              zoom={zoom}
+              onUndoChange={setPdfCanUndo}
+              onOutline={handleOutline}
             />
           )}
 

@@ -39,6 +39,7 @@ replaces them.
 | Replacing the PDF wipes all ink, unconditionally                       | §3.                                                                                                                                                 |
 | Replacing the lecture text carries annotations forward by content hash | §4. The opposite choice, and the asymmetry is the point.                                                                                            |
 | Ink stored as a whole `Stroke[]` per page, replaced by PUT             | Matches `NotebookEntry.strokes`, already proven. Per-stroke rows would buy concurrent editing that one user on one page does not need.              |
+| Word highlights stored beside the ink, as rectangles                   | §6.2. Same row, same lifecycle (per user, per page, wiped on replace); rectangles in page units so any client can draw them without a text layer.   |
 | Stroke points normalized to `[0, 1]`                                   | Zoom-independent: the same array renders correctly at any scale and on any screen, which is also what lets web and mobile share one storage format. |
 | `page_count` is the only page metadata stored                          | §5.                                                                                                                                                 |
 | Page rendering owned entirely by the clients                           | pdf.js on web, react-native-pdf on mobile. The backend never rasterizes a page; it stores a file and some ink.                                      |
@@ -127,6 +128,27 @@ The consequence worth stating plainly: on mobile, **ink is not visible while rea
 own annotations means entering draw mode. That is a real cost of the no-pan-offset constraint, not a
 preference.
 
+### 6.2 Highlights on PDF pages (web only)
+
+Web PDF mode also has the reader's word-level marker. pdf.js's `getTextContent()` gives runs of text
+with positions; `pdf-geometry.ts` splits them into word boxes, and a drag snaps to whole words.
+
+What is stored is the result, not the words: `lesson_page_ink.highlights` holds `{ color, rects }`,
+one rectangle per run of words on a line, in `[0, 1]` page units like stroke points. That keeps the
+same three properties the ink has: zoom-independent, renderable by any client (mobile can draw them
+with no text layer at all), and stable across a pdf.js upgrade that segments text differently.
+
+Two rules keep the clients from treading on each other:
+
+- **`highlights` is optional on the PUT.** Omitted, the stored highlights are left alone; a list,
+  even an empty one, replaces them. Mobile cannot make highlights and only sends `strokes`, so its
+  saves never wipe the web's.
+- **Creating highlights needs a text layer**, so it is web-only, and a scanned page (no text) says
+  so instead of failing silently.
+
+Nothing new is needed on PDF replace: the highlights are in the same row as the ink, and §3's
+cascade takes both.
+
 ### 6.1 Three gotchas worth keeping
 
 **The pdf.js worker is a vendored static file.** `apps/web/public/pdf.worker.min.mjs` is a committed
@@ -143,11 +165,12 @@ not enough — the in-flight render keeps going. Hold the `RenderTask` and `.can
 cleanup, and treat `RenderingCancelledException` as the normal path. Two quick Zoom clicks is enough
 to hit this, and the symptom is a blank page with no error.
 
-**Undo history is scoped to a page.** One `DrawingCanvas` instance is reused across every page of a
-PDF, so it takes a `pageKey` prop and discards its undo stack when that changes. Without it, Undo
-after a page turn fires `onChange` with the _previous_ page's strokes and the parent saves them onto
-the page now showing. Pen colour and tool deliberately survive a page turn — those are preferences,
-not page state.
+**Every undo step names its page.** On web, every page now has its own ink layer (the pages scroll
+as one column), but undo is one stack for the whole lesson, and each entry records the page it
+belongs to and that page's previous `{ strokes, highlights }`. Undoing writes that snapshot back to
+_that_ page. An undo that only remembered the strokes would put them on whichever page is in view.
+On mobile, one `DrawingCanvas` is still reused across pages, and its `pageKey` prop guards the same
+mistake by discarding its history on a page turn.
 
 ## 7. Status and `error_message`
 
