@@ -45,6 +45,7 @@ import { Overlay } from "@/lib/overlay";
 import { PdfLessonView } from "@/lib/pdf-lesson-view";
 import { QuestionBankList, type SeeInLesson } from "@/lib/question-bank-list";
 import { supabase } from "@/lib/supabase";
+import { useTabSwipe } from "@/lib/use-tab-swipe";
 import { fontSizes, fontWeights, lineHeight, shadows, spacing } from "@/lib/theme";
 import { spliceAnnotations, spliceClozeSpans } from "@/lib/text-offset";
 import { makeStyles, useTheme, useThemeColors, type ThemeColors } from "@/lib/theme-context";
@@ -1350,6 +1351,24 @@ export default function LectureScreen() {
     },
   });
 
+  // Edited in place (PATCH): the note keeps its id. Saved on Close, only
+  // when the text actually changed.
+  const noteEdit = useRef<string | null>(null);
+  const updateNoteMutation = useMutation({
+    mutationFn: ({ annotationId, text }: { annotationId: string; text: string }) =>
+      getApiClient().updateAnnotation(id, annotationId, { note_text: text }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["annotations", id] }),
+  });
+
+  function closeNote() {
+    const text = noteEdit.current;
+    if (viewingNote && text !== null && text.trim() && text !== viewingNote.note_text) {
+      updateNoteMutation.mutate({ annotationId: viewingNote.id, text });
+    }
+    noteEdit.current = null;
+    setViewingNote(null);
+  }
+
   const deleteAnnotationMutation = useMutation({
     mutationFn: (annotationId: string) => getApiClient().deleteAnnotation(id, annotationId),
     onSuccess: () => {
@@ -1417,6 +1436,18 @@ export default function LectureScreen() {
     }
   }
 
+  // Off while marking (a sideways drag is a selection then) and in PDF
+  // view, where drags pan, zoom and draw.
+  const swipeHandlers = useTabSwipe(
+    !(activeTab === "lesson" && (activeTool !== null || lessonViewMode === "pdf")),
+    (direction) => {
+      const next = TABS[TABS.findIndex((tab) => tab.key === activeTab) + direction];
+      if (!next) return;
+      setActiveTab(next.key);
+      setSeeInLesson(null);
+    },
+  );
+
   if (isPending) {
     return (
       <View style={styles.container}>
@@ -1472,7 +1503,7 @@ export default function LectureScreen() {
 
   return (
     <TextScaleContext.Provider value={textScale}>
-      <View style={styles.screenRoot}>
+      <View style={styles.screenRoot} {...swipeHandlers}>
         <ScrollView
           style={styles.container}
           contentContainerStyle={[
@@ -1805,15 +1836,27 @@ export default function LectureScreen() {
           visible={viewingNote !== null}
           transparent
           animationType="fade"
-          onRequestClose={() => setViewingNote(null)}
+          onRequestClose={closeNote}
         >
           <View style={styles.modalBackdrop}>
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Note</Text>
-              <Text style={styles.noteText}>{viewingNote?.note_text}</Text>
+              {viewingNote && (
+                <TextInput
+                  // Keyed by note so reopening another note starts from its text.
+                  key={viewingNote.id}
+                  style={styles.modalInput}
+                  defaultValue={viewingNote.note_text ?? ""}
+                  onChangeText={(text) => {
+                    noteEdit.current = text;
+                  }}
+                  multiline
+                  accessibilityLabel="Note text"
+                />
+              )}
               <View style={styles.modalActions}>
                 <Pressable
-                  onPress={() => setViewingNote(null)}
+                  onPress={closeNote}
                   style={styles.modalButton}
                   accessibilityRole="button"
                 >
@@ -2182,10 +2225,6 @@ const useStyles = makeStyles((colors) => ({
     fontSize: fontSizes.base,
     color: colors.foreground,
     textAlignVertical: "top",
-  },
-  noteText: {
-    fontSize: fontSizes.base,
-    color: colors.foreground,
   },
   actionMenuItem: {
     paddingVertical: spacing.sm,

@@ -10,6 +10,7 @@ const mockCreateSignedUrl = jest.fn();
 const mockListAnnotations = jest.fn();
 const mockCreateAnnotation = jest.fn();
 const mockDeleteAnnotation = jest.fn();
+const mockUpdateAnnotation = jest.fn();
 const mockListQuestionBank = jest.fn();
 const mockGetQuizAvailableCount = jest.fn();
 const mockAnswerBankQuestion = jest.fn();
@@ -34,6 +35,7 @@ jest.mock("@/lib/api-client", () => ({
     listAnnotations: mockListAnnotations,
     createAnnotation: mockCreateAnnotation,
     deleteAnnotation: mockDeleteAnnotation,
+    updateAnnotation: mockUpdateAnnotation,
     listQuestionBank: mockListQuestionBank,
     getQuizAvailableCount: mockGetQuizAvailableCount,
     answerBankQuestion: mockAnswerBankQuestion,
@@ -416,7 +418,37 @@ test("renders an existing margin note as a badge and reveals its text when press
 
   fireEvent.press(badge);
 
-  expect(await screen.findByText("Remember this")).toBeTruthy();
+  expect(await screen.findByDisplayValue("Remember this")).toBeTruthy();
+});
+
+test("editing an open note saves the new text in place on Close", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListAnnotations.mockResolvedValue([
+    {
+      id: "a1",
+      document_version_id: "v1",
+      type: "margin_note",
+      block_index: 0,
+      start_offset: null,
+      end_offset: null,
+      note_text: "Remember this",
+      color: null,
+      created_at: "2026-01-01",
+    },
+  ]);
+  mockUpdateAnnotation.mockResolvedValue({});
+
+  renderScreen();
+  fireEvent.press(await screen.findByText("note"));
+  fireEvent.changeText(await screen.findByLabelText("Note text"), "Remember this too");
+  fireEvent.press(screen.getByText("Close"));
+
+  await waitFor(() =>
+    expect(mockUpdateAnnotation).toHaveBeenCalledWith("d1", "a1", {
+      note_text: "Remember this too",
+    }),
+  );
+  expect(mockDeleteAnnotation).not.toHaveBeenCalled();
 });
 
 test("long-pressing a paragraph shows a Notes/Explain menu, and Notes opens the composer", async () => {
