@@ -11,7 +11,7 @@ import { BulbIcon, BulbOffIcon, CardsIcon, HistoryIcon } from "@/components/icon
 import { useToast } from "@/components/toast";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { spliceClozeSpans } from "@/lib/text-offset";
-import { clozeGap, lightColors } from "@lp/ui";
+import { clozeGap, lightColors, sentenceAround } from "@lp/ui";
 
 import { ExtractedImage } from "./extracted-image";
 import { GradeButtons, ShowButton, useGradeKeys } from "./grade-bar";
@@ -332,12 +332,7 @@ function renderSentence(
   card: ClozeDueCard,
   render: (slice: string, base: number) => ReactNode[],
 ): ReactNode {
-  const before = text.slice(0, card.start_offset);
-  const after = text.slice(card.end_offset);
-  const startMatch = [...before.matchAll(/[.!?;]\s+/g)].pop();
-  const start = startMatch ? startMatch.index + startMatch[0].length : 0;
-  const endMatch = after.match(/[.!?;](\s|$)/);
-  const end = endMatch ? card.end_offset + (endMatch.index ?? 0) + 1 : text.length;
+  const { start, end } = sentenceAround(text, card.start_offset, card.end_offset);
   return (
     <>
       {start > 0 && "… "}

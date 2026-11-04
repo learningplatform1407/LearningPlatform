@@ -63,10 +63,9 @@ built, so every item below, and the screens generally, need a look on Android.
 - react-native-pdf can't be colour-inverted (pages stay white in dark mode) and exposes no text, so
   PDF word highlights are **display only** on mobile — drawn under the ink in draw mode, made on
   the web. The ink PUT sends strokes only, which leaves highlights untouched on the server.
-- Text marking on mobile still uses native selection in a read-only `TextInput`, not the web's
-  word-span dragging.
-- No resizable panel (fixed-width side sheets), no keyboard shortcuts, no swipe between lesson
-  tabs, no cards overlay for Review.
+- Text marking on mobile is two taps (first word, then last) rather than a drag: nested `Text`
+  can't report where a finger is mid-drag. It snaps to whole words, like the web.
+- No resizable panel (fixed-width side sheets) and no keyboard shortcuts.
 - Screens beyond the shared pieces (headers, tree rows, tags, question options, lesson screen) keep
   their existing layouts in themed colours; they have not had a screen-by-screen visual pass.
 - iOS has never been run (INK-10).

@@ -1,6 +1,6 @@
 import { lightColors } from "@lp/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { router } from "expo-router";
 
 import LectureScreen from "../[id]";
@@ -1418,4 +1418,33 @@ test("See in lesson paints a checked question's source and the back pill returns
   // The same question, still showing its answer.
   expect(await screen.findByText("correct — 4/4 points")).toBeTruthy();
   expect(screen.queryByText("← Back to quizzes")).toBeNull();
+});
+
+test("the cards view shows only the sentence holding the gap, on a card", async () => {
+  mockGetDocument.mockResolvedValue(
+    readyDocumentWithParagraph("Bones heal slowly. The femur is the longest bone. Rest helps."),
+  );
+  mockListDueClozeCards.mockResolvedValue([
+    {
+      id: "c1",
+      document_id: "d1",
+      block_index: 0,
+      start_offset: 23,
+      end_offset: 28,
+      next_intervals: { again: 1, hard: 1, good: 1, easy: 1 },
+    },
+  ]);
+
+  renderScreen();
+  await screen.findByText(/Bones heal slowly/);
+  fireEvent.press(screen.getByText("Review"));
+  fireEvent.press(await screen.findByLabelText("Cards, one at a time"));
+
+  const card = await screen.findByLabelText("Review card");
+  expect(within(card).getByText(/is the longest bone\./)).toBeTruthy();
+  expect(within(card).queryByText(/Bones heal slowly/)).toBeNull();
+  expect(within(card).getByText("[ f____ ]")).toBeTruthy();
+
+  fireEvent.press(screen.getByText("Back to the text"));
+  expect(screen.queryByLabelText("Review card")).toBeNull();
 });

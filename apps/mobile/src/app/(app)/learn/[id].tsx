@@ -14,6 +14,7 @@ import {
   clozeGap,
   describeInterval,
   findQuote,
+  sentenceAround,
   formatInterval,
   highlightIndex,
   pageColors,
@@ -53,6 +54,7 @@ import {
   ArrowLeftIcon,
   BulbIcon,
   BulbOffIcon,
+  CardsIcon,
   EraserIcon,
   MoonIcon,
   SparkleIcon,
@@ -916,6 +918,7 @@ function useClozeReview(documentId: string, enabled: boolean) {
   const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [hints, setHints] = useState(true);
+  const [cardsView, setCardsView] = useState(false);
 
   const reviewMutation = useMutation({
     mutationFn: ({ cardId, rating }: { cardId: string; rating: ClozeRating }) =>
@@ -958,6 +961,9 @@ function useClozeReview(documentId: string, enabled: boolean) {
     nextIntervals: currentCard?.next_intervals,
     hints,
     toggleHints: () => setHints((on) => !on),
+    currentCard,
+    cardsView,
+    setCardsView,
     isRevealed: currentCard !== undefined && revealedCardId === currentCard.id,
     queueLength: queue.length,
     feedback,
@@ -1076,26 +1082,34 @@ const GRADES: { rating: ClozeRating; label: string; tone: "again" | "hard" | "go
 
 /** The review bar: a bottom notch with Show, then the four grades on light
  * paper buttons that stay light in dark mode (design.md §11). */
-function ReviewBar({ review }: { review: ReturnType<typeof useClozeReview> }) {
+function ReviewBar({
+  review,
+  inline = false,
+}: {
+  review: ReturnType<typeof useClozeReview>;
+  /** Inside the cards view, where it sits under the card, not on the edge. */
+  inline?: boolean;
+}) {
   const styles = useStyles();
   const colors = useThemeColors();
+  const barStyle = inline ? styles.reviewBarInline : styles.reviewBar;
   if (review.isPending) {
     return (
-      <View style={styles.reviewBar}>
+      <View style={barStyle}>
         <Text style={styles.hint}>Loading...</Text>
       </View>
     );
   }
   if (review.isError) {
     return (
-      <View style={styles.reviewBar}>
+      <View style={barStyle}>
         <Text style={styles.error}>Failed to load review cards.</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.reviewBar}>
+    <View style={barStyle}>
       {!review.currentCardId && (
         <>
           <Text style={styles.hint}>You&apos;re all caught up — nothing to review right now.</Text>
@@ -1108,6 +1122,11 @@ function ReviewBar({ review }: { review: ReturnType<typeof useClozeReview> }) {
             <Text style={styles.reviewCount}>
               {review.queueLength} {review.queueLength === 1 ? "word" : "words"} left to review
             </Text>
+            {!inline && (
+              <Dot label="Cards, one at a time" onPress={() => review.setCardsView(true)}>
+                <CardsIcon color={colors.foreground} />
+              </Dot>
+            )}
             <Dot
               label="Letter hints in the gaps"
               pressed={review.hints}
@@ -1153,6 +1172,68 @@ function ReviewBar({ review }: { review: ReturnType<typeof useClozeReview> }) {
         </View>
       )}
     </View>
+  );
+}
+
+/**
+ * Review as cards (design.md §11): one gap at a time, inside just the
+ * sentence that holds it, on light paper; the grade controls sit under it.
+ */
+function CardsOverlay({
+  review,
+  blocks,
+}: {
+  review: ReturnType<typeof useClozeReview>;
+  blocks: { type: string; text?: string | null }[];
+}) {
+  const styles = useStyles();
+  const card = review.currentCard;
+  const close = () => review.setCardsView(false);
+  let sentence: React.ReactNode = null;
+  let section = "Review";
+  if (card) {
+    for (let i = card.block_index; i >= 0; i -= 1) {
+      if (blocks[i]?.type === "heading") {
+        section = blocks[i]!.text ?? "Review";
+        break;
+      }
+    }
+    const text = blocks[card.block_index]?.text ?? "";
+    const { start, end } = sentenceAround(text, card.start_offset, card.end_offset);
+    const hidden = text.slice(card.start_offset, card.end_offset);
+    sentence = (
+      <Text style={styles.cardSentence}>
+        {start > 0 && "… "}
+        {text.slice(start, card.start_offset)}
+        {review.isRevealed ? (
+          <Text style={styles.cardRevealed}>{hidden}</Text>
+        ) : (
+          <ClozeGapText hidden={hidden} hints={review.hints} current />
+        )}
+        {text.slice(card.end_offset, end)}
+        {end < text.length && " …"}
+      </Text>
+    );
+  }
+  return (
+    <Modal visible={review.cardsView} transparent animationType="fade" onRequestClose={close}>
+      <View style={styles.cardsScrim}>
+        <Pressable style={styles.cardsDismiss} onPress={close} accessibilityLabel="Close cards" />
+        <View style={styles.paperCard} accessibilityLabel="Review card">
+          <View style={styles.cardMeta}>
+            <Text style={styles.cardMetaText} numberOfLines={1}>
+              {section}
+            </Text>
+            <Text style={styles.cardMetaText}>{review.queueLength} left</Text>
+          </View>
+          {sentence ?? <Text style={styles.cardSentence}>Nothing left to review.</Text>}
+        </View>
+        <ReviewBar review={review} inline />
+        <Pressable onPress={close} accessibilityRole="button">
+          <Text style={styles.cardsClose}>Back to the text</Text>
+        </Pressable>
+      </View>
+    </Modal>
   );
 }
 
@@ -1758,6 +1839,7 @@ export default function LectureScreen() {
         </Pressable>
 
         {activeTab === "review" && <ReviewBar review={review} />}
+        {activeTab === "review" && <CardsOverlay review={review} blocks={blocks} />}
 
         <Modal
           visible={actionMenuBlockIndex !== null}
@@ -1926,6 +2008,61 @@ export default function LectureScreen() {
 }
 
 const useStyles = makeStyles((colors) => ({
+  reviewBarInline: {
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  cardsScrim: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    backgroundColor: colors.scrim,
+  },
+  cardsDismiss: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
+  // Light paper in both themes, so its text uses the light palette.
+  paperCard: {
+    borderRadius: 18,
+    padding: 24,
+    backgroundColor: colors.paper,
+    ...shadows.card,
+  },
+  cardMeta: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 14,
+  },
+  cardMetaText: {
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    color: "#6C6F76",
+  },
+  cardSentence: {
+    fontSize: 19,
+    lineHeight: 29,
+    color: "#1D1F23",
+  },
+  cardRevealed: {
+    fontWeight: fontWeights.bold,
+    color: "#1D1F23",
+    backgroundColor: "rgba(47, 111, 159, 0.10)",
+  },
+  cardsClose: {
+    textAlign: "center",
+    fontSize: 14,
+    fontWeight: fontWeights.bold,
+    color: colors.accent,
+  },
   markHint: {
     fontSize: 13,
     fontWeight: fontWeights.semibold,
