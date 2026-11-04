@@ -260,6 +260,7 @@ classDiagram
         +json options
         +json correct_option_ids
         +json rationales
+        +json source_quotes
         +string difficulty
         +string status
     }
@@ -303,6 +304,10 @@ classDiagram
         +int points_possible
         +int attempt_count
         +datetime last_answered_at
+    }
+    class QuestionFavourite {
+        +UUID user_id
+        +UUID question_id
     }
     class DailyQuestion {
         +date for_date
@@ -362,6 +367,8 @@ classDiagram
 
     Profile "1" -- "*" QuestionProgress : latest attempt wins
     Question "1" -- "*" QuestionProgress : projection, not source of truth
+    Profile "1" -- "*" QuestionFavourite : hearts
+    Question "1" -- "*" QuestionFavourite
 
     Question "1" -- "*" DailyQuestion : RESTRICT
     Profile "0..1" -- "*" DailyQuestion : selected_by, SET NULL
