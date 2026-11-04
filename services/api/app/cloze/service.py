@@ -53,7 +53,11 @@ def list_cloze_cards(db: Session, document: Document) -> list[ClozeCard]:
     )
 
 
-def list_due_cloze_cards(db: Session, document: Document, user_id: uuid.UUID) -> list[ClozeCard]:
+def list_due_cloze_cards_with_state(
+    db: Session, document: Document, user_id: uuid.UUID
+) -> list[tuple[ClozeCard, ClozeReviewState | None]]:
+    """Due cards with this user's review state (None for a card never graded),
+    which the due endpoint turns into interval previews."""
     cards = list_cloze_cards(db, document)
     if not cards:
         return []
@@ -68,10 +72,14 @@ def list_due_cloze_cards(db: Session, document: Document, user_id: uuid.UUID) ->
     }
     now = to_utc_naive(datetime.now(UTC))
     return [
-        card
+        (card, state)
         for card in cards
         if (state := states.get(card.id)) is None or to_utc_naive(state.due_at) <= now
     ]
+
+
+def list_due_cloze_cards(db: Session, document: Document, user_id: uuid.UUID) -> list[ClozeCard]:
+    return [card for card, _ in list_due_cloze_cards_with_state(db, document, user_id)]
 
 
 def submit_cloze_review(

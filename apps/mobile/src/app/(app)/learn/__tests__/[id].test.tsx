@@ -600,6 +600,7 @@ function officialCard(overrides: Record<string, unknown> = {}) {
     is_mine: false,
     due_at: null,
     is_new: true,
+    next_intervals: { again: 1, hard: 1, good: 1, easy: 1 },
     ...overrides,
   };
 }
@@ -625,6 +626,8 @@ test("the Flashcards tab shows the front only until the card is tapped", async (
   for (const label of ["Again", "Hard", "Good", "Easy"]) {
     expect(screen.getByText(label)).toBeTruthy();
   }
+  // Each grade shows the interval it would schedule (all 1 day for a new card).
+  expect(screen.getAllByText("1d")).toHaveLength(4);
 });
 
 test("grading a flashcard submits the rating and reports the next interval", async () => {

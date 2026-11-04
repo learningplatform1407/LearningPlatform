@@ -12,7 +12,12 @@ from app.chapters.models import Chapter
 from app.cloze.generation import generate_cloze_spans
 from app.documents.models import Document, DocumentVersion
 from app.main import app
-from app.srs.scheduler import MAX_INTERVAL_DAYS, SchedulerState, compute_next_state
+from app.srs.scheduler import (
+    MAX_INTERVAL_DAYS,
+    SchedulerState,
+    compute_next_state,
+    preview_intervals,
+)
 from app.sub_chapters.models import SubChapter
 from app.users.models import AccountSettings, Profile
 
@@ -241,6 +246,25 @@ def test_due_cards_include_never_reviewed_cards(
     response = authed_client.get(f"/v1/documents/{ready_document_id}/cloze-cards/due")
     assert response.status_code == 200
     assert len(response.json()) == 2
+
+
+def test_preview_intervals_match_what_grading_schedules() -> None:
+    state = SchedulerState(ease_factor=2.5, interval_days=6, repetitions=2)
+    preview = preview_intervals(state)
+    for rating in ("again", "hard", "good", "easy"):
+        assert getattr(preview, rating) == compute_next_state(rating, state).interval_days
+    # A never-reviewed card: 1 day for again/hard/good, Easy's bonus on top.
+    assert preview_intervals(None) == preview_intervals(
+        SchedulerState(ease_factor=2.5, interval_days=0, repetitions=0)
+    )
+    assert (preview_intervals(None).again, preview_intervals(None).good) == (1, 1)
+
+
+def test_due_cards_carry_next_intervals(
+    authed_client: TestClient, ready_document_id: uuid.UUID
+) -> None:
+    due = authed_client.get(f"/v1/documents/{ready_document_id}/cloze-cards/due").json()
+    assert due[0]["next_intervals"] == {"again": 1, "hard": 1, "good": 1, "easy": 1}
 
 
 def test_reviewing_a_card_removes_only_that_card_from_the_due_list(

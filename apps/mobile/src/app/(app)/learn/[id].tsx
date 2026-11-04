@@ -9,7 +9,13 @@ import type {
   FlashcardScopeFilter,
   ReviewRating,
 } from "@lp/contracts";
-import { HIGHLIGHT_COLOR_NAMES, highlightIndex, pageColors } from "@lp/ui";
+import {
+  HIGHLIGHT_COLOR_NAMES,
+  describeInterval,
+  formatInterval,
+  highlightIndex,
+  pageColors,
+} from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { createContext, useContext, useRef, useState } from "react";
@@ -737,6 +743,9 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
                 style={styles.gradeButton}
               >
                 <Text style={[styles.gradeButtonText, { color: colors.again }]}>Again</Text>
+                <Text style={styles.gradeInterval}>
+                  {formatInterval(currentCard.next_intervals.again)}
+                </Text>
               </Pressable>
               <Pressable
                 disabled={reviewMutation.isPending}
@@ -745,6 +754,9 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
                 style={styles.gradeButton}
               >
                 <Text style={[styles.gradeButtonText, { color: colors.hard }]}>Hard</Text>
+                <Text style={styles.gradeInterval}>
+                  {formatInterval(currentCard.next_intervals.hard)}
+                </Text>
               </Pressable>
               <Pressable
                 disabled={reviewMutation.isPending}
@@ -753,6 +765,9 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
                 style={styles.gradeButton}
               >
                 <Text style={[styles.gradeButtonText, { color: colors.good }]}>Good</Text>
+                <Text style={styles.gradeInterval}>
+                  {formatInterval(currentCard.next_intervals.good)}
+                </Text>
               </Pressable>
               <Pressable
                 disabled={reviewMutation.isPending}
@@ -761,6 +776,9 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
                 style={styles.gradeButton}
               >
                 <Text style={[styles.gradeButtonText, { color: colors.easy }]}>Easy</Text>
+                <Text style={styles.gradeInterval}>
+                  {formatInterval(currentCard.next_intervals.easy)}
+                </Text>
               </Pressable>
             </View>
           )}
@@ -871,6 +889,7 @@ function useClozeReview(documentId: string, enabled: boolean) {
     isError: dueQuery.isError,
     spansByBlock,
     currentCardId: currentCard?.id,
+    nextIntervals: currentCard?.next_intervals,
     isRevealed: currentCard !== undefined && revealedCardId === currentCard.id,
     queueLength: queue.length,
     feedback,
@@ -1009,10 +1028,20 @@ function ReviewBar({ review }: { review: ReturnType<typeof useClozeReview> }) {
               disabled={review.isGrading}
               onPress={() => review.grade(grade.rating)}
               accessibilityRole="button"
+              accessibilityLabel={
+                review.nextIntervals
+                  ? `${grade.label}, ${describeInterval(review.nextIntervals[grade.rating])}`
+                  : grade.label
+              }
             >
               <Text style={[styles.gradeButtonText, { color: colors[grade.tone] }]}>
                 {grade.label}
               </Text>
+              {review.nextIntervals && (
+                <Text style={styles.gradeInterval}>
+                  {formatInterval(review.nextIntervals[grade.rating])}
+                </Text>
+              )}
             </Pressable>
           ))}
         </View>
@@ -1784,6 +1813,11 @@ const useStyles = makeStyles((colors) => ({
     borderWidth: 1.5,
     borderColor: "#DEDBD2",
     backgroundColor: colors.paper,
+  },
+  gradeInterval: {
+    fontSize: 12,
+    fontWeight: fontWeights.semibold,
+    color: "#6C6F76",
   },
   gradeButtonText: {
     fontSize: 15,

@@ -7,6 +7,7 @@ import type {
   Chapter,
   ChapterCreateRequest,
   ClozeCard,
+  ClozeDueCard,
   ClozeRating,
   ClozeReviewState,
   DocumentCreateRequest,
@@ -723,7 +724,7 @@ export function createApiClient(config: ApiClientConfig) {
     listClozeCards: (documentId: string) =>
       request<ClozeCard[]>(`/v1/documents/${documentId}/cloze-cards`),
     listDueClozeCards: (documentId: string) =>
-      request<ClozeCard[]>(`/v1/documents/${documentId}/cloze-cards/due`),
+      request<ClozeDueCard[]>(`/v1/documents/${documentId}/cloze-cards/due`),
     submitClozeReview: (documentId: string, clozeCardId: string, rating: ClozeRating) =>
       request<ClozeReviewState>(`/v1/documents/${documentId}/cloze-cards/${clozeCardId}/review`, {
         method: "POST",

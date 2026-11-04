@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from "react";
 
-import type { ReviewRating } from "@lp/contracts";
+import type { NextIntervals, ReviewRating } from "@lp/contracts";
+import { describeInterval, formatInterval } from "@lp/ui";
 
 const GRADES = [
   { rating: "again", label: "Again", border: "border-again", key: "1" },
@@ -38,34 +39,43 @@ export function ShowButton({ onShow }: { onShow: () => void }) {
 }
 
 /**
- * Again / Hard / Good / Easy. The design shows the next interval under each
- * button; the API only tells us the interval *after* grading, so the hint
- * line carries the keyboard shortcut instead, and the interval is announced
- * once the grade lands.
+ * Again / Hard / Good / Easy, each with the interval it would schedule
+ * under it (design.md §11). The keyboard shortcut (1–4) is in the tooltip.
  */
 export function GradeButtons({
   onGrade,
+  intervals,
   disabled,
 }: {
   onGrade: (rating: ReviewRating) => void;
+  /** From the due card; absent while it's loading. */
+  intervals?: NextIntervals;
   disabled?: boolean;
 }) {
   return (
     <div className="flex gap-1.5 min-[721px]:gap-2">
-      {GRADES.map((grade) => (
-        <button
-          key={grade.rating}
-          type="button"
-          disabled={disabled}
-          onClick={() => onGrade(grade.rating)}
-          className={`${PAPER_BUTTON} ${grade.border}`}
-        >
-          {grade.label}
-          <small className="text-xs font-semibold text-paper-muted-foreground" aria-hidden="true">
-            {grade.key}
-          </small>
-        </button>
-      ))}
+      {GRADES.map((grade) => {
+        const days = intervals?.[grade.rating];
+        return (
+          <button
+            key={grade.rating}
+            type="button"
+            disabled={disabled}
+            onClick={() => onGrade(grade.rating)}
+            title={`${grade.label} (${grade.key})`}
+            aria-keyshortcuts={grade.key}
+            aria-label={
+              days === undefined ? grade.label : `${grade.label}, ${describeInterval(days)}`
+            }
+            className={`${PAPER_BUTTON} ${grade.border}`}
+          >
+            {grade.label}
+            <small className="text-xs font-semibold text-paper-muted-foreground" aria-hidden="true">
+              {days === undefined ? grade.key : formatInterval(days)}
+            </small>
+          </button>
+        );
+      })}
     </div>
   );
 }

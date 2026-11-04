@@ -1053,6 +1053,24 @@ describe("LecturePage", () => {
     }
   });
 
+  test("each grade button shows the interval it would schedule", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDueFlashcards.mockResolvedValue([
+      officialCard({ next_intervals: { again: 1, hard: 7, good: 15, easy: 40 } }),
+    ]);
+
+    renderPage();
+    await screen.findByText(para("Hello world"));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Flashcards" }));
+    await user.click(await screen.findByText("What is a CDN?"));
+
+    expect(await screen.findByRole("button", { name: "Good, 15 days" })).toHaveTextContent(
+      "Good15d",
+    );
+    expect(screen.getByRole("button", { name: "Easy, 40 days" })).toHaveTextContent("Easy1mo");
+  });
+
   test("grading a flashcard submits the rating and reports the next interval", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
     listDueFlashcards.mockResolvedValue([officialCard()]);

@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.flashcards.constants import FlashcardScope, FlashcardStatus
 from app.srs.scheduler import ReviewRating
+from app.srs.schemas import NextIntervalsResponse
 
 
 class FlashcardResponse(BaseModel):
@@ -50,6 +51,8 @@ class FlashcardCardResponse(BaseModel):
     # reports. Both are present because the hub counts them separately.
     due_at: datetime | None
     is_new: bool
+    # What each grade would schedule this card for (design.md §11).
+    next_intervals: NextIntervalsResponse
 
 
 class FlashcardCreateRequest(BaseModel):

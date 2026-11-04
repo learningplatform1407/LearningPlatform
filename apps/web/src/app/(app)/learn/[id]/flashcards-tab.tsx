@@ -438,7 +438,11 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
 
           <BottomNotch label="Flashcard controls">
             {revealed ? (
-              <GradeButtons onGrade={grade} disabled={reviewMutation.isPending} />
+              <GradeButtons
+                onGrade={grade}
+                intervals={currentCard.next_intervals}
+                disabled={reviewMutation.isPending}
+              />
             ) : (
               <ShowButton onShow={() => setRevealedCardId(currentCard.id)} />
             )}

@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useState, type ReactNode } from "react";
 
-import type { ClozeCard, ClozeRating, ExtractedContent } from "@lp/contracts";
+import type { ClozeDueCard, ClozeRating, ExtractedContent } from "@lp/contracts";
 
 import { BottomNotch } from "@/components/bottom-notch";
 import { Dot } from "@/components/dot";
@@ -64,7 +64,7 @@ export function ReviewTab({
   const [grades, setGrades] = useState<Map<string, ClozeRating>>(new Map());
   // Cards seen this session, in order -- a graded card may drop out of the
   // refetched due list, but it still has a place in the text.
-  const [seen, setSeen] = useState<Map<string, ClozeCard>>(new Map());
+  const [seen, setSeen] = useState<Map<string, ClozeDueCard>>(new Map());
   const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
   const [onlyMissed, setOnlyMissed] = useState(false);
   const [oneAtATime, setOneAtATime] = useState(false);
@@ -92,7 +92,7 @@ export function ReviewTab({
     setSeen(next);
   }
 
-  const missed = (card: ClozeCard) =>
+  const missed = (card: ClozeDueCard) =>
     grades.get(card.id) === "again" || grades.get(card.id) === "hard";
   const queue = onlyMissed
     ? allCards.filter(missed)
@@ -128,14 +128,14 @@ export function ReviewTab({
   const pending = allCards.filter((card) => !grades.has(card.id)).length;
   const missedCount = allCards.filter(missed).length;
 
-  function stateOf(card: ClozeCard): "current" | "hidden" | "shown" | ClozeRating {
+  function stateOf(card: ClozeDueCard): "current" | "hidden" | "shown" | ClozeRating {
     if (card.id === current?.id) return revealed ? "shown" : "current";
     const given = grades.get(card.id);
     if (given && !(onlyMissed && missed(card))) return given;
     return oneAtATime ? "shown" : "hidden";
   }
 
-  const spansByBlock = new Map<number, { card: ClozeCard; hidden: boolean }[]>();
+  const spansByBlock = new Map<number, { card: ClozeDueCard; hidden: boolean }[]>();
   for (const card of allCards) {
     const state = stateOf(card);
     const list = spansByBlock.get(card.block_index) ?? [];
@@ -282,7 +282,13 @@ export function ReviewTab({
           </div>
           {current ? (
             revealed ? (
-              <GradeButtons onGrade={grade} disabled={reviewMutation.isPending} />
+              <GradeButtons
+                onGrade={grade}
+                // A card going round again in "only missed" was graded a
+                // moment ago, so its preview is out of date -- keys instead.
+                intervals={onlyMissed ? undefined : current.next_intervals}
+                disabled={reviewMutation.isPending}
+              />
             ) : (
               <ShowButton onShow={show} />
             )
@@ -318,7 +324,7 @@ function sectionOf(blocks: Block[], blockIndex: number): string {
 /** The sentence holding the gap, for the cards view (design.md §11). */
 function renderSentence(
   text: string,
-  card: ClozeCard,
+  card: ClozeDueCard,
   render: (slice: string, base: number) => ReactNode[],
 ): ReactNode {
   const before = text.slice(0, card.start_offset);

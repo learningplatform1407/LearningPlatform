@@ -5,12 +5,23 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
-from app.cloze.schemas import ClozeCardResponse, ClozeRatingRequest, ClozeReviewStateResponse
-from app.cloze.service import list_cloze_cards, list_due_cloze_cards, submit_cloze_review
+from app.cloze.schemas import (
+    ClozeCardResponse,
+    ClozeDueCardResponse,
+    ClozeRatingRequest,
+    ClozeReviewStateResponse,
+)
+from app.cloze.service import (
+    list_cloze_cards,
+    list_due_cloze_cards_with_state,
+    submit_cloze_review,
+)
 from app.common.errors import ApiError
 from app.db.session import get_db
 from app.documents.models import Document
 from app.documents.service import get_document
+from app.srs.scheduler import preview_intervals, state_of
+from app.srs.schemas import NextIntervalsResponse
 from app.users.service import get_or_create_profile
 
 router = APIRouter(prefix="/v1/documents/{document_id}/cloze-cards", tags=["cloze"])
@@ -33,15 +44,19 @@ def read_cloze_cards(
     return [ClozeCardResponse.model_validate(c) for c in list_cloze_cards(db, document)]
 
 
-@router.get("/due", response_model=list[ClozeCardResponse])
+@router.get("/due", response_model=list[ClozeDueCardResponse])
 def read_due_cloze_cards(
     document_id: UUID,
     user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> list[ClozeCardResponse]:
+) -> list[ClozeDueCardResponse]:
     document = _get_document_or_404(db, document_id)
     return [
-        ClozeCardResponse.model_validate(c) for c in list_due_cloze_cards(db, document, user.id)
+        ClozeDueCardResponse(
+            **ClozeCardResponse.model_validate(card).model_dump(),
+            next_intervals=NextIntervalsResponse.of(preview_intervals(state_of(state))),
+        )
+        for card, state in list_due_cloze_cards_with_state(db, document, user.id)
     ]
 
 

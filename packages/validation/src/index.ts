@@ -233,6 +233,14 @@ export const flashcardResponseSchema = z.object({
 /** A card as the deck runner receives it. Carries `back_text` up front:
  * unlike a question, a flashcard's back is not an answer key, so the reveal
  * needs no second request and the client simply holds it until tapped. */
+/** Days each grade would schedule a card for, if chosen now. */
+export const nextIntervalsSchema = z.object({
+  again: z.number(),
+  hard: z.number(),
+  good: z.number(),
+  easy: z.number(),
+});
+
 export const flashcardCardSchema = z.object({
   id: z.string(),
   document_id: z.string(),
@@ -242,6 +250,7 @@ export const flashcardCardSchema = z.object({
   is_mine: z.boolean(),
   due_at: z.string().nullable(),
   is_new: z.boolean(),
+  next_intervals: nextIntervalsSchema,
 });
 
 export const flashcardCreateRequestSchema = z.object({
@@ -345,6 +354,10 @@ export const clozeCardResponseSchema = z.object({
   start_offset: z.number(),
   end_offset: z.number(),
   created_at: z.string(),
+});
+
+export const clozeDueCardResponseSchema = clozeCardResponseSchema.extend({
+  next_intervals: nextIntervalsSchema,
 });
 
 export const clozeRatingRequestSchema = z.object({

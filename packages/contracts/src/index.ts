@@ -10,6 +10,7 @@ import type {
   chapterCreateRequestSchema,
   chapterResponseSchema,
   clozeCardResponseSchema,
+  clozeDueCardResponseSchema,
   clozeRatingRequestSchema,
   clozeRatingSchema,
   clozeReviewStateResponseSchema,
@@ -108,6 +109,7 @@ export type FlashcardScope = z.infer<typeof flashcardScopeSchema>;
 export type FlashcardStatus = z.infer<typeof flashcardStatusSchema>;
 export type FlashcardScopeFilter = z.infer<typeof flashcardScopeFilterSchema>;
 export type FlashcardCard = z.infer<typeof flashcardCardSchema>;
+export type NextIntervals = FlashcardCard["next_intervals"];
 export type FlashcardCreateRequest = z.infer<typeof flashcardCreateRequestSchema>;
 export type FlashcardUpdateRequest = z.infer<typeof flashcardUpdateRequestSchema>;
 export type FlashcardRatingRequest = z.infer<typeof flashcardRatingRequestSchema>;
@@ -121,6 +123,7 @@ export type FlashcardSuspensionRequest = z.infer<typeof flashcardSuspensionReque
 export type ReviewRating = z.infer<typeof reviewRatingSchema>;
 export type ClozeRating = z.infer<typeof clozeRatingSchema>;
 export type ClozeCard = z.infer<typeof clozeCardResponseSchema>;
+export type ClozeDueCard = z.infer<typeof clozeDueCardResponseSchema>;
 export type ClozeRatingRequest = z.infer<typeof clozeRatingRequestSchema>;
 export type ClozeReviewState = z.infer<typeof clozeReviewStateResponseSchema>;
 export type ReviewSummaryLesson = z.infer<typeof reviewSummaryLessonSchema>;

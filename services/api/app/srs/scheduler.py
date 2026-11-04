@@ -13,7 +13,7 @@ means a third state table, never a second copy of this file.
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Literal, Protocol
 
 ReviewRating = Literal["again", "hard", "good", "easy"]
 
@@ -102,4 +102,47 @@ def compute_next_state(
         interval_days=interval,
         repetitions=repetitions,
         due_at=now + timedelta(days=interval),
+    )
+
+
+@dataclass(frozen=True)
+class NextIntervals:
+    """What each grade would schedule, in days -- shown under the grade
+    buttons before grading (design.md §11)."""
+
+    again: int
+    hard: int
+    good: int
+    easy: int
+
+
+def preview_intervals(state: SchedulerState | None) -> NextIntervals:
+    """The interval each rating would produce from `state` (a never-reviewed
+    card when None), computed by the same function grading uses, so the
+    preview can never disagree with the outcome."""
+    current = state or SchedulerState(
+        ease_factor=DEFAULT_EASE_FACTOR, interval_days=0, repetitions=0
+    )
+    return NextIntervals(
+        again=compute_next_state("again", current).interval_days,
+        hard=compute_next_state("hard", current).interval_days,
+        good=compute_next_state("good", current).interval_days,
+        easy=compute_next_state("easy", current).interval_days,
+    )
+
+
+class StoredSchedule(Protocol):
+    """The scheduling columns every review-state table has."""
+
+    ease_factor: float
+    interval_days: int
+    repetitions: int
+
+
+def state_of(row: StoredSchedule | None) -> SchedulerState | None:
+    """A stored review-state row (either feature's table) as scheduler input."""
+    if row is None:
+        return None
+    return SchedulerState(
+        ease_factor=row.ease_factor, interval_days=row.interval_days, repetitions=row.repetitions
     )
