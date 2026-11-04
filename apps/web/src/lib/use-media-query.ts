@@ -24,3 +24,9 @@ export function useMediaQuery(query: string, serverDefault = true): boolean {
 
 /** The design's narrow-screen breakpoint (design.md §13). */
 export const WIDE_QUERY = "(min-width: 721px)";
+
+/** "smooth", unless the user asked for less motion -- then jumps are instant
+ * (design.md §13). Read at call time: scrolls happen in event handlers. */
+export function scrollBehavior(): ScrollBehavior {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+}

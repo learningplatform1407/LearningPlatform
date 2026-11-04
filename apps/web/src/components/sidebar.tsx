@@ -90,7 +90,7 @@ export function Sidebar() {
           />
           <nav
             aria-label="Mobile menu"
-            className="absolute top-0 left-0 flex h-full w-[280px] max-w-[85vw] animate-[drawer-in-left_0.25s_ease] flex-col overflow-y-auto border-r border-border bg-background pt-[calc(22px+env(safe-area-inset-top,0px))] pr-3 pb-[22px] pl-3.5"
+            className="absolute top-0 left-0 flex h-full w-[280px] max-w-[85vw] animate-[drawer-in-left_0.25s_ease] motion-reduce:animate-none flex-col overflow-y-auto border-r border-border bg-background pt-[calc(22px+env(safe-area-inset-top,0px))] pr-3 pb-[22px] pl-3.5"
           >
             <div className="mb-3 flex items-center justify-between pl-1.5">
               <span className="label-caps">Menu</span>

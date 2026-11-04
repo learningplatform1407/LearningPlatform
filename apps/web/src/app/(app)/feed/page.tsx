@@ -29,7 +29,7 @@ import { createClient } from "@/lib/supabase/client";
  * @lp/ui, shared with mobile so the http(s)-only rule has one home. */
 function LinkifiedBody({ body }: { body: string }) {
   return (
-    <p className="mt-sm whitespace-pre-wrap text-foreground">
+    <p className="mt-sm whitespace-pre-wrap [overflow-wrap:anywhere] text-foreground">
       {splitLinkifiedBody(body).map((segment, index) =>
         segment.href === undefined ? (
           <Fragment key={index}>{segment.text}</Fragment>

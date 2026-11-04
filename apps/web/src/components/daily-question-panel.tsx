@@ -115,7 +115,7 @@ export function DailyQuestionRail({
                 key={cell.date}
                 aria-hidden="true"
                 className={`aspect-square rounded-full py-xs text-center text-xs ${
-                  cell.inMonth ? "text-muted-foreground" : "text-muted-foreground/40"
+                  cell.inMonth ? "text-muted-foreground" : "text-muted-foreground font-normal"
                 }`}
               >
                 {cell.dayOfMonth}
@@ -133,7 +133,7 @@ export function DailyQuestionRail({
                 cell.isToday
                   ? "bg-primary font-semibold text-primary-foreground hover:bg-primary/90"
                   : (mark?.className ?? "text-foreground")
-              } ${cell.inMonth ? "" : "opacity-50"}`}
+              }`}
             >
               {cell.dayOfMonth}
               {mark && (

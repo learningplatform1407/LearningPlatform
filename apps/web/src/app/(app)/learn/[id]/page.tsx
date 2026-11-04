@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Annotation, AnnotationCreateRequest } from "@lp/contracts";
 
 import { useToast } from "@/components/toast";
+import { scrollBehavior } from "@/lib/use-media-query";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 import { FlashcardsTab } from "./flashcards-tab";
@@ -33,6 +34,7 @@ import { headingId, TextLessonView } from "./text-lesson-view";
 import { TocDrawer, type TocHeading } from "./toc-drawer";
 import { ToolNotch } from "./tool-notch";
 import { useLessonKeys } from "./use-lesson-keys";
+import { useTabSwipe } from "./use-tab-swipe";
 
 const TEXT_SCALE_KEY = "lp-text-scale";
 const UNDO_LIMIT = 80;
@@ -263,7 +265,7 @@ export default function LecturePage() {
     requestAnimationFrame(() =>
       document
         .querySelector(`[data-annotation-id="${note.id}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "center" }),
+        ?.scrollIntoView({ behavior: scrollBehavior(), block: "center" }),
     );
   }
 
@@ -303,6 +305,14 @@ export default function LecturePage() {
       // Storage blocked: the size just won't be remembered.
     }
   }
+
+  // Swiping stays off while a tool is armed: on the Lesson tab a sideways
+  // drag is marking, not navigating (design.md §13).
+  useTabSwipe(!(activeTab === "lesson" && tool !== null), (direction) => {
+    const index = LESSON_TABS.findIndex((tab) => tab.key === activeTab) + direction;
+    const next = LESSON_TABS[index];
+    if (next) setActiveTab(next.key);
+  });
 
   useLessonKeys(activeTab === "lesson", {
     swatch: chooseSwatch,
@@ -364,7 +374,8 @@ export default function LecturePage() {
   function jumpToHeading(id: string) {
     setActiveTab("lesson");
     if (mode === "pdf") pdfRef.current?.jumpTo(id);
-    else document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else
+      document.getElementById(id)?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
     if (!window.matchMedia("(min-width: 721px)").matches) setTocOpen(false);
   }
 

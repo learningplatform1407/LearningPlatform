@@ -63,7 +63,7 @@ export function LessonTopNotch({
 }) {
   const wide = useMediaQuery(WIDE_QUERY);
   return (
-    <div className="pointer-events-none sticky top-[env(safe-area-inset-top,0px)] z-50 flex items-start justify-center gap-2.5">
+    <header className="pointer-events-none sticky top-[env(safe-area-inset-top,0px)] z-50 flex items-start justify-center gap-2.5">
       <div className="flex flex-1 justify-end gap-2 pt-2.5">
         {wide && <LeftDots backHref={backHref} textScale={textScale} onTextScale={onTextScale} />}
       </div>
@@ -92,7 +92,7 @@ export function LessonTopNotch({
         {wide && showViewMode && <ViewSwitch mode={viewMode} onChange={onViewMode} />}
         {wide && zoom && <ZoomDots {...zoom} />}
       </div>
-    </div>
+    </header>
   );
 }
 

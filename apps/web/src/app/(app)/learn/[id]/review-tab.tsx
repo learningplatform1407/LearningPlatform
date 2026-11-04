@@ -361,6 +361,7 @@ function CardsOverlay({
 }) {
   return (
     <div
+      data-no-swipe
       className="fixed inset-0 z-[54] flex items-center justify-center bg-scrim px-[50px] pt-[80px] pb-[140px] min-[721px]:px-[60px]"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();

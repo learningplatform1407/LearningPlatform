@@ -55,92 +55,95 @@ export function ToolNotch({
   const penMode = tool?.kind === "pen";
 
   return (
-    <div
-      role="toolbar"
-      aria-label="Lesson tools"
-      aria-orientation="vertical"
-      style={{ left: tocOpen ? 280 : 0 }}
-      className="fixed top-1/2 z-[60] flex w-[42px] -translate-y-1/2 flex-col items-center gap-[3px] rounded-r-xl border border-l-0 border-border bg-background px-[5px] py-1.5 shadow-edge-left transition-[left] duration-[250ms] ease-in-out"
-    >
-      <ToolButton
-        label={tocOpen ? "Hide contents" : "Show contents"}
-        pressed={tocOpen}
-        onClick={onToggleToc}
+    // The landmark lets screen-reader users jump straight to the tools.
+    <aside aria-label="Lesson toolbar" data-no-swipe>
+      <div
+        role="toolbar"
+        aria-label="Lesson tools"
+        aria-orientation="vertical"
+        style={{ left: tocOpen ? 280 : 0 }}
+        className="fixed top-1/2 z-[60] flex w-[42px] -translate-y-1/2 flex-col items-center gap-[3px] rounded-r-xl border border-l-0 border-border bg-background px-[5px] py-1.5 shadow-edge-left transition-[left] duration-[250ms] ease-in-out"
       >
-        <span className="text-[22px] leading-none font-semibold">{tocOpen ? "‹" : "›"}</span>
-      </ToolButton>
+        <ToolButton
+          label={tocOpen ? "Hide contents" : "Show contents"}
+          pressed={tocOpen}
+          onClick={onToggleToc}
+        >
+          <span className="text-[22px] leading-none font-semibold">{tocOpen ? "‹" : "›"}</span>
+        </ToolButton>
 
-      {HIGHLIGHT_COLOR_NAMES.map((name, index) => {
-        const swatch = index as SwatchIndex;
-        const active =
-          (tool?.kind === "highlight" || tool?.kind === "pen") && tool.color === swatch;
-        return (
-          <ToolButton
-            key={name}
-            label={penMode ? `Pen colour — ${name}` : `Highlight — ${name}`}
-            title={`${penMode ? "Pen colour" : "Marker"}: ${name} (${index + 1})`}
-            pressed={active}
-            dimmed={!onLessonTab}
-            onClick={guard(true, "", () => onSwatch(swatch))}
-          >
-            <span
-              className="block h-5 w-[13px] rounded-[4px]"
-              style={{ background: pageColors.swatches[index] }}
-            />
-          </ToolButton>
-        );
-      })}
+        {HIGHLIGHT_COLOR_NAMES.map((name, index) => {
+          const swatch = index as SwatchIndex;
+          const active =
+            (tool?.kind === "highlight" || tool?.kind === "pen") && tool.color === swatch;
+          return (
+            <ToolButton
+              key={name}
+              label={penMode ? `Pen colour — ${name}` : `Highlight — ${name}`}
+              title={`${penMode ? "Pen colour" : "Marker"}: ${name} (${index + 1})`}
+              pressed={active}
+              dimmed={!onLessonTab}
+              onClick={guard(true, "", () => onSwatch(swatch))}
+            >
+              <span
+                className="block h-5 w-[13px] rounded-[4px]"
+                style={{ background: pageColors.swatches[index] }}
+              />
+            </ToolButton>
+          );
+        })}
 
-      <span aria-hidden="true" className="my-[3px] h-px w-[22px] bg-border" />
+        <span aria-hidden="true" className="my-[3px] h-px w-[22px] bg-border" />
 
-      <ToolButton
-        label="Explain"
-        title="Explain (Q) — coming soon"
-        dimmed
-        onClick={() => toast("AI explanations are coming soon.")}
-      >
-        <BulbIcon />
-      </ToolButton>
-      <ToolButton
-        label="Note"
-        title={viewMode === "text" ? "Note (W)" : "Notes work in Text mode"}
-        pressed={tool?.kind === "note"}
-        dimmed={!onLessonTab || !toolAvailable("note", viewMode)}
-        onClick={guard(toolAvailable("note", viewMode), "Notes work in Text mode.", () =>
-          onTool("note"),
-        )}
-      >
-        <NoteIcon />
-      </ToolButton>
-      <ToolButton
-        label="Pen"
-        title={viewMode === "pdf" ? "Pen (P)" : "The pen draws on PDF pages"}
-        pressed={penMode}
-        dimmed={!onLessonTab || !toolAvailable("pen", viewMode)}
-        onClick={guard(toolAvailable("pen", viewMode), "The pen draws on PDF pages.", () =>
-          onTool("pen"),
-        )}
-      >
-        <PenIcon />
-      </ToolButton>
-      <ToolButton
-        label="Eraser"
-        title="Eraser (R)"
-        pressed={tool?.kind === "eraser"}
-        dimmed={!onLessonTab}
-        onClick={guard(true, "", () => onTool("eraser"))}
-      >
-        <EraserIcon />
-      </ToolButton>
-      <ToolButton
-        label="Undo"
-        title="Undo (Z)"
-        dimmed={!onLessonTab || !canUndo}
-        onClick={guard(canUndo, "Nothing to undo.", onUndo)}
-      >
-        <UndoIcon />
-      </ToolButton>
-    </div>
+        <ToolButton
+          label="Explain"
+          title="Explain (Q) — coming soon"
+          dimmed
+          onClick={() => toast("AI explanations are coming soon.")}
+        >
+          <BulbIcon />
+        </ToolButton>
+        <ToolButton
+          label="Note"
+          title={viewMode === "text" ? "Note (W)" : "Notes work in Text mode"}
+          pressed={tool?.kind === "note"}
+          dimmed={!onLessonTab || !toolAvailable("note", viewMode)}
+          onClick={guard(toolAvailable("note", viewMode), "Notes work in Text mode.", () =>
+            onTool("note"),
+          )}
+        >
+          <NoteIcon />
+        </ToolButton>
+        <ToolButton
+          label="Pen"
+          title={viewMode === "pdf" ? "Pen (P)" : "The pen draws on PDF pages"}
+          pressed={penMode}
+          dimmed={!onLessonTab || !toolAvailable("pen", viewMode)}
+          onClick={guard(toolAvailable("pen", viewMode), "The pen draws on PDF pages.", () =>
+            onTool("pen"),
+          )}
+        >
+          <PenIcon />
+        </ToolButton>
+        <ToolButton
+          label="Eraser"
+          title="Eraser (R)"
+          pressed={tool?.kind === "eraser"}
+          dimmed={!onLessonTab}
+          onClick={guard(true, "", () => onTool("eraser"))}
+        >
+          <EraserIcon />
+        </ToolButton>
+        <ToolButton
+          label="Undo"
+          title="Undo (Z)"
+          dimmed={!onLessonTab || !canUndo}
+          onClick={guard(canUndo, "Nothing to undo.", onUndo)}
+        >
+          <UndoIcon />
+        </ToolButton>
+      </div>
+    </aside>
   );
 }
 

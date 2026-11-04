@@ -114,9 +114,10 @@ export function SidePanel({
 
       {open && (
         <aside
+          data-no-swipe
           aria-label="Notebook and AI chat"
           style={{ width: panelWidth }}
-          className="fixed top-0 right-0 bottom-0 z-[57] flex animate-[drawer-in-right_0.25s_ease] flex-col border-l border-border bg-background pt-[env(safe-area-inset-top,0px)]"
+          className="fixed top-0 right-0 bottom-0 z-[57] flex animate-[drawer-in-right_0.25s_ease] motion-reduce:animate-none flex-col border-l border-border bg-background pt-[env(safe-area-inset-top,0px)]"
         >
           <div
             aria-hidden="true"

@@ -24,7 +24,7 @@ export const lightColors = {
   secondary: "rgba(110, 110, 120, 0.13)",
   secondaryForeground: "#1D1F23",
 
-  accent: "#2F6F9F",
+  accent: "#2D6B9A",
   accentForeground: "#FFFFFF",
 
   paper: "#FFFFFF",
@@ -33,22 +33,22 @@ export const lightColors = {
 
   danger: "#C8372D",
   dangerForeground: "#FFFFFF",
-  success: "#2F8A4F",
+  success: "#267140",
   warning: "#C27A10",
 
   // Review grades. Again/Hard/Good are the design's; Easy is ours (the SM-2
   // scheduler has four ratings) and takes the accent so it reads as "fine".
   again: "#C8372D",
   hard: "#C27A10",
-  good: "#2F8A4F",
-  easy: "#2F6F9F",
+  good: "#267140",
+  easy: "#2D6B9A",
   // Precomputed instead of `color-mix()`, which React Native can't do.
   againTint: "rgba(200, 55, 45, 0.18)",
   hardTint: "rgba(194, 122, 16, 0.18)",
   goodTint: "rgba(47, 138, 79, 0.16)",
   easyTint: "rgba(47, 111, 159, 0.16)",
 
-  cloze: "#2F6F9F",
+  cloze: "#2D6B9A",
   clozeBg: "rgba(47, 111, 159, 0.10)",
 
   // Highlighter fills, in swatch order: yellow, blue, purple, red, green.
@@ -84,10 +84,10 @@ export const darkColors = {
 
   paper: "#F4F2EC",
   paperForeground: "#1D1F23",
-  paperMutedForeground: "#6C6F76",
+  paperMutedForeground: "#5F6269",
 
   danger: "#E0574C",
-  dangerForeground: "#FFFFFF",
+  dangerForeground: "#17181B",
   success: "#5CBF7D",
   warning: "#E0A03A",
 

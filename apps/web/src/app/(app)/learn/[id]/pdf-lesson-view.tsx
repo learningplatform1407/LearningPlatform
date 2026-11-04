@@ -19,6 +19,7 @@ import type { LessonPageInk, PageHighlight, Stroke, StrokePoint } from "@lp/cont
 import { highlightIndex, pageColors } from "@lp/ui";
 
 import { useToast } from "@/components/toast";
+import { scrollBehavior } from "@/lib/use-media-query";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { createClient } from "@/lib/supabase/client";
 
@@ -244,7 +245,7 @@ export function PdfLessonView({
         if (!page) return;
         const y = page.getBoundingClientRect().top + window.scrollY;
         const offset = item.y === null ? 0 : item.y * page.offsetHeight;
-        window.scrollTo({ top: y + offset - window.innerHeight / 3, behavior: "smooth" });
+        window.scrollTo({ top: y + offset - window.innerHeight / 3, behavior: scrollBehavior() });
         if (item.y !== null) setFlash({ page: item.page, y: item.y, at: Date.now() });
       },
     }),

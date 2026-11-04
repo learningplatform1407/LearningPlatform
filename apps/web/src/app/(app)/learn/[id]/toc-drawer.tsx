@@ -43,8 +43,9 @@ export function TocDrawer({
 
   return (
     <nav
+      data-no-swipe
       aria-label="Table of contents"
-      className="fixed top-0 bottom-0 left-0 z-[59] w-[280px] max-w-[85vw] animate-[drawer-in-left_0.25s_ease] overflow-y-auto border-r border-border bg-background pt-[calc(22px+env(safe-area-inset-top,0px))] pr-3 pb-[22px] pl-3.5"
+      className="fixed top-0 bottom-0 left-0 z-[59] w-[280px] max-w-[85vw] animate-[drawer-in-left_0.25s_ease] motion-reduce:animate-none overflow-y-auto border-r border-border bg-background pt-[calc(22px+env(safe-area-inset-top,0px))] pr-3 pb-[22px] pl-3.5"
     >
       {headings.length > 0 && (
         <section className="mb-lg">

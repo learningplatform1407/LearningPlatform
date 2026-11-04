@@ -18,7 +18,7 @@ export function ChangePasswordForm() {
       <h2 className="text-lg font-semibold text-foreground">Change password</h2>
       <p className="mt-xs text-sm text-muted-foreground">
         You&apos;ll be signed out on every device, including this one. Forgotten it instead?{" "}
-        <a href="/forgot-password" className="text-accent hover:underline">
+        <a href="/forgot-password" className="text-accent underline underline-offset-2">
           Reset it by email
         </a>
         .

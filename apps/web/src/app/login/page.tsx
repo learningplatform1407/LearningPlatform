@@ -45,13 +45,13 @@ export default function LoginPage() {
         </Button>
       </form>
       <p className="mt-md text-sm text-muted-foreground">
-        <Link href="/forgot-password" className="text-accent hover:underline">
+        <Link href="/forgot-password" className="text-accent underline underline-offset-2">
           Forgot your password?
         </Link>
       </p>
       <p className="mt-xs text-sm text-muted-foreground">
         Don&apos;t have an account?{" "}
-        <Link href="/signup" className="text-accent hover:underline">
+        <Link href="/signup" className="text-accent underline underline-offset-2">
           Sign up
         </Link>
       </p>
