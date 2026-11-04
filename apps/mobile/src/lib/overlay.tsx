@@ -21,6 +21,7 @@ export function Overlay({
   title,
   onClose,
   footer,
+  side,
   children,
 }: {
   visible: boolean;
@@ -28,22 +29,50 @@ export function Overlay({
   onClose: () => void;
   /** Pinned below the scroll area, for actions that must stay reachable. */
   footer?: ReactNode;
+  /** A panel sliding over the page from that edge instead of a full sheet:
+   * the lesson's contents drawer (left) and notebook panel (right),
+   * design.md §6-7. Tapping the dimmed page beside it closes it. */
+  side?: "left" | "right";
   children: ReactNode;
 }) {
   const overlayStyles = useOverlayStyles();
+  const panel = (
+    <View
+      style={[
+        overlayStyles.container,
+        side && overlayStyles.sidePanel,
+        side && overlayStyles[side],
+      ]}
+    >
+      <View style={overlayStyles.header}>
+        <Text style={overlayStyles.title}>{title}</Text>
+        <Pressable onPress={onClose} accessibilityRole="button">
+          <Text style={overlayStyles.close}>Close</Text>
+        </Pressable>
+      </View>
+      <ScrollView contentContainerStyle={overlayStyles.content}>{children}</ScrollView>
+      {footer !== undefined && <View style={overlayStyles.footer}>{footer}</View>}
+    </View>
+  );
+  // onRequestClose is what makes the Android back button dismiss it; without
+  // it the sheet is a trap on that platform.
+  if (!side) {
+    return (
+      <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+        {panel}
+      </Modal>
+    );
+  }
   return (
-    // onRequestClose is what makes the Android back button dismiss it; without
-    // it the sheet is a trap on that platform.
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={overlayStyles.container}>
-        <View style={overlayStyles.header}>
-          <Text style={overlayStyles.title}>{title}</Text>
-          <Pressable onPress={onClose} accessibilityRole="button">
-            <Text style={overlayStyles.close}>Close</Text>
-          </Pressable>
-        </View>
-        <ScrollView contentContainerStyle={overlayStyles.content}>{children}</ScrollView>
-        {footer !== undefined && <View style={overlayStyles.footer}>{footer}</View>}
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={[overlayStyles.scrimRow, side === "right" && overlayStyles.scrimRowRight]}>
+        {panel}
+        <Pressable
+          style={overlayStyles.scrim}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel={`Close ${title.toLowerCase()}`}
+        />
       </View>
     </Modal>
   );
@@ -54,27 +83,55 @@ export const useOverlayStyles = makeStyles((colors) => ({
     flex: 1,
     backgroundColor: colors.background,
   },
+  sidePanel: {
+    flex: 0,
+    width: "85%",
+    maxWidth: 360,
+    height: "100%",
+  },
+  left: {
+    borderRightWidth: 1,
+    borderRightColor: colors.border,
+  },
+  right: {
+    borderLeftWidth: 1,
+    borderLeftColor: colors.border,
+  },
+  scrimRow: {
+    flex: 1,
+    flexDirection: "row",
+  },
+  scrimRowRight: {
+    flexDirection: "row-reverse",
+  },
+  scrim: {
+    flex: 1,
+    backgroundColor: colors.scrim,
+  },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: spacing.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingTop: 42,
+    paddingBottom: spacing.sm,
   },
   title: {
-    fontSize: fontSizes.xl,
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    color: colors.mutedForeground,
   },
   close: {
     fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
-    color: colors.primary,
+    fontWeight: fontWeights.bold,
+    color: colors.accent,
   },
   content: {
     flexGrow: 1,
-    padding: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xl,
     gap: spacing.xs,
   },
   footer: {

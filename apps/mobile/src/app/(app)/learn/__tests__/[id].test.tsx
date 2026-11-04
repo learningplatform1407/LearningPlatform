@@ -1,3 +1,4 @@
+import { lightColors } from "@lp/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { router } from "expo-router";
@@ -494,7 +495,7 @@ test("renders a chapter / sub-chapter breadcrumb when the lesson is organized", 
 
   renderScreen();
 
-  expect(await screen.findByText("Chapter One / Sub A")).toBeTruthy();
+  expect(await screen.findByText("Chapter One · Sub A")).toBeTruthy();
 });
 
 test("omits the breadcrumb when the lesson is uncategorized", async () => {
@@ -747,14 +748,14 @@ test("the Review tab shows the whole lesson with the due word blanked, then reve
   // The whole lesson (heading included) stays visible during review, not
   // just the paragraph containing the due word.
   expect(await screen.findByText("Cell Biology")).toBeTruthy();
-  expect(await screen.findByText("[...]")).toBeTruthy();
+  expect(await screen.findByText("[ … ]")).toBeTruthy();
   expect(screen.queryByText("mitochondria")).toBeNull();
   expect(await screen.findByText("1 word left to review")).toBeTruthy();
 
   fireEvent.press(screen.getByText("Show"));
 
   expect(screen.getByText("mitochondria")).toBeTruthy();
-  expect(screen.queryByText("[...]")).toBeNull();
+  expect(screen.queryByText("[ … ]")).toBeNull();
   for (const label of ["Again", "Hard", "Good", "Easy"]) {
     expect(screen.getByText(label)).toBeTruthy();
   }
@@ -773,21 +774,21 @@ test("two due words in the same paragraph are revealed one at a time, in order",
   await screen.findByText(/The database index accelerates lookups\./);
   fireEvent.press(screen.getByText("Review"));
 
-  expect(await screen.findAllByText("[...]")).toHaveLength(2);
+  expect(await screen.findAllByText("[ … ]")).toHaveLength(2);
   expect(screen.getByText("2 words left to review")).toBeTruthy();
 
   fireEvent.press(screen.getByText("Show"));
   expect(screen.getByText("database")).toBeTruthy();
-  expect(screen.getAllByText("[...]")).toHaveLength(1); // "index" still queued
+  expect(screen.getAllByText("[ … ]")).toHaveLength(1); // "index" still queued
 
   fireEvent.press(screen.getByText("Good"));
   await waitFor(() => expect(screen.getByText("1 word left to review")).toBeTruthy());
   expect(screen.getByText(/database/)).toBeTruthy(); // stays revealed (merged into plain text)
-  expect(screen.getByText("[...]")).toBeTruthy(); // "index" still hidden, Show not pressed yet
+  expect(screen.getByText("[ … ]")).toBeTruthy(); // "index" still hidden, Show not pressed yet
 
   fireEvent.press(screen.getByText("Show"));
   expect(screen.getByText("index")).toBeTruthy();
-  expect(screen.queryByText("[...]")).toBeNull();
+  expect(screen.queryByText("[ … ]")).toBeNull();
 });
 
 test("grading a Review word submits the rating and shows the next-interval feedback", async () => {
@@ -875,7 +876,7 @@ test("the Notes overlay lists notes and lets the user open one to edit", async (
   renderScreen();
   await screen.findByText("Hello world");
 
-  fireEvent.press(screen.getByText("Notes"));
+  fireEvent.press(screen.getByLabelText("Notes"));
 
   fireEvent.press(await screen.findByText("Existing note"));
   const textarea = await screen.findByDisplayValue("Existing note");
@@ -899,7 +900,7 @@ test("the Notes overlay shows an empty state and creates a new note tagged with 
   renderScreen();
   await screen.findByText("Hello world");
 
-  fireEvent.press(screen.getByText("Notes"));
+  fireEvent.press(screen.getByLabelText("Notes"));
   expect(await screen.findByText("No notes yet.")).toBeTruthy();
 
   fireEvent.press(screen.getByText("+ Text"));
@@ -921,7 +922,7 @@ test("the Notes overlay closes via its Close button", async () => {
   renderScreen();
   await screen.findByText("Hello world");
 
-  fireEvent.press(screen.getByText("Notes"));
+  fireEvent.press(screen.getByLabelText("Notes"));
   await screen.findByText("No notes yet.");
 
   fireEvent.press(screen.getByText("Close"));
@@ -946,7 +947,7 @@ test("the Contents overlay lists the current sub-chapter's lessons and navigates
   renderScreen();
   await screen.findByText("Hello world");
 
-  fireEvent.press(screen.getByText("Contents"));
+  fireEvent.press(screen.getByLabelText("Contents"));
 
   await screen.findByText("Second lesson");
   expect(mockListDocuments).toHaveBeenCalledWith("sc1");
@@ -965,7 +966,7 @@ test("the Contents overlay falls back to the Uncategorized bucket when the lesso
   renderScreen();
   await screen.findByText("Hello world");
 
-  fireEvent.press(screen.getByText("Contents"));
+  fireEvent.press(screen.getByLabelText("Contents"));
 
   await waitFor(() => expect(mockListDocuments).toHaveBeenCalledWith("none"));
 });
@@ -989,7 +990,8 @@ test("a highlight renders with its stored color", async () => {
   renderScreen();
 
   const mark = await screen.findByText("Hello");
-  expect(mark.props.style).toEqual({ backgroundColor: "#BBF7D0" });
+  // Green is the design's fifth marker, from the shared tokens.
+  expect(mark.props.style).toEqual({ backgroundColor: lightColors.highlight4 });
 });
 
 test("activating the yellow highlight tool and selecting text creates a highlight, replacing the read-only paragraph with a selectable one", async () => {

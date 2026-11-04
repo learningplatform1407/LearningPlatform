@@ -1,4 +1,5 @@
 import type { Stroke } from "@lp/contracts";
+import { highlightIndex } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { type LayoutChangeEvent, Pressable, Text, View, useWindowDimensions } from "react-native";
@@ -8,7 +9,7 @@ import { getApiClient } from "@/lib/api-client";
 import { DrawingCanvas } from "@/lib/notebook-drawing-canvas";
 import { supabase } from "@/lib/supabase";
 import { fontSizes, spacing } from "@/lib/theme";
-import { makeStyles } from "@/lib/theme-context";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
 // react-native-pdf downloads the whole file before rendering, so unlike
 // pdf.js on web this URL only has to outlive the initial fetch. Kept in step
@@ -51,6 +52,7 @@ interface PdfLessonViewProps {
  * above was confirmed against the real package rather than assumed.
  */
 export function PdfLessonView({ documentId, storagePath, pageCount }: PdfLessonViewProps) {
+  const colors = useThemeColors();
   const styles = useStyles();
   const queryClient = useQueryClient();
   const { height: windowHeight } = useWindowDimensions();
@@ -205,6 +207,27 @@ export function PdfLessonView({ documentId, storagePath, pageCount }: PdfLessonV
             style={[styles.inkOverlay, { width: overlayWidth, height: overlayHeight }]}
             pointerEvents="box-none"
           >
+            {/* Word highlights made on the web (design.md §8), shown under the
+                ink. Read-only here: react-native-pdf exposes no text to mark,
+                and the PUT below sends strokes only, which leaves them
+                untouched on the server. */}
+            <View style={styles.highlightLayer} pointerEvents="none">
+              {(ink?.highlights ?? []).flatMap((highlight, h) =>
+                highlight.rects.map(([x0, y0, x1, y1], r) => (
+                  <View
+                    key={`${h}-${r}`}
+                    style={{
+                      position: "absolute",
+                      left: x0 * overlayWidth,
+                      top: y0 * overlayHeight,
+                      width: (x1 - x0) * overlayWidth,
+                      height: (y1 - y0) * overlayHeight,
+                      backgroundColor: colors[`highlight${highlightIndex(highlight.color)}`],
+                    }}
+                  />
+                )),
+              )}
+            </View>
             <DrawingCanvas
               strokes={ink?.strokes ?? []}
               onChange={(strokes) => updateInkMutation.mutate(strokes)}
@@ -220,6 +243,13 @@ export function PdfLessonView({ documentId, storagePath, pageCount }: PdfLessonV
 }
 
 const useStyles = makeStyles((colors) => ({
+  highlightLayer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
