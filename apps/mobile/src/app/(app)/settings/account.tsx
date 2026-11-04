@@ -113,31 +113,37 @@ const useStyles = makeStyles((colors) => ({
     color: colors.mutedForeground,
   },
   button: {
+    // Same width and height for every action on this screen, text centred.
+    width: 176,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 10,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
+    paddingVertical: 9,
     alignItems: "center",
+    justifyContent: "center",
     alignSelf: "flex-start",
   },
   buttonText: {
     color: colors.foreground,
-    fontWeight: fontWeights.medium,
+    fontWeight: fontWeights.bold,
+    textAlign: "center",
     fontSize: fontSizes.sm,
   },
   dangerButton: {
+    // Same width and height for every action on this screen, text centred.
+    width: 176,
     borderWidth: 1,
     borderColor: colors.danger,
     borderRadius: 10,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
+    paddingVertical: 9,
     alignItems: "center",
+    justifyContent: "center",
     alignSelf: "flex-start",
   },
   dangerButtonText: {
     color: colors.danger,
-    fontWeight: fontWeights.medium,
+    fontWeight: fontWeights.bold,
+    textAlign: "center",
     fontSize: fontSizes.sm,
   },
   error: {

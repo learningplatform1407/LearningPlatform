@@ -61,7 +61,8 @@ export function ChangePasswordForm() {
         )}
         {/* No success message: the action redirects to /login, which carries
             the confirmation. This component is unmounted by then. */}
-        <Button type="submit" className="self-start" disabled={pending}>
+        {/* w-44: the same width as the Account page's other two buttons. */}
+        <Button type="submit" className="w-44 self-start" disabled={pending}>
           {pending ? "Saving..." : "Change password"}
         </Button>
       </form>

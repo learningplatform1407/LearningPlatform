@@ -13,6 +13,10 @@ import { logout } from "../../actions";
 
 import { ChangePasswordForm } from "./change-password-form";
 
+/** The page's three actions share one width (Change password too, in its
+ * form), so they line up as a set. */
+const ACCOUNT_BUTTON = "w-44";
+
 export default function AccountSettingsPage() {
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
@@ -54,7 +58,7 @@ export default function AccountSettingsPage() {
       <div className="mt-lg flex max-w-[32rem] flex-col gap-md">
         <p className="text-sm text-muted-foreground">{data.email}</p>
         <form action={logout}>
-          <Button type="submit" variant="secondary">
+          <Button type="submit" variant="secondary" className={ACCOUNT_BUTTON}>
             Sign out
           </Button>
         </form>
@@ -68,7 +72,7 @@ export default function AccountSettingsPage() {
         <Button
           type="button"
           variant="danger"
-          className="self-start"
+          className={ACCOUNT_BUTTON}
           onClick={() => setDeleteOpen(true)}
         >
           Delete Account
