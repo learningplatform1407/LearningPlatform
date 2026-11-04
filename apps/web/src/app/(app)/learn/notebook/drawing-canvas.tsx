@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 import type { Stroke, StrokePoint } from "@lp/contracts";
+import { HIGHLIGHT_COLOR_NAMES, pageColors } from "@lp/ui";
 
 // Every stroke's points are normalized to [0, 1] relative to this fixed
 // aspect ratio so a drawing looks the same regardless of what size box it's
@@ -11,12 +12,9 @@ import type { Stroke, StrokePoint } from "@lp/contracts";
 export const NOTEBOOK_CANVAS_ASPECT_RATIO = 4 / 3;
 
 export const NOTEBOOK_PEN_COLORS = [
-  { name: "black", value: "#1f2937" },
-  { name: "yellow", value: "#eab308" },
-  { name: "green", value: "#22c55e" },
-  { name: "blue", value: "#3b82f6" },
-  { name: "pink", value: "#ec4899" },
-] as const;
+  { name: "graphite", value: "#1D1F23" },
+  ...HIGHLIGHT_COLOR_NAMES.map((name, i) => ({ name, value: pageColors.pens[i]! })),
+];
 
 const STROKE_WIDTH = 0.006;
 
@@ -97,7 +95,7 @@ export function DrawingCanvas({
   const explicitSize = width !== undefined && height !== undefined;
   const [autoSize, setAutoSize] = useState({ width: 0, height: 0 });
   const size = explicitSize ? { width, height } : autoSize;
-  const [color, setColor] = useState<string>(NOTEBOOK_PEN_COLORS[0].value);
+  const [color, setColor] = useState<string>(NOTEBOOK_PEN_COLORS[0]!.value);
   const [tool, setTool] = useState<"pen" | "eraser">("pen");
   const currentStrokeRef = useRef<StrokePoint[]>([]);
   const [drawingStroke, setDrawingStroke] = useState<StrokePoint[] | null>(null);
@@ -266,7 +264,9 @@ export function DrawingCanvas({
               onClick={() => setColor(swatch.value)}
               style={{ backgroundColor: swatch.value }}
               className={`h-6 w-6 rounded-full border border-border ${
-                color === swatch.value ? "ring-2 ring-primary ring-offset-1" : ""
+                color === swatch.value
+                  ? "ring-2 ring-foreground ring-offset-2 ring-offset-background"
+                  : ""
               }`}
             />
           ))}
@@ -275,9 +275,7 @@ export function DrawingCanvas({
               type="button"
               aria-pressed={tool === "pen"}
               onClick={() => setTool("pen")}
-              className={`rounded-md border border-border px-sm py-xs text-xs text-foreground hover:bg-muted ${
-                tool === "pen" ? "bg-muted" : ""
-              }`}
+              className="rounded-full border border-border bg-background px-3 py-1 text-caption font-bold text-foreground hover:bg-muted aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background"
             >
               Pen
             </button>
@@ -285,9 +283,7 @@ export function DrawingCanvas({
               type="button"
               aria-pressed={tool === "eraser"}
               onClick={() => setTool("eraser")}
-              className={`rounded-md border border-border px-sm py-xs text-xs text-foreground hover:bg-muted ${
-                tool === "eraser" ? "bg-muted" : ""
-              }`}
+              className="rounded-full border border-border bg-background px-3 py-1 text-caption font-bold text-foreground hover:bg-muted aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background"
             >
               Eraser
             </button>
@@ -296,7 +292,7 @@ export function DrawingCanvas({
             type="button"
             onClick={handleUndo}
             disabled={history.length === 0}
-            className="ml-md rounded-md border border-border px-sm py-xs text-xs text-foreground hover:bg-muted disabled:opacity-50"
+            className="ml-md rounded-full border border-border bg-background px-3 py-1 text-caption font-bold text-foreground hover:bg-muted disabled:opacity-50"
           >
             Undo
           </button>
@@ -304,7 +300,7 @@ export function DrawingCanvas({
             type="button"
             onClick={handleClear}
             disabled={strokes.length === 0}
-            className="rounded-md border border-border px-sm py-xs text-xs text-foreground hover:bg-muted disabled:opacity-50"
+            className="rounded-full border border-border bg-background px-3 py-1 text-caption font-bold text-foreground hover:bg-muted disabled:opacity-50"
           >
             Clear
           </button>
@@ -320,7 +316,7 @@ export function DrawingCanvas({
           // own visible background/border.
           explicitSize
             ? "overflow-hidden"
-            : "w-full overflow-hidden rounded-md border border-border bg-background"
+            : "w-full overflow-hidden rounded-lg bg-paper shadow-page"
         }
       >
         <canvas
@@ -344,7 +340,7 @@ export function DrawingThumbnail({ strokes }: { strokes: Stroke[] }) {
       viewBox="0 0 1 1"
       preserveAspectRatio="none"
       style={{ aspectRatio: NOTEBOOK_CANVAS_ASPECT_RATIO }}
-      className="w-full rounded-sm border border-border bg-background"
+      className="w-full rounded-sm bg-paper shadow-page"
       role="img"
       aria-label="Drawing preview"
     >

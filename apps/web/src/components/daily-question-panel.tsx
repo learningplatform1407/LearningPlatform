@@ -62,8 +62,8 @@ export function DailyQuestionRail({
 
   return (
     <div className="flex w-full flex-col">
-      <h2 className="text-sm font-semibold text-foreground">Question of the day</h2>
-      <p className="mt-xs text-xs text-muted-foreground">{summarise(today)}</p>
+      <h2 className="label-caps">Question of the day</h2>
+      <p className="mt-xs text-caption font-semibold text-muted-foreground">{summarise(today)}</p>
 
       <div className="mt-md flex items-center justify-between">
         <button
@@ -168,10 +168,10 @@ export function DailyQuestionCard({ today, onOpen }: { today: DailyQuestion; onO
       type="button"
       interactive
       onClick={onOpen}
-      className="block p-lg text-left lg:hidden"
+      className="block px-md py-3.5 text-left lg:hidden"
     >
-      <p className="text-lg font-semibold text-foreground">Question of the day</p>
-      <p className="mt-xs text-sm text-muted-foreground">{summarise(today)}</p>
+      <p className="text-card leading-snug font-extrabold text-foreground">Question of the day</p>
+      <p className="mt-xs text-toc leading-snug text-muted-foreground">{summarise(today)}</p>
     </Card>
   );
 }

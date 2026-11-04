@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { PageHeader } from "@/components/page-header";
+
 import {
   DrawingEntryEditor,
   NewEntryButtons,
@@ -47,7 +49,8 @@ export default function NotebookPage() {
         aria-label="Notebook contents"
         className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-border"
       >
-        <div className="flex flex-1 flex-col gap-md overflow-y-auto p-md">
+        <div className="flex flex-1 flex-col gap-md overflow-y-auto px-sm pt-[42px] pb-md">
+          <h2 className="label-caps ml-1.5">Notes</h2>
           <NotebookEntryList
             entries={notebookEntries}
             selectedEntryId={selection?.kind === "entry" ? selection.entryId : undefined}
@@ -61,12 +64,14 @@ export default function NotebookPage() {
         />
       </nav>
 
-      <div className="flex h-screen min-w-0 flex-1 flex-col p-xl">
-        <h1 className="shrink-0 text-2xl font-bold text-foreground">Notebook</h1>
+      <div className="mx-auto flex h-screen w-full max-w-[47.5rem] min-w-0 flex-1 flex-col px-md pb-lg md:px-xl">
+        <div className="shrink-0">
+          <PageHeader kicker="Learn" title="Notebook" />
+        </div>
 
         <div className="mt-lg flex min-h-0 flex-1 flex-col">
           {!selection && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-toc text-muted-foreground">
               Select a note on the left, or create a new one.
             </p>
           )}

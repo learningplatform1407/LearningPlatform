@@ -16,11 +16,20 @@ export function Chip({
   );
 }
 
-/** A static, non-interactive chip -- a tag or a count. */
-export function Tag({ className = "", ...props }: React.HTMLAttributes<HTMLSpanElement>) {
+/** A static, non-interactive chip -- a tag or a count. `active` tints it
+ * with the accent, for a count that asks for attention (cards due). */
+export function Tag({
+  className = "",
+  active = false,
+  ...props
+}: React.HTMLAttributes<HTMLSpanElement> & { active?: boolean }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-xs font-bold text-muted-foreground ${className}`}
+      className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-bold whitespace-nowrap ${
+        active
+          ? "border-transparent bg-cloze-bg text-accent"
+          : "border-border text-muted-foreground"
+      } ${className}`}
       {...props}
     />
   );

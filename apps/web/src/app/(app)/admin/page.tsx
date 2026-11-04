@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
+import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
@@ -55,7 +56,7 @@ export default function AdminPage() {
 
   if (me.isPending) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p className="text-sm text-muted-foreground">Loading...</p>
       </PageMain>
     );
@@ -63,29 +64,36 @@ export default function AdminPage() {
 
   if (me.data?.role !== "admin") {
     return (
-      <PageMain>
-        <h1 className="text-2xl font-bold text-foreground">Admin</h1>
+      <PageMain width="reading">
+        <PageHeader kicker="Content tools" title="Admin" />
         <p className="mt-md text-sm font-medium text-muted-foreground">Admin access required.</p>
       </PageMain>
     );
   }
 
   return (
-    <PageMain>
-      <h1 className="text-2xl font-bold text-foreground">Admin</h1>
-      <p className="mt-xs text-sm font-medium text-muted-foreground">
+    <PageMain width="reading">
+      <PageHeader kicker="Content tools" title="Admin" />
+      <p className="text-toc text-muted-foreground">
         Content tools. Each one opens where that content actually lives.
       </p>
 
-      <ul className="mt-lg flex w-full max-w-[48rem] flex-col gap-sm">
+      <ul className="mt-lg border-t border-border">
         {TOOLS.map((tool) => (
-          <li key={tool.href}>
+          <li key={tool.href} className="border-b border-border">
             <Link
               href={tool.href}
-              className="block rounded-md border border-border p-lg hover:bg-muted"
+              className="group -mx-sm block rounded-sm px-sm py-md hover:bg-muted"
             >
-              <p className="text-lg font-semibold text-foreground">{tool.title}</p>
-              <p className="mt-xs text-sm text-muted-foreground">{tool.description}</p>
+              <p className="text-card leading-snug font-extrabold text-foreground">
+                {tool.title}{" "}
+                <span aria-hidden="true" className="text-muted-foreground">
+                  →
+                </span>
+              </p>
+              <p className="mt-xs text-toc leading-snug text-muted-foreground">
+                {tool.description}
+              </p>
             </Link>
           </li>
         ))}

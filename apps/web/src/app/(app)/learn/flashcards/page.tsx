@@ -6,6 +6,8 @@ import Link from "next/link";
 import type { FlashcardSummaryResponse } from "@lp/contracts";
 
 import { ExpandableRow } from "@/components/expandable-row";
+import { PageHeader } from "@/components/page-header";
+import { Tag } from "@/components/chip";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
@@ -22,16 +24,8 @@ type SummaryLesson = SummarySubChapter["lessons"][number];
 function CountBadges({ dueCount, newCount }: { dueCount: number; newCount: number }) {
   return (
     <span className="flex shrink-0 items-center gap-xs">
-      <span
-        className={`rounded-full px-sm py-0.5 text-xs font-medium ${
-          dueCount > 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-        }`}
-      >
-        {dueCount} due
-      </span>
-      <span className="rounded-full bg-muted px-sm py-0.5 text-xs font-medium text-muted-foreground">
-        {newCount} new
-      </span>
+      <Tag active={dueCount > 0}>{dueCount} due</Tag>
+      <Tag>{newCount} new</Tag>
     </span>
   );
 }
@@ -41,7 +35,7 @@ function LessonRow({ lesson }: { lesson: SummaryLesson }) {
     <li>
       <Link
         href={`/learn/${lesson.id}?tab=flashcards`}
-        className="flex items-center justify-between gap-sm rounded-md px-md py-xs text-sm hover:bg-muted"
+        className="-mx-sm flex items-center justify-between gap-sm rounded-sm px-sm py-1.5 text-toc font-semibold hover:bg-muted"
       >
         <span className="text-foreground">{lesson.title}</span>
         <CountBadges dueCount={lesson.due_count} newCount={lesson.new_count} />
@@ -59,7 +53,7 @@ function SubChapterRow({ subChapter }: { subChapter: SummarySubChapter }) {
       {subChapter.lessons.length === 0 ? (
         <p className="text-sm text-muted-foreground">No lessons.</p>
       ) : (
-        <ul className="flex flex-col gap-xs">
+        <ul>
           {subChapter.lessons.map((lesson) => (
             <LessonRow key={lesson.id} lesson={lesson} />
           ))}
@@ -78,7 +72,7 @@ function ChapterRow({ chapter }: { chapter: SummaryChapter }) {
       {chapter.sub_chapters.length === 0 ? (
         <p className="text-sm text-muted-foreground">No sub-chapters.</p>
       ) : (
-        <ul className="flex flex-col gap-xs">
+        <ul>
           {chapter.sub_chapters.map((subChapter) => (
             <SubChapterRow key={subChapter.id} subChapter={subChapter} />
           ))}
@@ -97,7 +91,7 @@ function BookRow({ book }: { book: SummaryBook }) {
       {book.chapters.length === 0 ? (
         <p className="text-sm text-muted-foreground">No chapters.</p>
       ) : (
-        <ul className="flex flex-col gap-xs">
+        <ul>
           {book.chapters.map((chapter) => (
             <ChapterRow key={chapter.id} chapter={chapter} />
           ))}
@@ -121,7 +115,7 @@ export default function FlashcardsPage() {
 
   if (isPending) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p className="text-sm text-muted-foreground">Loading...</p>
       </PageMain>
     );
@@ -129,7 +123,7 @@ export default function FlashcardsPage() {
 
   if (isError) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p role="alert" className="text-sm text-danger">
           Failed to load your flashcard summary.
         </p>
@@ -149,16 +143,16 @@ export default function FlashcardsPage() {
   const totalNew = data.books.reduce((sum, book) => sum + book.new_count, 0) + uncategorizedNew;
 
   return (
-    <PageMain>
-      <h1 className="text-2xl font-bold text-foreground">Flashcards</h1>
-      <p className="mt-xs text-sm font-medium text-muted-foreground">
+    <PageMain width="reading">
+      <PageHeader kicker="Learn" title="Flashcards" />
+      <p className="text-toc text-muted-foreground">
         {totalDue} {totalDue === 1 ? "card" : "cards"} due today · {totalNew} not studied yet.
       </p>
 
       {data.books.length === 0 && data.uncategorized_lessons.length === 0 ? (
         <p className="mt-md text-sm text-muted-foreground">No lessons yet.</p>
       ) : (
-        <ul className="mt-lg flex flex-col gap-xs">
+        <ul className="mt-lg border-y border-border">
           {data.books.map((book) => (
             <BookRow key={book.id} book={book} />
           ))}
@@ -167,7 +161,7 @@ export default function FlashcardsPage() {
               title="Uncategorized"
               badge={<CountBadges dueCount={uncategorizedDue} newCount={uncategorizedNew} />}
             >
-              <ul className="flex flex-col gap-xs">
+              <ul>
                 {data.uncategorized_lessons.map((lesson) => (
                   <LessonRow key={lesson.id} lesson={lesson} />
                 ))}

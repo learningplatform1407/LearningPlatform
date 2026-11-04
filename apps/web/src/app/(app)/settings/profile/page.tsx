@@ -5,6 +5,7 @@ import type { MeResponse } from "@lp/contracts";
 import { useState } from "react";
 
 import { Button } from "@/components/button";
+import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { createClient } from "@/lib/supabase/client";
@@ -101,8 +102,8 @@ export default function ProfileSettingsPage() {
   }
 
   return (
-    <PageMain>
-      <h1 className="text-2xl font-bold text-foreground">Profile Settings</h1>
+    <PageMain width="reading">
+      <PageHeader kicker="Settings" title="Profile Settings" />
 
       <div className="mt-lg flex items-center gap-md">
         <label className="relative flex h-16 w-16 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-lg font-medium text-muted-foreground">
@@ -140,16 +141,16 @@ export default function ProfileSettingsPage() {
           saveMutation.mutate();
         }}
       >
-        <label className="flex flex-col gap-xs text-sm text-foreground">
+        <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
           Email
           <input
             type="email"
             value={data.email ?? ""}
             disabled
-            className="rounded-md border border-border bg-muted px-sm py-xs text-base text-muted-foreground"
+            className="field bg-muted text-muted-foreground"
           />
         </label>
-        <label className="flex flex-col gap-xs text-sm text-foreground">
+        <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
           Display name
           <input
             type="text"
@@ -158,7 +159,7 @@ export default function ProfileSettingsPage() {
             className="field"
           />
         </label>
-        <label className="flex flex-col gap-xs text-sm text-foreground">
+        <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
           University
           <input
             type="text"

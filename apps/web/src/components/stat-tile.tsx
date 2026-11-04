@@ -23,7 +23,7 @@ export function StatTile({
       className={`flex flex-col gap-0.5 p-md ${emphasis ? "border-foreground/40 shadow-dot" : ""}`}
     >
       <span
-        className={`leading-tight font-extrabold text-foreground tabular-nums ${emphasis ? "text-3xl" : "text-xl"}`}
+        className={`leading-tight font-extrabold text-foreground tabular-nums ${emphasis ? "text-2xl" : "text-xl"}`}
       >
         {value}
       </span>

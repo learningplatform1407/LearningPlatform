@@ -261,6 +261,12 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
+
+  /* Native checkboxes and radios tick in ink, like the design's buttons. */
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--foreground);
+  }
 }
 
 /* Text inputs, selects and textareas: the design's chat input (15px, radius

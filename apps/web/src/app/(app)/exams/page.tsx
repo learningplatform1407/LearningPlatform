@@ -1,17 +1,14 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type {
-  QuizOptionResult,
-  QuizQuestionResult,
-  QuizSession,
-  QuizSessionQuestion,
-} from "@lp/api-client";
+import type { QuizQuestionResult, QuizSession, QuizSessionQuestion } from "@lp/api-client";
 import { ApiClientError } from "@lp/api-client";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/button";
 import { ExpandableRow } from "@/components/expandable-row";
+import { OptionChoice, QuestionRevealPanel } from "@/components/question-reveal";
+import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
@@ -78,7 +75,7 @@ function TopicPicker({
 
   return (
     <fieldset className="flex flex-col gap-xs">
-      <legend className="text-sm text-foreground">Topics</legend>
+      <legend className="text-toc font-semibold text-foreground">Topics</legend>
       <div className="mt-xs flex items-center gap-sm">
         <Button
           type="button"
@@ -97,19 +94,19 @@ function TopicPicker({
 
       {tree.isPending && <p className="text-xs text-muted-foreground">Loading topics...</p>}
       {tree.data && (
-        <ul className="mt-xs flex flex-col gap-xs">
+        <ul className="mt-xs border-y border-border">
           {tree.data.books.map((book) => (
             <ExpandableRow key={book.id} title={book.title}>
               {book.chapters.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No chapters.</p>
               ) : (
-                <ul className="flex flex-col gap-xs">
+                <ul>
                   {book.chapters.map((chapter) => (
                     <ExpandableRow
                       key={chapter.id}
                       title={chapter.title}
                       badge={
-                        <label className="flex items-center gap-xs text-xs text-muted-foreground">
+                        <label className="flex items-center gap-1.5 text-caption font-semibold text-muted-foreground">
                           <input
                             type="checkbox"
                             checked={topics.chapterIds.includes(chapter.id)}
@@ -124,13 +121,13 @@ function TopicPicker({
                         </label>
                       }
                     >
-                      <ul className="flex flex-col gap-xs">
+                      <ul>
                         {chapter.sub_chapters.map((subChapter) => (
                           <ExpandableRow
                             key={subChapter.id}
                             title={subChapter.title}
                             badge={
-                              <label className="flex items-center gap-xs text-xs text-muted-foreground">
+                              <label className="flex items-center gap-1.5 text-caption font-semibold text-muted-foreground">
                                 <input
                                   type="checkbox"
                                   checked={topics.subChapterIds.includes(subChapter.id)}
@@ -145,10 +142,10 @@ function TopicPicker({
                               </label>
                             }
                           >
-                            <ul className="flex flex-col gap-xs">
+                            <ul>
                               {subChapter.lessons.map((lesson) => (
                                 <li key={lesson.id}>
-                                  <label className="flex items-center gap-xs text-sm text-foreground">
+                                  <label className="flex items-center gap-sm py-1 text-toc font-semibold text-foreground">
                                     <input
                                       type="checkbox"
                                       checked={topics.documentIds.includes(lesson.id)}
@@ -224,7 +221,7 @@ function TagPicker({
       {open && (
         <>
           <div className="fixed inset-0 z-0" onClick={() => setOpen(false)} />
-          <div className="absolute z-10 mt-xs w-80 rounded-lg border border-border bg-background shadow-md">
+          <div className="absolute z-10 mt-xs w-80 rounded-xl border border-border bg-background shadow-notch">
             <div className="border-b border-border p-sm">
               <input
                 type="text"
@@ -242,7 +239,7 @@ function TagPicker({
                 filtered.map((tag) => (
                   <label
                     key={tag.id}
-                    className="flex items-center gap-xs rounded-md px-sm py-xs text-sm text-foreground hover:bg-muted"
+                    className="flex items-center gap-sm rounded-sm px-sm py-1.5 text-toc font-semibold text-foreground hover:bg-muted"
                   >
                     <input
                       type="checkbox"
@@ -314,11 +311,11 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
   // sections below and Question Bank's own width, so Exam Hub isn't the one
   // narrower page in its own state machine.
   return (
-    <div className="mt-lg flex w-full max-w-[48rem] flex-col gap-md">
+    <div className="mt-lg flex w-full flex-col gap-md">
       <TopicPicker topics={topics} onChange={setTopics} />
 
       <fieldset className="flex flex-col gap-xs">
-        <legend className="text-sm text-foreground">
+        <legend className="text-toc font-semibold text-foreground">
           Tags — none selected means no tag filter
         </legend>
         <div className="mt-xs">
@@ -339,7 +336,7 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
         )}
       </fieldset>
 
-      <label className="flex flex-col gap-xs text-sm text-foreground">
+      <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
         Number of questions
         <input
           type="number"
@@ -347,11 +344,11 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
           max={100}
           value={questionCount}
           onChange={(event) => setQuestionCount(Number(event.target.value))}
-          className="rounded-md border border-border px-sm py-xs text-sm"
+          className="field w-auto"
         />
       </label>
 
-      <label className="flex items-center gap-xs text-sm text-foreground">
+      <label className="flex items-center gap-sm py-1 text-toc font-semibold text-foreground">
         <input
           type="checkbox"
           checked={timed}
@@ -360,7 +357,7 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
         Timed
       </label>
       {timed && (
-        <label className="flex flex-col gap-xs text-sm text-foreground">
+        <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
           Duration (minutes)
           <input
             type="number"
@@ -368,17 +365,17 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
             max={240}
             value={durationMinutes}
             onChange={(event) => setDurationMinutes(Number(event.target.value))}
-            className="rounded-md border border-border px-sm py-xs text-sm"
+            className="field w-auto"
           />
         </label>
       )}
 
-      <label className="flex flex-col gap-xs text-sm text-foreground">
+      <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
         Reveal mode
         <select
           value={revealMode}
           onChange={(event) => setRevealMode(event.target.value as "immediate" | "on_finish")}
-          className="rounded-md border border-border px-sm py-xs text-sm"
+          className="field w-auto"
         >
           <option value="immediate">Immediate — see the answer after each question</option>
           <option value="on_finish">On finish — see results only at the end</option>
@@ -403,51 +400,6 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
 }
 
 // --- runner --------------------------------------------------------------
-
-function OptionResultRow({ option }: { option: QuizOptionResult }) {
-  return (
-    <li className="flex items-start gap-sm text-sm">
-      <span
-        className={
-          option.classified_correctly
-            ? "text-success"
-            : option.selected
-              ? "text-danger"
-              : "text-muted-foreground"
-        }
-      >
-        {option.selected ? "☑" : "☐"}
-      </span>
-      <span className="flex-1">
-        {option.text}
-        {option.in_key && (
-          <span className="ml-xs text-xs text-muted-foreground">(correct answer)</span>
-        )}
-        {option.rationale && (
-          <span className="block text-xs text-muted-foreground">{option.rationale}</span>
-        )}
-      </span>
-    </li>
-  );
-}
-
-function ImmediateReveal({ result }: { result: QuizQuestionResult }) {
-  return (
-    <div className="mt-sm rounded-md border border-border bg-secondary/40 p-sm">
-      <p className="text-sm font-medium text-foreground">
-        {result.outcome} — {result.points_awarded}/{result.points_possible} points
-      </p>
-      <ul className="mt-xs flex flex-col gap-xs">
-        {result.options.map((option) => (
-          <OptionResultRow key={option.id} option={option} />
-        ))}
-      </ul>
-      {result.explanation && (
-        <p className="mt-xs text-xs text-muted-foreground">{result.explanation}</p>
-      )}
-    </div>
-  );
-}
 
 function QuestionCard({
   question,
@@ -481,41 +433,41 @@ function QuestionCard({
   }
 
   return (
-    <div className="rounded-md border border-border p-md">
-      <p className="text-sm font-medium text-foreground">
+    <div className="border-t border-border pt-md">
+      <p className="mb-2.5 font-bold text-foreground">
         {question.position + 1}. {question.prompt}
       </p>
-      <ul className="mt-sm flex flex-col gap-xs">
-        {question.options.map((option) => (
-          <li key={option.id}>
-            <label className="flex items-center gap-xs text-sm text-foreground">
-              <input
-                type={question.kind === "single" ? "radio" : "checkbox"}
+      {reveal ? (
+        <QuestionRevealPanel reveal={reveal} />
+      ) : (
+        <ul>
+          {question.options.map((option, index) => (
+            <li key={option.id}>
+              <OptionChoice
                 name={`question-${question.position}`}
+                kind={question.kind}
+                index={index}
+                text={option.text}
                 checked={selected.includes(option.id)}
                 disabled={disabled || locked}
                 onChange={() => toggle(option.id)}
               />
-              {option.text}
-            </label>
-          </li>
-        ))}
-      </ul>
-      {reveal ? (
-        <ImmediateReveal result={reveal} />
-      ) : locked ? (
+            </li>
+          ))}
+        </ul>
+      )}
+      {reveal ? null : locked ? (
         // Answered in an earlier visit: the session payload carries the
         // points and outcome under `immediate`, but not the per-option
         // rationales — those only come back from the answer call itself
         // and from /results once the quiz is over.
-        <p className="mt-sm text-sm text-muted-foreground">
+        <p className="mt-sm text-toc font-semibold text-muted-foreground">
           Answered — {question.outcome} ({question.points_awarded}/{question.points_possible}{" "}
           points)
         </p>
       ) : (
         <Button
           type="button"
-          variant="secondary"
           className="mt-sm"
           disabled={disabled || selected.length === 0}
           onClick={() => onAnswer(question.position, selected)}
@@ -623,9 +575,9 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
   const isPaused = session.status === "paused";
 
   return (
-    <div className="mt-lg flex w-full max-w-[48rem] flex-col gap-md">
-      <div className="flex items-center justify-between rounded-md border border-border p-sm">
-        <span className="text-sm font-medium text-foreground">
+    <div className="mt-lg flex w-full flex-col gap-md">
+      <div className="sticky top-0 z-10 -mx-md flex items-center justify-between gap-sm rounded-b-xl border border-t-0 border-border bg-background px-md py-sm shadow-notch">
+        <span className="text-ui font-bold text-foreground tabular-nums">
           {remaining !== null ? formatSeconds(remaining) : "Untimed"}
           {isPaused && " (paused)"} · {session.reveal_mode}
         </span>
@@ -660,7 +612,7 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
       {isPaused ? (
         <p className="text-sm text-muted-foreground">Paused — resume to see the questions again.</p>
       ) : (
-        <div className="flex flex-col gap-md">
+        <div className="flex flex-col gap-lg">
           {session.questions.map((question) => (
             <QuestionCard
               key={question.position}
@@ -702,26 +654,18 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
 
   const data = results.data;
   return (
-    <div className="mt-lg flex w-full max-w-[48rem] flex-col gap-md">
-      <h2 className="text-lg font-semibold text-foreground">
+    <div className="mt-lg flex w-full flex-col gap-md">
+      <h2 className="text-heading font-extrabold text-foreground">
         {data.status === "cancelled"
           ? "Attempt cancelled"
           : `${data.points_awarded ?? 0} / ${data.points_possible ?? 0} points`}
       </h2>
       {data.questions.map((question) => (
-        <div key={question.position} className="rounded-md border border-border p-md">
-          <p className="text-sm font-medium text-foreground">
-            {question.position + 1}. {question.prompt} — {question.outcome} (
-            {question.points_awarded}/{question.points_possible})
+        <div key={question.position} className="border-t border-border pt-md">
+          <p className="mb-2.5 font-bold text-foreground">
+            {question.position + 1}. {question.prompt}
           </p>
-          <ul className="mt-sm flex flex-col gap-xs">
-            {question.options.map((option) => (
-              <OptionResultRow key={option.id} option={option} />
-            ))}
-          </ul>
-          {question.explanation && (
-            <p className="mt-xs text-xs text-muted-foreground">{question.explanation}</p>
-          )}
+          <QuestionRevealPanel reveal={question} />
         </div>
       ))}
       <Button type="button" onClick={onDone}>
@@ -743,15 +687,15 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
   if (!history.data || history.data.length === 0) return null;
 
   return (
-    <div className="mt-xl w-full max-w-[48rem]">
-      <h2 className="text-sm font-medium text-foreground">Recent attempts</h2>
-      <ul className="mt-sm flex flex-col gap-xs">
+    <div className="mt-xl">
+      <h2 className="label-caps">Recent attempts</h2>
+      <ul className="mt-sm border-t border-border">
         {history.data.map((item) => (
-          <li key={item.id}>
+          <li key={item.id} className="border-b border-border">
             <button
               type="button"
               onClick={() => onOpen(item.id)}
-              className="w-full rounded-md border border-border p-sm text-left text-sm hover:bg-secondary/40"
+              className="-mx-sm w-[calc(100%+16px)] rounded-sm px-sm py-2.5 text-left text-toc font-semibold text-foreground hover:bg-muted"
             >
               {item.status} · {item.points_awarded ?? "—"}/{item.points_possible ?? "—"} points ·{" "}
               {item.question_count} questions
@@ -782,9 +726,9 @@ export default function QuizzesPage() {
   }
 
   return (
-    <PageMain>
-      <h1 className="text-2xl font-bold text-foreground">Exam Hub</h1>
-      <p className="mt-xs text-sm font-medium text-muted-foreground">
+    <PageMain width="reading">
+      <PageHeader kicker="Practice" title="Exam Hub" />
+      <p className="text-toc text-muted-foreground">
         Build a custom quiz from any topics and tags. Scheduled mock exams will appear here too.
       </p>
 

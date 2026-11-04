@@ -8,7 +8,7 @@ import { changePassword, type ChangePasswordState } from "./actions";
 
 const initialState: ChangePasswordState = { error: null };
 
-const inputClass = "rounded-md border border-border px-sm py-xs text-base focus:border-primary";
+const inputClass = "field";
 
 export function ChangePasswordForm() {
   const [state, formAction, pending] = useActionState(changePassword, initialState);
@@ -24,7 +24,7 @@ export function ChangePasswordForm() {
         .
       </p>
       <form action={formAction} className="mt-md flex flex-col gap-md">
-        <label className="flex flex-col gap-xs text-sm text-foreground">
+        <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
           Current password
           <input
             type="password"
@@ -34,7 +34,7 @@ export function ChangePasswordForm() {
             className={inputClass}
           />
         </label>
-        <label className="flex flex-col gap-xs text-sm text-foreground">
+        <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
           New password
           <input
             type="password"
@@ -44,7 +44,7 @@ export function ChangePasswordForm() {
             className={inputClass}
           />
         </label>
-        <label className="flex flex-col gap-xs text-sm text-foreground">
+        <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
           Confirm new password
           <input
             type="password"

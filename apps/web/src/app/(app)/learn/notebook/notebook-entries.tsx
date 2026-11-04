@@ -27,6 +27,14 @@ export function useNotebookEntries() {
   });
 }
 
+/** Lined paper, as in the lesson's notebook panel (design.md §7). */
+const LINED_PAPER: React.CSSProperties = {
+  backgroundImage:
+    "linear-gradient(transparent calc(1.65em - 1px), var(--border) calc(1.65em - 1px))",
+  backgroundSize: "100% 1.65em",
+  backgroundAttachment: "local",
+};
+
 export function NotebookEntryList({
   entries,
   selectedEntryId,
@@ -39,17 +47,14 @@ export function NotebookEntryList({
   return (
     <div>
       {entries.length === 0 && <p className="text-sm text-muted-foreground">No notes yet.</p>}
-      <ul className="flex flex-col gap-xs">
+      <ul className="flex flex-col gap-0.5">
         {entries.map((entry) => (
           <li key={entry.id}>
             <button
               type="button"
               onClick={() => onSelect(entry.id)}
-              className={`block w-full rounded-md border-l-2 px-sm py-xs text-left text-sm ${
-                selectedEntryId === entry.id
-                  ? "border-primary bg-primary/5 font-semibold text-primary"
-                  : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
+              aria-current={selectedEntryId === entry.id ? "true" : undefined}
+              className="block w-full rounded-sm px-sm py-1.5 text-left text-toc leading-snug font-semibold text-foreground hover:bg-muted aria-current:bg-muted aria-current:font-extrabold"
             >
               {entry.type === "text" ? (
                 <span className="block truncate">{firstLine(entry.content ?? "")}</span>
@@ -79,14 +84,14 @@ export function NewEntryButtons({
       <button
         type="button"
         onClick={onNewText}
-        className="flex-1 rounded-md border border-border px-sm py-xs text-xs text-foreground hover:bg-muted"
+        className="flex-1 rounded-full border border-border bg-background px-3 py-1.5 text-caption font-bold text-foreground hover:bg-muted"
       >
         + Text
       </button>
       <button
         type="button"
         onClick={onNewDrawing}
-        className="flex-1 rounded-md border border-border px-sm py-xs text-xs text-foreground hover:bg-muted"
+        className="flex-1 rounded-full border border-border bg-background px-3 py-1.5 text-caption font-bold text-foreground hover:bg-muted"
       >
         + Drawing
       </button>
@@ -160,7 +165,7 @@ export function TextEntryEditor({
 
   return (
     <div className="flex flex-1 flex-col gap-sm">
-      <div className="flex min-h-[240px] flex-1 flex-col rounded-md border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30">
+      <div className="flex min-h-[240px] flex-1 flex-col">
         <input
           type="text"
           value={titleValue}
@@ -172,14 +177,15 @@ export function TextEntryEditor({
             }
           }}
           placeholder="Title"
-          className="border-0 bg-transparent px-sm pt-sm text-base font-semibold text-foreground placeholder:text-muted-foreground focus:outline-none"
+          className="border-0 bg-transparent pb-xs text-heading font-extrabold text-foreground placeholder:text-muted-foreground focus:outline-none"
         />
         <textarea
           ref={bodyRef}
           value={bodyValue}
           onChange={(event) => setBody(event.target.value)}
           placeholder="Write a new note..."
-          className="w-full flex-1 resize-none border-0 bg-transparent px-sm pb-sm text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+          style={LINED_PAPER}
+          className="w-full flex-1 resize-none border-0 bg-transparent text-body leading-[1.65] text-foreground placeholder:text-muted-foreground focus:outline-none"
         />
       </div>
       <div className="flex items-center gap-sm">
