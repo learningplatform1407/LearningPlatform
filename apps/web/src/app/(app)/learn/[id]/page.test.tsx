@@ -195,6 +195,9 @@ beforeEach(() => {
   listDocuments.mockReset().mockResolvedValue([]);
 });
 
+/** A hidden cloze gap, hints on or off: "[ m___ ]" or "[ … ]". */
+const GAP = /^\[ .+ \]$/;
+
 describe("LecturePage", () => {
   test("renders extracted headings and paragraphs when ready", async () => {
     getDocument.mockResolvedValue({
@@ -1324,14 +1327,14 @@ describe("LecturePage", () => {
     // The whole lesson (heading included) stays visible during review, not
     // just the paragraph containing the due word.
     expect(await screen.findByText("Cell Biology")).toBeInTheDocument();
-    expect(screen.getByText("[ … ]")).toBeInTheDocument();
+    expect(screen.getByText(GAP)).toBeInTheDocument();
     expect(screen.queryByText("mitochondria")).not.toBeInTheDocument();
     expect(screen.getByText("1 word left to review")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Show" }));
 
     expect(screen.getByText("mitochondria")).toBeInTheDocument();
-    expect(screen.queryByText("[ … ]")).not.toBeInTheDocument();
+    expect(screen.queryByText(GAP)).not.toBeInTheDocument();
     for (const label of ["Again", "Hard", "Good", "Easy"]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
@@ -1352,23 +1355,23 @@ describe("LecturePage", () => {
     await user.click(screen.getByRole("tab", { name: "Review" }));
 
     // Both due words start hidden, each as its own gap.
-    expect(await screen.findAllByText("[ … ]")).toHaveLength(2);
+    expect(await screen.findAllByText(GAP)).toHaveLength(2);
     expect(screen.getByText("2 words left to review")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Show" }));
     expect(screen.getByText("database")).toBeInTheDocument();
-    expect(screen.getAllByText("[ … ]")).toHaveLength(1); // "index" still queued
+    expect(screen.getAllByText(GAP)).toHaveLength(1); // "index" still queued
 
     await user.click(screen.getByRole("button", { name: "Good" }));
     await waitFor(() => expect(screen.getByText("1 word left to review")).toBeInTheDocument());
     // A graded word stays in the text, tinted with its grade, for the
     // rest of the session.
     expect(screen.getByText("database")).toHaveClass("text-good");
-    expect(screen.getByText("[ … ]")).toBeInTheDocument(); // "index" still hidden, Show not pressed yet
+    expect(screen.getByText(GAP)).toBeInTheDocument(); // "index" still hidden, Show not pressed yet
 
     await user.click(screen.getByRole("button", { name: "Show" }));
     expect(screen.getByText("index")).toBeInTheDocument();
-    expect(screen.queryByText("[ … ]")).not.toBeInTheDocument();
+    expect(screen.queryByText(GAP)).not.toBeInTheDocument();
   });
 
   test("grading a Review word submits the rating and shows the next-interval feedback", async () => {
@@ -1459,8 +1462,28 @@ describe("LecturePage", () => {
     await user.click(screen.getByRole("button", { name: "Only what you missed" }));
 
     expect(screen.getByText("1 missed word to go again")).toBeInTheDocument();
-    expect(screen.getAllByText("[ … ]")).toHaveLength(1);
+    expect(screen.getAllByText(GAP)).toHaveLength(1);
     expect(screen.getByText("index")).toBeInTheDocument();
+  });
+
+  test("gaps hint the first letter and length, and the bulb dot hides the hints", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("The femur is the longest bone."));
+    listDueClozeCards.mockResolvedValue([
+      { id: "c1", document_id: "d1", block_index: 0, start_offset: 4, end_offset: 9 },
+    ]);
+
+    renderPage();
+    await screen.findByText(para("The femur is the longest bone."));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Review" }));
+
+    expect(await screen.findByText("[ f____ ]")).toBeInTheDocument();
+    const hints = screen.getByRole("button", { name: "Letter hints in the gaps" });
+    expect(hints).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(hints);
+    expect(screen.getByText("[ … ]")).toBeInTheDocument();
+    expect(screen.queryByText("[ f____ ]")).not.toBeInTheDocument();
   });
 
   test("the cards view shows only the sentence holding the gap", async () => {
@@ -1478,7 +1501,7 @@ describe("LecturePage", () => {
     await user.click(await screen.findByRole("button", { name: "Cards, one at a time" }));
 
     const card = screen.getByRole("dialog", { name: "Review card" });
-    expect(card).toHaveTextContent("The [ … ] is the longest bone.");
+    expect(card).toHaveTextContent("The [ f____ ] is the longest bone.");
     expect(card).not.toHaveTextContent("Bones heal slowly");
     expect(card).not.toHaveTextContent("Rest helps");
   });

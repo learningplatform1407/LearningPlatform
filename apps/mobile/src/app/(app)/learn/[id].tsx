@@ -11,6 +11,7 @@ import type {
 } from "@lp/contracts";
 import {
   HIGHLIGHT_COLOR_NAMES,
+  clozeGap,
   describeInterval,
   formatInterval,
   highlightIndex,
@@ -46,6 +47,7 @@ import { makeStyles, useTheme, useThemeColors, type ThemeColors } from "@/lib/th
 import {
   ArrowLeftIcon,
   BulbIcon,
+  BulbOffIcon,
   EraserIcon,
   MoonIcon,
   SparkleIcon,
@@ -850,6 +852,7 @@ function useClozeReview(documentId: string, enabled: boolean) {
   const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
   const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [hints, setHints] = useState(true);
 
   const reviewMutation = useMutation({
     mutationFn: ({ cardId, rating }: { cardId: string; rating: ClozeRating }) =>
@@ -890,6 +893,8 @@ function useClozeReview(documentId: string, enabled: boolean) {
     spansByBlock,
     currentCardId: currentCard?.id,
     nextIntervals: currentCard?.next_intervals,
+    hints,
+    toggleHints: () => setHints((on) => !on),
     isRevealed: currentCard !== undefined && revealedCardId === currentCard.id,
     queueLength: queue.length,
     feedback,
@@ -906,17 +911,45 @@ function useClozeReview(documentId: string, enabled: boolean) {
   };
 }
 
-/** A hidden gap never shows the answer: cards carry no hint, so every gap
- * is the design's hints-off "[ … ]" (design.md §11). */
-const GAP_TEXT = "[ … ]";
+/** The text a hidden card covers, read from the block -- only its shape
+ * reaches the screen, through clozeGap (spliceClozeSpans gives a hidden
+ * segment no text, so the answer can't leak through a rendering slip). */
+function hiddenText(text: string, spans: ClozeSpanState[] | undefined, id: string | null): string {
+  const span = spans?.find((s) => s.id === id);
+  return span ? text.slice(span.start_offset, span.end_offset) : "";
+}
+
+/** A hidden gap: "[ … ]", or each word's first letter and length with
+ * hints on (design.md §11), with swallowed spaces kept outside it. */
+function ClozeGapText({
+  hidden,
+  hints,
+  current,
+}: {
+  hidden: string;
+  hints: boolean;
+  current: boolean;
+}) {
+  const styles = useStyles();
+  const gap = clozeGap(hidden, hints);
+  return (
+    <Text style={[styles.clozeHidden, current && styles.clozeCurrent]}>
+      {gap.lead}
+      <Text style={styles.clozeGap}>{gap.label}</Text>
+      {gap.trail}
+    </Text>
+  );
+}
 
 function ReviewArticle({
   version,
   spansByBlock,
   currentCardId,
+  hints,
 }: {
   version: DocumentResponse["current_version"] | undefined;
   spansByBlock: Map<number, ClozeSpanState[]>;
+  hints: boolean;
   currentCardId: string | undefined;
 }) {
   const styles = useStyles();
@@ -950,15 +983,12 @@ function ReviewArticle({
           <Text key={index} style={[styles.paragraph, body]}>
             {segments.map((segment, i) =>
               segment.hidden ? (
-                <Text
+                <ClozeGapText
                   key={i}
-                  style={[styles.clozeHidden, segment.id === currentCardId && styles.clozeCurrent]}
-                >
-                  {/* The space a card swallows stays outside the gap. */}
-                  {/^\s/.test(segment.text) ? " " : ""}
-                  <Text style={styles.clozeGap}>{GAP_TEXT}</Text>
-                  {/\s$/.test(segment.text) && segment.text.trim() ? " " : ""}
-                </Text>
+                  hidden={hiddenText(block.text ?? "", spansByBlock.get(index), segment.id)}
+                  hints={hints}
+                  current={segment.id === currentCardId}
+                />
               ) : segment.id === currentCardId ? (
                 <Text key={i} style={styles.clozeRevealed}>
                   {segment.text}
@@ -1011,9 +1041,22 @@ function ReviewBar({ review }: { review: ReturnType<typeof useClozeReview> }) {
       )}
       {review.currentCardId && !review.isRevealed && (
         <>
-          <Text style={styles.reviewCount}>
-            {review.queueLength} {review.queueLength === 1 ? "word" : "words"} left to review
-          </Text>
+          <View style={styles.reviewCountRow}>
+            <Text style={styles.reviewCount}>
+              {review.queueLength} {review.queueLength === 1 ? "word" : "words"} left to review
+            </Text>
+            <Dot
+              label="Letter hints in the gaps"
+              pressed={review.hints}
+              onPress={review.toggleHints}
+            >
+              {review.hints ? (
+                <BulbIcon color={colors.background} />
+              ) : (
+                <BulbOffIcon color={colors.foreground} />
+              )}
+            </Dot>
+          </View>
           <Pressable style={styles.showButton} onPress={review.reveal} accessibilityRole="button">
             <Text style={styles.showButtonText}>Show</Text>
           </Pressable>
@@ -1426,6 +1469,7 @@ export default function LectureScreen() {
               version={version}
               spansByBlock={review.spansByBlock}
               currentCardId={review.currentCardId}
+              hints={review.hints}
             />
           )}
           {activeTab === "quizzes" && <QuizzesTab documentId={id} />}
@@ -1784,6 +1828,11 @@ const useStyles = makeStyles((colors) => ({
   },
   edgeButtonRaised: {
     top: "35%",
+  },
+  reviewCountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
   reviewCount: {
     fontSize: 13,

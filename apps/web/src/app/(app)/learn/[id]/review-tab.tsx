@@ -7,11 +7,11 @@ import type { ClozeDueCard, ClozeRating, ExtractedContent } from "@lp/contracts"
 
 import { BottomNotch } from "@/components/bottom-notch";
 import { Dot } from "@/components/dot";
-import { CardsIcon, HistoryIcon } from "@/components/icons";
+import { BulbIcon, BulbOffIcon, CardsIcon, HistoryIcon } from "@/components/icons";
 import { useToast } from "@/components/toast";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { spliceClozeSpans } from "@/lib/text-offset";
-import { lightColors } from "@lp/ui";
+import { clozeGap, lightColors } from "@lp/ui";
 
 import { ExtractedImage } from "./extracted-image";
 import { GradeButtons, ShowButton, useGradeKeys } from "./grade-bar";
@@ -26,11 +26,9 @@ const GRADE_TINT: Record<ClozeRating, string> = {
 };
 
 const CLOZE_BASE = "rounded-[5px] px-[3px] font-bold";
-/** A hidden gap shows a placeholder, never the answer: spliceClozeSpans
- * returns no text for it, so even a rendering slip can't leak it. The
- * design's type hints ("[ procent ]") need a hint per card, which cloze
- * cards don't carry -- so every gap is the hints-off "[ … ]". */
-const GAP_TEXT = "[ … ]";
+// A hidden gap never shows the answer: spliceClozeSpans returns no text for
+// it, so even a rendering slip can't leak it. What the gap does show (its
+// spacing and the first-letter hint) comes from clozeGap in @lp/ui.
 
 /**
  * Cloze reading (design.md §11): the whole lesson, with due phrases turned
@@ -68,6 +66,7 @@ export function ReviewTab({
   const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
   const [onlyMissed, setOnlyMissed] = useState(false);
   const [oneAtATime, setOneAtATime] = useState(false);
+  const [hints, setHints] = useState(true);
   const [cardsView, setCardsView] = useState(false);
 
   const reviewMutation = useMutation({
@@ -164,21 +163,18 @@ export function ReviewTab({
       const state = stateOf(card);
       const isCurrent = card.id === current?.id;
       if (segment.hidden) {
-        // A card that swallows the space around its word would glue the
-        // placeholder to its neighbours; keep that space outside the gap.
-        const lead = /^\s*/.exec(segment.text)![0];
-        const trail = segment.text.trim() ? /\s*$/.exec(segment.text)![0] : "";
+        const gap = clozeGap(text.slice(card.start_offset - base, card.end_offset - base), hints);
         return (
           <Fragment key={i}>
-            {lead}
+            {gap.lead}
             <span
               className={`${CLOZE_BASE} border-b-2 border-cloze bg-cloze-bg text-[0.88em] font-semibold whitespace-nowrap text-cloze ${
                 isCurrent ? "outline-2 outline-offset-2 outline-cloze" : ""
               }`}
             >
-              {GAP_TEXT}
+              {gap.label}
             </span>
-            {trail}
+            {gap.trail}
           </Fragment>
         );
       }
@@ -298,6 +294,15 @@ export function ReviewTab({
             </p>
           )}
           <div className="flex gap-1.5 self-center">
+            <Dot
+              size="sm"
+              aria-label="Letter hints in the gaps"
+              title={hints ? "Hide hints" : "Show hints"}
+              aria-pressed={hints}
+              onClick={() => setHints((on) => !on)}
+            >
+              {hints ? <BulbIcon /> : <BulbOffIcon />}
+            </Dot>
             <Dot
               size="sm"
               aria-label="One gap at a time"
