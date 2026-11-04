@@ -3,511 +3,94 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import type { Annotation, AnnotationCreateRequest, DocumentSummaryResponse } from "@lp/contracts";
+import type { Annotation, AnnotationCreateRequest } from "@lp/contracts";
 
+import { useToast } from "@/components/toast";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
-import { findBlockElement, getOffsetsWithinContainer, spliceAnnotations } from "@/lib/text-offset";
-import { useDismissableOverlay } from "@/lib/use-dismissable-overlay";
 
-import {
-  DrawingEntryEditor,
-  NewEntryButtons,
-  NotebookEntryList,
-  TextEntryEditor,
-  useNotebookEntries,
-} from "../notebook/notebook-entries";
-import { ExtractedImage } from "./extracted-image";
 import { FlashcardsTab } from "./flashcards-tab";
+import {
+  colorName,
+  nextTextScale,
+  pickSwatch,
+  TEXT_SCALES,
+  toolAvailable,
+  type BlockRange,
+  type LessonTab,
+  type LessonTool,
+  type LessonViewMode,
+  type SwatchIndex,
+  type TextScale,
+} from "./lesson-tools";
+import { LESSON_TABS, LessonMobileDots, LessonTopNotch } from "./lesson-top-notch";
 import { PdfLessonView } from "./pdf-lesson-view";
 import { QuizzesTab } from "./quizzes-tab";
 import { ReviewTab } from "./review-tab";
+import { SidePanel, type SidePanelTab } from "./side-panel";
+import { headingId, TextLessonView } from "./text-lesson-view";
+import { TocDrawer, type TocHeading } from "./toc-drawer";
+import { ToolNotch } from "./tool-notch";
+import { useLessonKeys } from "./use-lesson-keys";
 
-function NoteMarker({
-  note,
-  onDeleteAnnotation,
-}: {
-  note: Annotation;
-  onDeleteAnnotation: (annotationId: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
+const TEXT_SCALE_KEY = "lp-text-scale";
+const UNDO_LIMIT = 80;
 
-  return (
-    <span className="relative ml-xs inline-block align-top">
-      <button
-        type="button"
-        className="rounded-full border border-border bg-muted px-xs text-xs text-muted-foreground"
-        onClick={() => setOpen((o) => !o)}
-      >
-        note
-      </button>
-      {open && (
-        <span className="absolute left-0 top-full z-10 mt-xs w-56 rounded-md border border-border bg-background p-sm text-sm text-foreground shadow-md">
-          <span className="block whitespace-pre-wrap">{note.note_text}</span>
-          <button
-            type="button"
-            className="mt-xs text-xs text-danger"
-            onClick={() => {
-              onDeleteAnnotation(note.id);
-              setOpen(false);
-            }}
-          >
-            Delete note
-          </button>
-        </span>
-      )}
-    </span>
-  );
-}
+/** One undoable change to this lesson's text annotations. Highlights have no
+ * update endpoint, so every change is creations and deletions, and undoing
+ * one is the reverse set. */
+type UndoOp = { created: Annotation[]; removed: Annotation[] };
 
-function AnnotatedParagraph({
-  text,
-  blockIndex,
-  annotations,
-  onDeleteAnnotation,
-}: {
-  text: string;
-  blockIndex: number;
-  annotations: Annotation[];
-  onDeleteAnnotation: (annotationId: string) => void;
-}) {
-  const blockAnnotations = annotations.filter((a) => a.block_index === blockIndex);
-  const segments = spliceAnnotations(text, blockAnnotations);
-  const blockNotes = blockAnnotations.filter(
-    (a) => a.type === "margin_note" && a.start_offset === null,
-  );
-
-  return (
-    <p data-block-index={blockIndex} className="text-base leading-relaxed text-foreground">
-      {segments.map((segment, index) => {
-        if (segment.annotation?.type === "highlight") {
-          return (
-            <mark key={index} className={highlightMarkClass(segment.annotation.color)}>
-              {segment.text}
-            </mark>
-          );
-        }
-        if (segment.annotation?.type === "margin_note") {
-          return (
-            <span key={index}>
-              {segment.text}
-              <NoteMarker note={segment.annotation} onDeleteAnnotation={onDeleteAnnotation} />
-            </span>
-          );
-        }
-        return <span key={index}>{segment.text}</span>;
-      })}
-      {blockNotes.map((note) => (
-        <NoteMarker key={note.id} note={note} onDeleteAnnotation={onDeleteAnnotation} />
-      ))}
-    </p>
-  );
-}
-
-interface PendingSelection {
-  blockIndex: number;
-  start: number;
-  end: number;
-  top: number;
-  left: number;
-}
-
-const TABS = [
-  { key: "lesson", label: "Lesson" },
-  { key: "review", label: "Review" },
-  { key: "quizzes", label: "Quizzes" },
-  { key: "flashcards", label: "Flashcards" },
-] as const;
-
-const NOTES_PANEL_MIN_WIDTH = 240;
-const NOTES_PANEL_MAX_WIDTH = 560;
-const NOTES_PANEL_DEFAULT_WIDTH = 320;
-const NOTES_PANEL_COLLAPSED_WIDTH = 40;
-
-type TabKey = (typeof TABS)[number]["key"];
-
-const HIGHLIGHT_COLORS = [
-  { name: "yellow", swatchClass: "bg-yellow-300", markClass: "bg-yellow-200" },
-  { name: "green", swatchClass: "bg-green-300", markClass: "bg-green-200" },
-  { name: "blue", swatchClass: "bg-blue-300", markClass: "bg-blue-200" },
-  { name: "pink", swatchClass: "bg-pink-300", markClass: "bg-pink-200" },
-] as const;
-
-function highlightMarkClass(color: string | null): string {
-  return HIGHLIGHT_COLORS.find((c) => c.name === color)?.markClass ?? "bg-yellow-200";
-}
-
-type ActiveTool = { type: "highlight"; color: string } | { type: "eraser" } | null;
-
-function AnnotationToolbar({
-  activeTool,
-  onToolChange,
-}: {
-  activeTool: ActiveTool;
-  onToolChange: (tool: ActiveTool) => void;
-}) {
-  return (
-    <div
-      role="toolbar"
-      aria-label="Annotation tools"
-      className="flex items-center gap-xs border-t border-border p-sm"
-    >
-      {HIGHLIGHT_COLORS.map((color) => {
-        const isActive = activeTool?.type === "highlight" && activeTool.color === color.name;
-        return (
-          <button
-            key={color.name}
-            type="button"
-            aria-label={`Highlight — ${color.name}`}
-            aria-pressed={isActive}
-            onClick={() => onToolChange(isActive ? null : { type: "highlight", color: color.name })}
-            className={`h-6 w-6 rounded-full border border-border ${color.swatchClass} ${
-              isActive ? "ring-2 ring-primary ring-offset-1" : ""
-            }`}
-          />
-        );
-      })}
-      <button
-        type="button"
-        aria-label="Eraser"
-        aria-pressed={activeTool?.type === "eraser"}
-        onClick={() => onToolChange(activeTool?.type === "eraser" ? null : { type: "eraser" })}
-        className={`flex h-6 w-6 items-center justify-center rounded-md border border-border text-xs ${
-          activeTool?.type === "eraser" ? "bg-muted ring-2 ring-primary ring-offset-1" : ""
-        }`}
-      >
-        🧹
-      </button>
-    </div>
-  );
-}
-
-function TocPanelBody({
-  data,
-  isPending,
-  currentDocumentId,
-}: {
-  data: DocumentSummaryResponse[] | undefined;
-  isPending: boolean;
-  currentDocumentId: string;
-}) {
-  return (
-    <>
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Contents
-      </h2>
-      {isPending && <p className="text-sm text-muted-foreground">Loading...</p>}
-      {!isPending && (!data || data.length === 0) && (
-        <p className="text-sm text-muted-foreground">No lessons.</p>
-      )}
-      {data && data.length > 0 && (
-        <ul className="flex flex-col gap-xs">
-          {data.map((doc) => (
-            <li key={doc.id}>
-              <Link
-                href={`/learn/${doc.id}`}
-                className={`block rounded-md px-sm py-xs text-sm ${
-                  doc.id === currentDocumentId
-                    ? "bg-muted font-semibold text-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                {doc.title}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </>
-  );
-}
-
-function TocPanel({
-  scopeId,
-  currentDocumentId,
-  activeTool,
-  onToolChange,
-  mobileOpen,
-  onMobileClose,
-}: {
-  scopeId: string;
-  currentDocumentId: string;
-  activeTool: ActiveTool;
-  onToolChange: (tool: ActiveTool) => void;
-  mobileOpen: boolean;
-  onMobileClose: () => void;
-}) {
-  const { data, isPending } = useQuery({
-    queryKey: ["documents", scopeId],
-    queryFn: () => getBrowserApiClient().listDocuments(scopeId),
-  });
-
-  useDismissableOverlay(mobileOpen, onMobileClose);
-
-  return (
-    <>
-      {mobileOpen && (
-        <div className="fixed inset-0 z-20 md:hidden">
-          <div className="absolute inset-0 bg-foreground/40" onClick={onMobileClose} />
-          <nav
-            aria-label="Table of contents (mobile)"
-            className="absolute top-0 left-0 flex h-full w-[16rem] flex-col bg-background shadow-md"
-          >
-            <button
-              type="button"
-              onClick={onMobileClose}
-              aria-label="Close contents"
-              className="absolute top-md right-md flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-            >
-              <span aria-hidden="true" className="text-lg leading-none">
-                ×
-              </span>
-            </button>
-            <div className="flex flex-1 flex-col gap-xs overflow-y-auto p-md pr-2xl">
-              <TocPanelBody
-                data={data}
-                isPending={isPending}
-                currentDocumentId={currentDocumentId}
-              />
-            </div>
-            <AnnotationToolbar activeTool={activeTool} onToolChange={onToolChange} />
-          </nav>
-        </div>
-      )}
-
-      <nav
-        aria-label="Table of contents"
-        className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-border md:flex"
-      >
-        <div className="flex flex-1 flex-col gap-xs overflow-y-auto p-md">
-          <TocPanelBody data={data} isPending={isPending} currentDocumentId={currentDocumentId} />
-        </div>
-        <AnnotationToolbar activeTool={activeTool} onToolChange={onToolChange} />
-      </nav>
-    </>
-  );
-}
-
-type NotesView =
-  | { kind: "list" }
-  | { kind: "entry"; entryId: string }
-  | { kind: "new-text" }
-  | { kind: "new-drawing" };
-
-function NotesPanel({
-  documentId,
-  mobileOpen,
-  onMobileClose,
-}: {
-  documentId: string;
-  mobileOpen: boolean;
-  onMobileClose: () => void;
-}) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [width, setWidth] = useState(NOTES_PANEL_DEFAULT_WIDTH);
-  const [view, setView] = useState<NotesView>({ kind: "list" });
-  const draggingRef = useRef(false);
-  const entries = useNotebookEntries();
-  const selectedEntry =
-    view.kind === "entry" ? entries.data?.find((e) => e.id === view.entryId) : undefined;
-
-  useDismissableOverlay(mobileOpen, onMobileClose);
-
-  // A 4:3 drawing canvas needs real width to be usable — temporarily widen
-  // the panel to its max while a drawing is open. Derived during render
-  // (not synced via an effect) so the user's actual preferred `width` is
-  // untouched and simply resumes once they leave the drawing.
-  const isDrawingView = view.kind === "new-drawing" || selectedEntry?.type === "drawing";
-  const effectiveWidth = isDrawingView ? NOTES_PANEL_MAX_WIDTH : width;
-
-  function handleDragStart(event: ReactMouseEvent) {
-    event.preventDefault();
-    draggingRef.current = true;
-    const startX = event.clientX;
-    const startWidth = width;
-
-    function handleMouseMove(moveEvent: MouseEvent) {
-      if (!draggingRef.current) return;
-      const next = startWidth + (startX - moveEvent.clientX);
-      setWidth(Math.min(NOTES_PANEL_MAX_WIDTH, Math.max(NOTES_PANEL_MIN_WIDTH, next)));
-    }
-
-    function handleMouseUp() {
-      draggingRef.current = false;
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    }
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+function readTextScale(): TextScale {
+  try {
+    const stored = Number(window.localStorage.getItem(TEXT_SCALE_KEY));
+    return (TEXT_SCALES as readonly number[]).includes(stored) ? (stored as TextScale) : 100;
+  } catch {
+    return 100;
   }
+}
 
-  // Shared by the desktop expanded panel and the mobile drawer -- the list/
-  // editor views and the entries query are identical either way, only the
-  // surrounding chrome (sticky resizable column vs. off-canvas drawer)
-  // differs.
-  const notesBody = (
-    <>
-      {entries.isPending && <p className="text-sm text-muted-foreground">Loading...</p>}
-      {entries.isError && (
-        <p role="alert" className="text-sm text-danger">
-          Failed to load notes.
-        </p>
-      )}
-      {entries.data && (
-        <>
-          {view.kind !== "list" && (
-            <button
-              type="button"
-              onClick={() => setView({ kind: "list" })}
-              className="self-start text-sm text-muted-foreground hover:underline"
-            >
-              ← Notes
-            </button>
-          )}
-          {view.kind === "list" && (
-            <NotebookEntryList
-              entries={entries.data}
-              onSelect={(entryId) => setView({ kind: "entry", entryId })}
-            />
-          )}
-          {view.kind === "new-text" && (
-            <TextEntryEditor
-              sourceDocumentId={documentId}
-              onCreated={(id) => setView({ kind: "entry", entryId: id })}
-            />
-          )}
-          {view.kind === "new-drawing" && (
-            <DrawingEntryEditor
-              sourceDocumentId={documentId}
-              onCreated={(id) => setView({ kind: "entry", entryId: id })}
-            />
-          )}
-          {view.kind === "entry" && selectedEntry && selectedEntry.type === "text" && (
-            <TextEntryEditor
-              key={selectedEntry.id}
-              entry={selectedEntry}
-              onDeleted={() => setView({ kind: "list" })}
-            />
-          )}
-          {view.kind === "entry" && selectedEntry && selectedEntry.type === "drawing" && (
-            <DrawingEntryEditor
-              key={selectedEntry.id}
-              entry={selectedEntry}
-              onDeleted={() => setView({ kind: "list" })}
-            />
-          )}
-        </>
-      )}
-    </>
-  );
-  const newEntryButtons = view.kind === "list" && (
-    <NewEntryButtons
-      onNewText={() => setView({ kind: "new-text" })}
-      onNewDrawing={() => setView({ kind: "new-drawing" })}
-    />
-  );
-
-  return (
-    <>
-      {mobileOpen && (
-        <div className="fixed inset-0 z-20 md:hidden">
-          <div className="absolute inset-0 bg-foreground/40" onClick={onMobileClose} />
-          <div className="absolute top-0 right-0 flex h-full w-[18rem] flex-col bg-background shadow-md">
-            <div className="flex flex-1 flex-col gap-sm overflow-y-auto p-md">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Notes
-                </h2>
-                <button
-                  type="button"
-                  onClick={onMobileClose}
-                  aria-label="Close notes"
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-                >
-                  <span aria-hidden="true" className="text-lg leading-none">
-                    ×
-                  </span>
-                </button>
-              </div>
-              {notesBody}
-            </div>
-            {newEntryButtons}
-          </div>
-        </div>
-      )}
-
-      {collapsed ? (
-        <div
-          style={{ width: NOTES_PANEL_COLLAPSED_WIDTH }}
-          className="sticky top-0 hidden h-screen shrink-0 flex-col items-center border-l border-border p-xs md:flex"
-        >
-          <button
-            type="button"
-            onClick={() => setCollapsed(false)}
-            aria-label="Expand notes"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-          >
-            «
-          </button>
-        </div>
-      ) : (
-        <div
-          style={{ width: effectiveWidth }}
-          className="sticky top-0 relative hidden h-screen shrink-0 flex-col border-l border-border md:flex"
-        >
-          <div
-            onMouseDown={handleDragStart}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize notes panel"
-            className="absolute top-0 left-0 h-full w-2 -translate-x-1/2 cursor-col-resize"
-          />
-          <div className="flex flex-1 flex-col gap-sm overflow-y-auto p-md">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Notes
-              </h2>
-              <button
-                type="button"
-                onClick={() => setCollapsed(true)}
-                aria-label="Collapse notes"
-                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-              >
-                »
-              </button>
-            </div>
-            {notesBody}
-          </div>
-          {newEntryButtons}
-        </div>
-      )}
-    </>
-  );
+function recreateRequest(annotation: Annotation): AnnotationCreateRequest {
+  return {
+    type: annotation.type,
+    block_index: annotation.block_index,
+    start_offset: annotation.start_offset,
+    end_offset: annotation.end_offset,
+    note_text: annotation.note_text,
+    color: annotation.color,
+  };
 }
 
 export default function LecturePage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const articleRef = useRef<HTMLElement>(null);
-  const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
-  const [noteDraft, setNoteDraft] = useState<string | null>(null);
-  const [showExplainComingSoon, setShowExplainComingSoon] = useState(false);
+  const toast = useToast();
+  const titleRef = useRef<HTMLHeadingElement>(null);
+
   // Lazy-initialized so a deep link like /learn/{id}?tab=review (e.g. from
   // the review dashboard) opens straight to that tab instead of always
   // starting on Lesson.
-  const [activeTab, setActiveTab] = useState<TabKey>(() => {
+  const [activeTab, setActiveTab] = useState<LessonTab>(() => {
     const tabParam = searchParams.get("tab");
-    return TABS.some((tab) => tab.key === tabParam) ? (tabParam as TabKey) : "lesson";
+    return LESSON_TABS.some((tab) => tab.key === tabParam) ? (tabParam as LessonTab) : "lesson";
   });
-  // Defaults to "text" -- the PDF/Text toggle itself only renders when the
-  // lesson has a *ready* lecture_pdf attached (see `readyLecturePdf` below).
-  const [lessonViewMode, setLessonViewMode] = useState<"text" | "pdf">("text");
-  const [activeTool, setActiveTool] = useState<ActiveTool>(null);
-  const [mobileTocOpen, setMobileTocOpen] = useState(false);
-  const [mobileNotesOpen, setMobileNotesOpen] = useState(false);
+  // Defaults to "text" -- the PDF/Text switch only renders when the lesson
+  // has a *ready* lecture_pdf attached (see `readyLecturePdf` below).
+  const [viewMode, setViewMode] = useState<LessonViewMode>("text");
+  const [tool, setTool] = useState<LessonTool>(null);
+  const [tocOpen, setTocOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelTab, setPanelTab] = useState<SidePanelTab>("notebook");
+  const [focusNoteId, setFocusNoteId] = useState<string | null>(null);
+  const [textScale, setTextScale] = useState<TextScale>(() =>
+    typeof window === "undefined" ? 100 : readTextScale(),
+  );
+  const [titleScrolledAway, setTitleScrolledAway] = useState(false);
+  const [activeHeadingId, setActiveHeadingId] = useState<string | null>(null);
+  const undoStack = useRef<UndoOp[]>([]);
+  const [undoDepth, setUndoDepth] = useState(0);
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["documents", params.id],
@@ -515,12 +98,14 @@ export default function LecturePage() {
   });
 
   const version = data?.current_version;
+  const blocks = version?.status === "ready" ? (version.extracted_content?.blocks ?? []) : [];
   // Only a PDF that actually processed is offered. `status` and
   // `error_message` used to be plumbed through the whole stack and read by
   // nobody, so a failed upload still rendered the toggle and dead-ended in
   // "Failed to load the lecture PDF." The admin who uploaded it sees the
   // real reason on the library page instead, where the upload happens.
   const readyLecturePdf = data?.lecture_pdf?.status === "ready" ? data.lecture_pdf : null;
+  const mode: LessonViewMode = readyLecturePdf ? viewMode : "text";
 
   const { data: annotations = [] } = useQuery({
     queryKey: ["annotations", params.id],
@@ -528,127 +113,246 @@ export default function LecturePage() {
     enabled: version?.status === "ready",
   });
 
-  const createAnnotationMutation = useMutation({
+  const createAnnotation = useMutation({
     mutationFn: (body: AnnotationCreateRequest) =>
       getBrowserApiClient().createAnnotation(params.id, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["annotations", params.id] }),
   });
-
-  const deleteAnnotationMutation = useMutation({
+  const deleteAnnotation = useMutation({
     mutationFn: (annotationId: string) =>
       getBrowserApiClient().deleteAnnotation(params.id, annotationId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["annotations", params.id] }),
   });
 
-  function clearSelectionState() {
-    window.getSelection()?.removeAllRanges();
-    setPendingSelection(null);
-    setNoteDraft(null);
-    setShowExplainComingSoon(false);
+  /** Applies a set of deletions and creations, and returns what was created. */
+  async function apply(remove: Annotation[], create: AnnotationCreateRequest[]) {
+    try {
+      await Promise.all(remove.map((a) => deleteAnnotation.mutateAsync(a.id)));
+      return await Promise.all(create.map((body) => createAnnotation.mutateAsync(body)));
+    } catch {
+      toast("That change couldn't be saved.");
+      return [];
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: ["annotations", params.id] });
+    }
   }
 
-  function handleMouseUp() {
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
-      setPendingSelection(null);
+  function pushUndo(op: UndoOp) {
+    if (op.created.length === 0 && op.removed.length === 0) return;
+    undoStack.current = [...undoStack.current.slice(-(UNDO_LIMIT - 1)), op];
+    setUndoDepth(undoStack.current.length);
+  }
+
+  async function undo() {
+    const op = undoStack.current.pop();
+    setUndoDepth(undoStack.current.length);
+    if (!op) {
+      toast("Nothing to undo.");
       return;
     }
+    await apply(op.created, op.removed.map(recreateRequest));
+  }
 
-    const range = selection.getRangeAt(0);
-    const blockEl = findBlockElement(range.startContainer);
-    if (!blockEl || !articleRef.current?.contains(blockEl)) {
-      setPendingSelection(null);
-      return;
-    }
+  // -- Marking ---------------------------------------------------------
 
-    const offsets = getOffsetsWithinContainer(blockEl, range);
-    if (!offsets || offsets.start === offsets.end) {
-      setPendingSelection(null);
-      return;
-    }
+  async function handleMark(ranges: BlockRange[]) {
+    if (ranges.length === 0 || !tool) return;
 
-    const blockIndex = Number(blockEl.getAttribute("data-block-index"));
-
-    if (activeTool?.type === "highlight") {
-      createAnnotationMutation.mutate({
-        type: "highlight",
-        block_index: blockIndex,
-        start_offset: offsets.start,
-        end_offset: offsets.end,
-        color: activeTool.color,
-      });
-      clearSelectionState();
-      return;
-    }
-
-    if (activeTool?.type === "eraser") {
-      const overlapping = annotations.filter(
-        (a) =>
-          a.type === "highlight" &&
-          a.block_index === blockIndex &&
-          a.start_offset !== null &&
-          a.end_offset !== null &&
-          a.start_offset < offsets.end &&
-          a.end_offset > offsets.start,
+    if (tool.kind === "highlight") {
+      const created = await apply(
+        [],
+        ranges.map((range) => ({
+          type: "highlight" as const,
+          block_index: range.blockIndex,
+          start_offset: range.start,
+          end_offset: range.end,
+          color: colorName(tool.color),
+        })),
       );
-      // Erasing only removes the selected portion of a highlight, not the whole
-      // thing — the original annotation is deleted and replaced with new ones
-      // for whatever's left before/after the erased range (there's no update
-      // endpoint, so this is delete + recreate rather than a resize).
-      for (const a of overlapping) {
-        const before =
-          a.start_offset! < offsets.start ? { start: a.start_offset!, end: offsets.start } : null;
-        const after =
-          a.end_offset! > offsets.end ? { start: offsets.end, end: a.end_offset! } : null;
+      pushUndo({ created, removed: [] });
+      return;
+    }
 
-        deleteAnnotationMutation.mutate(a.id);
-        if (before) {
-          createAnnotationMutation.mutate({
-            type: "highlight",
-            block_index: blockIndex,
-            start_offset: before.start,
-            end_offset: before.end,
-            color: a.color,
-          });
-        }
-        if (after) {
-          createAnnotationMutation.mutate({
-            type: "highlight",
-            block_index: blockIndex,
-            start_offset: after.start,
-            end_offset: after.end,
-            color: a.color,
-          });
+    if (tool.kind === "eraser") {
+      // Erasing removes only the covered part of a highlight: the original
+      // is deleted and whatever is left either side is recreated (there's
+      // no update endpoint, so this is delete + recreate, not a resize).
+      const removed: Annotation[] = [];
+      const recreate: AnnotationCreateRequest[] = [];
+      for (const range of ranges) {
+        for (const a of annotations) {
+          if (
+            a.type !== "highlight" ||
+            a.block_index !== range.blockIndex ||
+            a.start_offset === null ||
+            a.end_offset === null ||
+            a.start_offset >= range.end ||
+            a.end_offset <= range.start
+          ) {
+            continue;
+          }
+          removed.push(a);
+          if (a.start_offset < range.start) {
+            recreate.push({ ...recreateRequest(a), end_offset: range.start });
+          }
+          if (a.end_offset > range.end) {
+            recreate.push({ ...recreateRequest(a), start_offset: range.end });
+          }
         }
       }
-      clearSelectionState();
+      if (removed.length === 0) return;
+      const created = await apply(removed, recreate);
+      pushUndo({ created, removed });
       return;
     }
 
-    // jsdom's Range doesn't implement getBoundingClientRect (no layout engine) — guard so
-    // selection-driven tests can run without a real browser.
-    const rect = range.getBoundingClientRect?.() ?? { top: 0, left: 0 };
-    setPendingSelection({
-      blockIndex,
-      start: offsets.start,
-      end: offsets.end,
-      top: rect.top,
-      left: rect.left,
-    });
-    setNoteDraft(null);
-    setShowExplainComingSoon(false);
+    if (tool.kind === "note") {
+      // A note quotes one passage, so a drag across paragraphs anchors to
+      // the first of them.
+      const range = ranges[0]!;
+      const [created] = await apply(
+        [],
+        [
+          {
+            type: "margin_note",
+            block_index: range.blockIndex,
+            start_offset: range.start,
+            end_offset: range.end,
+            note_text: null,
+          },
+        ],
+      );
+      setTool(null);
+      if (created) {
+        pushUndo({ created: [created], removed: [] });
+        openNote(created.id);
+      }
+    }
   }
 
-  function handleSaveNote() {
-    if (!pendingSelection || !noteDraft?.trim()) return;
-    createAnnotationMutation.mutate({
-      type: "margin_note",
-      block_index: pendingSelection.blockIndex,
-      start_offset: pendingSelection.start,
-      end_offset: pendingSelection.end,
-      note_text: noteDraft.trim(),
+  // Annotations have no update endpoint, so editing a note's text replaces
+  // the note, keeping its anchor.
+  async function saveNoteText(note: Annotation, text: string) {
+    const [replacement] = await apply([note], [{ ...recreateRequest(note), note_text: text }]);
+    if (replacement) setFocusNoteId((current) => (current === note.id ? replacement.id : current));
+  }
+
+  async function deleteNote(note: Annotation) {
+    await apply([note], []);
+    pushUndo({ created: [], removed: [note] });
+  }
+
+  function openNote(annotationId: string) {
+    setFocusNoteId(annotationId);
+    setPanelTab("notebook");
+    setPanelOpen(true);
+  }
+
+  function jumpToNote(note: Annotation) {
+    setActiveTab("lesson");
+    setViewMode("text");
+    requestAnimationFrame(() =>
+      document
+        .querySelector(`[data-annotation-id="${note.id}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" }),
+    );
+  }
+
+  // -- Tools -----------------------------------------------------------
+
+  function chooseTool(kind: "pen" | "eraser" | "note") {
+    if (!toolAvailable(kind, mode)) {
+      toast(kind === "pen" ? "The pen draws on PDF pages." : "Notes work in Text mode.");
+      return;
+    }
+    setTool((current) => {
+      if (current?.kind === kind) return null;
+      if (kind === "pen") {
+        return { kind: "pen", color: current?.kind === "highlight" ? current.color : 1 };
+      }
+      return { kind };
     });
-    clearSelectionState();
+  }
+
+  function chooseSwatch(color: SwatchIndex) {
+    setTool((current) => pickSwatch(current, color));
+  }
+
+  function changeViewMode(next: LessonViewMode) {
+    setViewMode(next);
+    // A tool that doesn't exist in the other view is put down.
+    setTool((current) => (current && !toolAvailable(current.kind, next) ? null : current));
+  }
+
+  function cycleTextScale() {
+    const next = nextTextScale(textScale);
+    setTextScale(next);
+    toast(`Text size ${next}%`);
+    try {
+      window.localStorage.setItem(TEXT_SCALE_KEY, String(next));
+    } catch {
+      // Storage blocked: the size just won't be remembered.
+    }
+  }
+
+  useLessonKeys(activeTab === "lesson", {
+    swatch: chooseSwatch,
+    toggleMarker: () =>
+      setTool((current) =>
+        current?.kind === "highlight" ? null : { kind: "highlight", color: 0 },
+      ),
+    eraser: () => chooseTool("eraser"),
+    pen: () => chooseTool("pen"),
+    note: () => chooseTool("note"),
+    explain: () => toast("AI explanations are coming soon."),
+    undo: () => void undo(),
+    clear: () => setTool(null),
+  });
+
+  // -- Scroll-linked state ----------------------------------------------
+
+  const headings: TocHeading[] =
+    mode === "text"
+      ? blocks.flatMap((block, index) =>
+          block.type === "heading" && block.text
+            ? [{ id: headingId(index), label: block.text }]
+            : [],
+        )
+      : [];
+  const headingKey = headings.map((h) => h.id).join(",");
+
+  // The title line appears in the top notch once the page's own h1 has
+  // scrolled up and away.
+  useEffect(() => {
+    const title = titleRef.current;
+    if (!title || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry) setTitleScrolledAway(!entry.isIntersecting && entry.boundingClientRect.top < 0);
+    });
+    observer.observe(title);
+    return () => observer.disconnect();
+  }, [isPending]);
+
+  // Scroll-spy: the current heading is the last one above the top third.
+  useEffect(() => {
+    if (activeTab !== "lesson" || !headingKey) return;
+    function spy() {
+      let current: string | null = null;
+      for (const id of headingKey.split(",")) {
+        const element = document.getElementById(id);
+        if (element && element.getBoundingClientRect().top <= window.innerHeight * 0.3) {
+          current = id;
+        }
+      }
+      setActiveHeadingId(current);
+    }
+    spy();
+    window.addEventListener("scroll", spy, { passive: true });
+    return () => window.removeEventListener("scroll", spy);
+  }, [activeTab, headingKey]);
+
+  function jumpToHeading(id: string) {
+    setActiveTab("lesson");
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!window.matchMedia("(min-width: 721px)").matches) setTocOpen(false);
   }
 
   if (isPending) {
@@ -669,115 +373,104 @@ export default function LecturePage() {
     );
   }
 
-  const tocScopeId = data.sub_chapter?.id ?? "none";
+  const subChapter = data.sub_chapter;
+  const backHref = subChapter ? `/learn/library/${subChapter.chapter.book_id}` : "/learn/library";
+  const tabLabel = LESSON_TABS.find((t) => t.key === activeTab)!.label;
+  const dotsProps = {
+    backHref,
+    textScale,
+    onTextScale: cycleTextScale,
+    viewMode: mode,
+    onViewMode: changeViewMode,
+    showViewMode: activeTab === "lesson" && readyLecturePdf !== null,
+  };
 
   return (
-    <main className="flex w-full">
-      <TocPanel
-        scopeId={tocScopeId}
-        currentDocumentId={params.id}
-        activeTool={activeTool}
-        onToolChange={setActiveTool}
-        mobileOpen={mobileTocOpen}
-        onMobileClose={() => setMobileTocOpen(false)}
+    // Narrow screens get 50px gutters so the edge notches never cover text.
+    <div className="min-h-screen px-[max(16px,env(safe-area-inset-left,0px))] pb-[140px] max-[720px]:px-[50px]">
+      <LessonTopNotch
+        tab={activeTab}
+        onTabChange={setActiveTab}
+        title={data.title}
+        context={subChapter?.title ?? null}
+        showTitle={titleScrolledAway}
+        {...dotsProps}
       />
 
-      {/* pb-0 for the Review tab: its sticky bottom bar supplies its own
-          padding and must sit flush with the true end of the page — a
-          trailing p-xl bottom padding here would let the page scroll a
-          bit past the bar's stuck position, dragging it up off the edge. */}
-      <div className={`min-w-0 flex-1 p-xl ${activeTab === "review" ? "pb-0" : ""}`}>
-        {/* Contents and the Notes panel live as sticky side columns at
-            md: and up (see TocPanel/NotesPanel); below that they're
-            off-canvas drawers, opened from here since that's the only place
-            both of them and the main reading column are all in scope
-            together. Labeled "Notebook" rather than "Notes" specifically to
-            stay distinct from the per-selection "Notes" action in the
-            floating annotation toolbar below -- same panel, two different
-            accessible names so neither button is ambiguous to find. */}
-        <div className="mt-sm flex gap-sm md:hidden">
-          <button
-            type="button"
-            onClick={() => setMobileTocOpen(true)}
-            className="rounded-md border border-border px-sm py-xs text-xs font-medium text-foreground hover:bg-muted"
-          >
-            Contents
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileNotesOpen(true)}
-            className="rounded-md border border-border px-sm py-xs text-xs font-medium text-foreground hover:bg-muted"
-          >
-            Notebook
-          </button>
-        </div>
-        {data.sub_chapter && (
-          <p className="mt-xs text-xs text-muted-foreground">
-            <Link
-              href={`/learn/library/${data.sub_chapter.chapter.book_id}/${data.sub_chapter.chapter.id}`}
-              className="hover:underline"
-            >
-              {data.sub_chapter.chapter.title}
-            </Link>
-            {" / "}
-            {data.sub_chapter.title}
+      <ToolNotch
+        tool={tool}
+        viewMode={mode}
+        onLessonTab={activeTab === "lesson"}
+        canUndo={undoDepth > 0}
+        tocOpen={tocOpen}
+        onToggleToc={() => setTocOpen((open) => !open)}
+        onSwatch={chooseSwatch}
+        onTool={chooseTool}
+        onUndo={() => void undo()}
+      />
+
+      <TocDrawer
+        open={tocOpen}
+        title={data.title}
+        headings={headings}
+        activeHeadingId={activeHeadingId}
+        onJump={jumpToHeading}
+        scopeId={subChapter?.id ?? "none"}
+        currentDocumentId={params.id}
+      />
+
+      <SidePanel
+        open={panelOpen}
+        onOpenChange={setPanelOpen}
+        tab={panelTab}
+        onTabChange={setPanelTab}
+        documentId={params.id}
+        lessonTitle={data.title}
+        blocks={blocks}
+        annotations={annotations}
+        focusNoteId={focusNoteId}
+        onJumpToNote={jumpToNote}
+        onDeleteNote={(note) => void deleteNote(note)}
+        onSaveNoteText={(note, text) => void saveNoteText(note, text)}
+      />
+
+      <main
+        className={`mx-auto w-full ${
+          activeTab === "lesson" && mode === "pdf" ? "max-w-[57.5rem]" : "max-w-[47.5rem]"
+        }`}
+      >
+        <header className="pt-[30px] pb-1.5">
+          <p className="m-0 text-xs font-bold tracking-[0.14em] text-muted-foreground uppercase">
+            {subChapter ? (
+              <>
+                <Link
+                  href={`/learn/library/${subChapter.chapter.book_id}/${subChapter.chapter.id}`}
+                  className="hover:text-foreground hover:underline"
+                >
+                  {subChapter.chapter.title}
+                </Link>
+                {" / "}
+                {subChapter.title}
+              </>
+            ) : (
+              tabLabel
+            )}
           </p>
-        )}
-        <h1 className="mt-xs text-2xl font-bold text-foreground">{data.title}</h1>
+          <h1
+            ref={titleRef}
+            className="mt-1.5 mb-1 text-[clamp(26px,4vw,34px)] leading-[1.15] font-extrabold"
+          >
+            {data.title}
+          </h1>
+          <LessonMobileDots {...dotsProps} />
+        </header>
 
-        <div className="mt-lg flex w-full items-center justify-between gap-xs border-b border-border">
-          <div className="flex gap-xs">
-            {TABS.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key)}
-                className={`px-md py-sm text-sm font-medium ${
-                  activeTab === tab.key
-                    ? "border-b-2 border-primary text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          {activeTab === "lesson" && readyLecturePdf && (
-            <div role="group" aria-label="Lesson view mode" className="mb-sm flex gap-xs">
-              <button
-                type="button"
-                aria-pressed={lessonViewMode === "pdf"}
-                onClick={() => setLessonViewMode("pdf")}
-                className={`rounded-md border border-border px-sm py-xs text-xs font-medium ${
-                  lessonViewMode === "pdf"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                PDF
-              </button>
-              <button
-                type="button"
-                aria-pressed={lessonViewMode === "text"}
-                onClick={() => setLessonViewMode("text")}
-                className={`rounded-md border border-border px-sm py-xs text-xs font-medium ${
-                  lessonViewMode === "text"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Text
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-lg">
+        <div className="mt-md">
           {activeTab === "review" && <ReviewTab documentId={params.id} />}
           {activeTab === "quizzes" && <QuizzesTab documentId={params.id} />}
           {activeTab === "flashcards" && <FlashcardsTab documentId={params.id} />}
 
-          {activeTab === "lesson" && lessonViewMode === "pdf" && readyLecturePdf && (
+          {activeTab === "lesson" && mode === "pdf" && readyLecturePdf && (
             <PdfLessonView
               documentId={params.id}
               storagePath={readyLecturePdf.storage_path}
@@ -785,7 +478,7 @@ export default function LecturePage() {
             />
           )}
 
-          {activeTab === "lesson" && lessonViewMode === "text" && (
+          {activeTab === "lesson" && mode === "text" && (
             <>
               {!version && <p className="text-sm text-muted-foreground">Not processed yet.</p>}
               {version?.status === "processing" && (
@@ -796,114 +489,20 @@ export default function LecturePage() {
                   Processing failed: {version.error_message ?? "Unknown error"}
                 </p>
               )}
-              {version?.status === "ready" && version.extracted_content && (
-                <article
-                  ref={articleRef}
-                  onMouseUp={handleMouseUp}
-                  className="flex flex-col gap-md"
-                >
-                  {version.extracted_content.blocks.map((block, index) => {
-                    if (block.type === "heading") {
-                      return (
-                        <h2 key={index} className="text-xl font-semibold text-foreground">
-                          {block.text}
-                        </h2>
-                      );
-                    }
-                    if (block.type === "image") {
-                      return block.image_path ? (
-                        <ExtractedImage key={index} path={block.image_path} />
-                      ) : null;
-                    }
-                    return (
-                      <AnnotatedParagraph
-                        key={index}
-                        text={block.text ?? ""}
-                        blockIndex={index}
-                        annotations={annotations}
-                        onDeleteAnnotation={(annotationId) =>
-                          deleteAnnotationMutation.mutate(annotationId)
-                        }
-                      />
-                    );
-                  })}
-                </article>
+              {version?.status === "ready" && (
+                <TextLessonView
+                  blocks={blocks}
+                  annotations={annotations}
+                  tool={tool}
+                  textScale={textScale}
+                  onMark={(ranges) => void handleMark(ranges)}
+                  onOpenNote={openNote}
+                />
               )}
             </>
           )}
         </div>
-
-        {activeTab === "lesson" && pendingSelection && (
-          <div
-            role="toolbar"
-            aria-label="Annotation actions"
-            className="fixed z-20 flex items-center gap-xs rounded-md border border-border bg-background p-xs shadow-md"
-            style={{ top: pendingSelection.top - 44, left: pendingSelection.left }}
-          >
-            {noteDraft === null && !showExplainComingSoon && (
-              <>
-                <button
-                  type="button"
-                  className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
-                  onClick={() => setNoteDraft("")}
-                >
-                  Notes
-                </button>
-                <button
-                  type="button"
-                  className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
-                  onClick={() => setShowExplainComingSoon(true)}
-                >
-                  Explain
-                </button>
-              </>
-            )}
-            {noteDraft !== null && (
-              <form
-                className="flex items-center gap-xs"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  handleSaveNote();
-                }}
-              >
-                <input
-                  autoFocus
-                  value={noteDraft}
-                  onChange={(event) => setNoteDraft(event.target.value)}
-                  placeholder="Note..."
-                  className="rounded-sm border border-border px-sm py-xs text-sm"
-                />
-                <button
-                  type="submit"
-                  className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
-                >
-                  Save
-                </button>
-              </form>
-            )}
-            {showExplainComingSoon && (
-              <div className="flex items-center gap-sm px-sm py-xs">
-                <span className="text-sm text-muted-foreground">
-                  AI explanations are coming soon.
-                </span>
-                <button
-                  type="button"
-                  className="text-xs font-medium text-accent hover:underline"
-                  onClick={() => setShowExplainComingSoon(false)}
-                >
-                  Got it
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <NotesPanel
-        documentId={params.id}
-        mobileOpen={mobileNotesOpen}
-        onMobileClose={() => setMobileNotesOpen(false)}
-      />
-    </main>
+      </main>
+    </div>
   );
 }
