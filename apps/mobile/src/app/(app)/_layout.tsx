@@ -5,6 +5,7 @@ import { useWindowDimensions, View } from "react-native";
 import { fontWeights, spacing } from "@/lib/theme";
 
 import type { DrawerContentComponentProps } from "expo-router/drawer";
+import { HIDDEN_TAB_ROUTES, NotchTabBar } from "@/lib/ui/notch-tab-bar";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
 const TABLET_BREAKPOINT = 768;
@@ -22,10 +23,7 @@ function AppDrawerContent({ state, navigation, descriptors }: DrawerContentCompo
   // "index" joins them: it exists only to redirect `/` to Learn, so it is a
   // route rather than a place, and would otherwise show up as a nameless
   // drawer item above Learn.
-  const visibleRoutes = state.routes.filter(
-    (route) =>
-      route.name !== "settings" && route.name !== "question-bank" && route.name !== "index",
-  );
+  const visibleRoutes = state.routes.filter((route) => !HIDDEN_TAB_ROUTES.has(route.name));
   const profileIndex = visibleRoutes.findIndex((route) => route.name === "profile");
   const topRoutes = visibleRoutes.filter((_, index) => index !== profileIndex);
   const profileRoute = profileIndex >= 0 ? visibleRoutes[profileIndex] : undefined;
@@ -38,8 +36,9 @@ function AppDrawerContent({ state, navigation, descriptors }: DrawerContentCompo
         label={typeof drawerLabel === "string" ? drawerLabel : route.name}
         focused={activeKey === route.key}
         activeTintColor={colors.foreground}
-        inactiveTintColor={colors.mutedForeground}
-        labelStyle={styles.drawerItemLabel}
+        inactiveTintColor={colors.foreground}
+        activeBackgroundColor={colors.muted}
+        labelStyle={activeKey === route.key ? styles.drawerItemLabelActive : styles.drawerItemLabel}
         onPress={() => navigation.navigate(route.name)}
         style={isProfile ? styles.profileItem : undefined}
       />
@@ -64,7 +63,12 @@ const useStyles = makeStyles((colors) => ({
     flexGrow: 1,
   },
   drawerItemLabel: {
+    fontSize: 14.5,
     fontWeight: fontWeights.semibold,
+  },
+  drawerItemLabelActive: {
+    fontSize: 14.5,
+    fontWeight: fontWeights.extrabold,
   },
   profileItem: {
     borderTopWidth: 1,
@@ -85,6 +89,12 @@ export default function AppLayout() {
         screenOptions={{
           headerShown: false,
           drawerType: "permanent",
+          drawerStyle: {
+            width: 240,
+            backgroundColor: colors.background,
+            borderRightColor: colors.border,
+          },
+          sceneStyle: { backgroundColor: colors.background },
         }}
       >
         {/* Answers `/` and redirects to Learn; AppDrawerContent filters it
@@ -107,11 +117,10 @@ export default function AppLayout() {
 
   return (
     <Tabs
+      tabBar={(props) => <NotchTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.foreground,
-        tabBarInactiveTintColor: colors.mutedForeground,
-        tabBarLabelStyle: { fontWeight: fontWeights.semibold },
+        sceneStyle: { backgroundColor: colors.background },
       }}
     >
       {/* Answers `/` and redirects to Learn — not a tab of its own. */}

@@ -6,20 +6,16 @@ import type {
 } from "@lp/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
+import { ExpandableRow } from "@/lib/expandable-row";
+import { ScreenHeader, Tag } from "@/lib/ui/primitives";
 
 function DueBadge({ count }: { count: number }) {
-  const styles = useStyles();
-  return (
-    <View style={[styles.dueBadge, count > 0 && styles.dueBadgeActive]}>
-      <Text style={[styles.dueBadgeText, count > 0 && styles.dueBadgeTextActive]}>{count} due</Text>
-    </View>
-  );
+  return <Tag active={count > 0}>{count} due</Tag>;
 }
 
 function LessonRow({ lesson }: { lesson: ReviewSummaryLesson }) {
@@ -36,45 +32,10 @@ function LessonRow({ lesson }: { lesson: ReviewSummaryLesson }) {
   );
 }
 
-// Same accordion interaction as the Library screen's ChapterRow/SubChapterRow
-// (learn/library/[bookId]/index.tsx), but each row owns its own
-// expanded state rather than sharing one "which row is open" slot -- the
-// whole tree is already in memory here (one eager fetch), so there's no
-// cost to letting several nodes stay open at once while comparing counts.
-function ExpandableRow({
-  title,
-  dueCount,
-  children,
-}: {
-  title: string;
-  dueCount: number;
-  children: React.ReactNode;
-}) {
-  const styles = useStyles();
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <View style={styles.expandableCard}>
-      <Pressable
-        style={styles.expandableHeader}
-        onPress={() => setExpanded((e) => !e)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded }}
-      >
-        <Text style={styles.rowTitle}>{title}</Text>
-        <View style={styles.expandableHeaderRight}>
-          <DueBadge count={dueCount} />
-          <Text style={styles.expandArrow}>{expanded ? "▲" : "▼"}</Text>
-        </View>
-      </Pressable>
-      {expanded && <View style={styles.expandableBody}>{children}</View>}
-    </View>
-  );
-}
-
 function SubChapterRow({ subChapter }: { subChapter: ReviewSummarySubChapter }) {
   const styles = useStyles();
   return (
-    <ExpandableRow title={subChapter.title} dueCount={subChapter.due_count}>
+    <ExpandableRow title={subChapter.title} badge={<DueBadge count={subChapter.due_count} />}>
       {subChapter.lessons.length === 0 ? (
         <Text style={styles.hint}>No lessons.</Text>
       ) : (
@@ -91,7 +52,7 @@ function SubChapterRow({ subChapter }: { subChapter: ReviewSummarySubChapter }) 
 function ChapterRow({ chapter }: { chapter: ReviewSummaryChapter }) {
   const styles = useStyles();
   return (
-    <ExpandableRow title={chapter.title} dueCount={chapter.due_count}>
+    <ExpandableRow title={chapter.title} badge={<DueBadge count={chapter.due_count} />}>
       {chapter.sub_chapters.length === 0 ? (
         <Text style={styles.hint}>No sub-chapters.</Text>
       ) : (
@@ -108,7 +69,7 @@ function ChapterRow({ chapter }: { chapter: ReviewSummaryChapter }) {
 function BookRow({ book }: { book: ReviewSummaryBook }) {
   const styles = useStyles();
   return (
-    <ExpandableRow title={book.title} dueCount={book.due_count}>
+    <ExpandableRow title={book.title} badge={<DueBadge count={book.due_count} />}>
       {book.chapters.length === 0 ? (
         <Text style={styles.hint}>No chapters.</Text>
       ) : (
@@ -153,7 +114,7 @@ export default function ReviewSummaryScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Review</Text>
+      <ScreenHeader kicker="Learn" title="Review" />
       <Text style={styles.hint}>
         {totalDue} {totalDue === 1 ? "word" : "words"} due today across your course.
       </Text>
@@ -166,7 +127,7 @@ export default function ReviewSummaryScreen() {
             <BookRow key={book.id} book={book} />
           ))}
           {data.uncategorized_lessons.length > 0 && (
-            <ExpandableRow title="Uncategorized" dueCount={uncategorizedDue}>
+            <ExpandableRow title="Uncategorized" badge={<DueBadge count={uncategorizedDue} />}>
               <View style={styles.list}>
                 {data.uncategorized_lessons.map((lesson) => (
                   <LessonRow key={lesson.id} lesson={lesson} />
@@ -189,12 +150,6 @@ const useStyles = makeStyles((colors) => ({
     padding: spacing.xl,
     gap: spacing.lg,
   },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
-  },
   list: {
     gap: spacing.xs,
   },
@@ -210,50 +165,6 @@ const useStyles = makeStyles((colors) => ({
     fontSize: fontSizes.sm,
     fontWeight: fontWeights.medium,
     color: colors.foreground,
-  },
-  expandableCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-  },
-  expandableHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
-  expandableHeaderRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  expandArrow: {
-    fontSize: fontSizes.xs,
-    color: colors.mutedForeground,
-  },
-  expandableBody: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    padding: spacing.md,
-  },
-  dueBadge: {
-    borderRadius: 999,
-    paddingVertical: 2,
-    paddingHorizontal: spacing.sm,
-    backgroundColor: colors.muted,
-  },
-  dueBadgeActive: {
-    backgroundColor: colors.primary,
-  },
-  dueBadgeText: {
-    fontSize: fontSizes.xs,
-    fontWeight: fontWeights.medium,
-    color: colors.mutedForeground,
-  },
-  dueBadgeTextActive: {
-    color: colors.primaryForeground,
   },
   hint: {
     fontSize: fontSizes.sm,

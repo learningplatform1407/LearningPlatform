@@ -19,6 +19,7 @@ import { getApiClient } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
 import { fontSizes, fontWeights, lineHeight, radii, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 function imageUrl(imagePath: string): string {
   // A synchronous string concat against a public bucket -- no network call
@@ -612,7 +613,7 @@ export default function FeedScreen() {
       keyExtractor={(post) => post.id}
       ListHeaderComponent={
         <View>
-          <Text style={styles.title}>Feed</Text>
+          <ScreenHeader kicker="Announcements" title="Feed" />
           {isAdmin ? <Composer /> : null}
         </View>
       }
@@ -634,12 +635,6 @@ const useStyles = makeStyles((colors) => ({
   list: { flex: 1, backgroundColor: colors.background },
   listContent: { padding: spacing.xl, gap: spacing.lg },
   centered: { flex: 1, justifyContent: "center", padding: spacing.xl },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"]),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
-  },
   loading: { fontSize: fontSizes.sm, color: colors.mutedForeground },
   empty: { fontSize: fontSizes.sm, color: colors.mutedForeground },
   error: { fontSize: fontSizes.sm, color: colors.danger },

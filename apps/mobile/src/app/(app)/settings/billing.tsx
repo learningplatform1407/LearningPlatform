@@ -1,13 +1,14 @@
 import { Text, View } from "react-native";
 
-import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 export default function BillingSettingsScreen() {
   const styles = useStyles();
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Subscription & Billing</Text>
+      <ScreenHeader kicker="Settings" title="Subscription & Billing" />
       <Text style={styles.hint}>Coming soon.</Text>
     </View>
   );
@@ -19,12 +20,6 @@ const useStyles = makeStyles((colors) => ({
     padding: spacing.xl,
     gap: spacing.md,
     backgroundColor: colors.background,
-  },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
   },
   hint: {
     fontSize: fontSizes.sm,

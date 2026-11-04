@@ -7,8 +7,9 @@ import { getApiClient } from "@/lib/api-client";
 import { BankStatsLine } from "@/lib/bank-stats-line";
 import { ExpandableRow } from "@/lib/expandable-row";
 import { QuestionBankList } from "@/lib/question-bank-list";
-import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 function ProgressBadge({ answered, total }: { answered: number; total: number }) {
   const styles = useStyles();
@@ -143,7 +144,7 @@ export default function QuestionBankScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Question Bank</Text>
+      <ScreenHeader kicker="Learn" title="Question Bank" />
       <Text style={styles.hint}>
         The same structure as your lessons, one level deeper. Answer anything to check yourself —
         attempts are recorded, and you can retry.
@@ -223,12 +224,6 @@ const useStyles = makeStyles((colors) => ({
   content: {
     padding: spacing.xl,
     gap: spacing.lg,
-  },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
   },
   list: {
     gap: spacing.xs,

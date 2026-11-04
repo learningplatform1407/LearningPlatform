@@ -1,13 +1,14 @@
 import { Text, View } from "react-native";
 
-import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 export default function PrivacySettingsScreen() {
   const styles = useStyles();
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Privacy</Text>
+      <ScreenHeader kicker="Settings" title="Privacy" />
       <Text style={styles.hint}>Nothing to configure yet.</Text>
     </View>
   );
@@ -19,12 +20,6 @@ const useStyles = makeStyles((colors) => ({
     padding: spacing.xl,
     gap: spacing.md,
     backgroundColor: colors.background,
-  },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
   },
   hint: {
     fontSize: fontSizes.sm,

@@ -25,7 +25,7 @@ export function ExpandableRow({
   const styles = useStyles();
   const [expanded, setExpanded] = useState(defaultExpanded);
   return (
-    <View style={styles.card}>
+    <View style={styles.row}>
       <View style={styles.header}>
         <Pressable
           style={styles.toggle}
@@ -33,8 +33,8 @@ export function ExpandableRow({
           accessibilityRole="button"
           accessibilityState={{ expanded }}
         >
+          <Text style={[styles.chevron, expanded && styles.chevronOpen]}>›</Text>
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.arrow}>{expanded ? "▲" : "▼"}</Text>
         </Pressable>
         {badge}
       </View>
@@ -43,39 +43,44 @@ export function ExpandableRow({
   );
 }
 
+// Ruled rows like the web tree (and the design's TOC): a top rule per row,
+// a chevron that turns when open, children indented under the title.
 const useStyles = makeStyles((colors) => ({
-  card: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+  row: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
   },
   toggle: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     gap: spacing.sm,
   },
-  title: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
-    color: colors.foreground,
-  },
-  arrow: {
-    fontSize: fontSizes.xs,
+  chevron: {
+    width: 10,
+    fontSize: fontSizes.lg,
+    lineHeight: fontSizes.lg,
+    fontWeight: fontWeights.semibold,
     color: colors.mutedForeground,
   },
+  chevronOpen: {
+    transform: [{ rotate: "90deg" }],
+  },
+  title: {
+    flex: 1,
+    fontSize: 14.5,
+    fontWeight: fontWeights.bold,
+    color: colors.foreground,
+  },
   body: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    padding: spacing.md,
+    paddingLeft: spacing.lg,
+    paddingBottom: spacing.md,
     gap: spacing.xs,
   },
 }));

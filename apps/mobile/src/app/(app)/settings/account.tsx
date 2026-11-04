@@ -5,8 +5,9 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { getApiClient } from "@/lib/api-client";
 import { Overlay } from "@/lib/overlay";
 import { supabase } from "@/lib/supabase";
-import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 export default function AccountSettingsScreen() {
   const styles = useStyles();
@@ -45,7 +46,7 @@ export default function AccountSettingsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Account</Text>
+      <ScreenHeader kicker="Settings" title="Account" />
 
       <Text style={styles.rowValue}>{data.email}</Text>
       <Pressable
@@ -106,12 +107,6 @@ const useStyles = makeStyles((colors) => ({
   centered: {
     justifyContent: "center",
     padding: spacing.xl,
-  },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
   },
   rowValue: {
     fontSize: fontSizes.sm,

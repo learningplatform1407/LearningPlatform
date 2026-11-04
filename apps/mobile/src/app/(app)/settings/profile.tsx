@@ -15,8 +15,9 @@ import {
 
 import { getApiClient } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
-import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
@@ -117,7 +118,7 @@ export default function ProfileSettingsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Profile Settings</Text>
+      <ScreenHeader kicker="Settings" title="Profile Settings" />
 
       <View style={styles.avatarRow}>
         <Pressable
@@ -182,12 +183,6 @@ const useStyles = makeStyles((colors) => ({
   centered: {
     justifyContent: "center",
     padding: spacing.xl,
-  },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
   },
   avatarRow: {
     marginTop: spacing.md,

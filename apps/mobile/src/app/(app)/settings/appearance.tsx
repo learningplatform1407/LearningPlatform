@@ -4,10 +4,17 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
+import { ScreenHeader, SegmentedSwitch } from "@/lib/ui/primitives";
 
-const THEMES = ["light", "dark", "system"] as const;
+const THEME_OPTIONS = [
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+  { value: "system", label: "System" },
+] as const;
+
+type ThemeChoice = (typeof THEME_OPTIONS)[number]["value"];
 
 export default function AppearanceSettingsScreen() {
   const styles = useStyles();
@@ -17,11 +24,11 @@ export default function AppearanceSettingsScreen() {
     queryFn: () => getApiClient().getMe(),
   });
 
-  const [theme, setTheme] = useState<(typeof THEMES)[number]>("system");
+  const [theme, setTheme] = useState<ThemeChoice>("system");
 
   const [syncedFrom, setSyncedFrom] = useState<MeResponse | null>(null);
   if (data && data !== syncedFrom) {
-    setTheme(data.settings.theme as (typeof THEMES)[number]);
+    setTheme(data.settings.theme as ThemeChoice);
     setSyncedFrom(data);
   }
 
@@ -48,25 +55,12 @@ export default function AppearanceSettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Appearance</Text>
+      <ScreenHeader kicker="Settings" title="Appearance" />
 
       <Text style={styles.label}>Theme</Text>
-      <View style={styles.segmented}>
-        {THEMES.map((option) => (
-          <Pressable
-            key={option}
-            style={[styles.segment, theme === option && styles.segmentActive]}
-            onPress={() => setTheme(option)}
-            accessibilityRole="button"
-          >
-            <Text style={[styles.segmentText, theme === option && styles.segmentTextActive]}>
-              {option.charAt(0).toUpperCase() + option.slice(1)}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      <SegmentedSwitch label="Theme" options={THEME_OPTIONS} value={theme} onChange={setTheme} />
       <Text style={styles.hint}>
-        Dark mode isn&apos;t implemented yet — this just saves your preference for later.
+        System follows your device. Saving applies it here and on the web.
       </Text>
 
       {saveMutation.isError && (
@@ -95,12 +89,6 @@ const useStyles = makeStyles((colors) => ({
   centered: {
     justifyContent: "center",
   },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
-  },
   label: {
     fontSize: fontSizes.sm,
     fontWeight: fontWeights.medium,
@@ -109,30 +97,6 @@ const useStyles = makeStyles((colors) => ({
   hint: {
     fontSize: fontSizes.xs,
     color: colors.mutedForeground,
-  },
-  segmented: {
-    flexDirection: "row",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: spacing.xs / 2,
-    alignSelf: "flex-start",
-  },
-  segment: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    borderRadius: 6,
-  },
-  segmentActive: {
-    backgroundColor: colors.primary,
-  },
-  segmentText: {
-    fontSize: fontSizes.sm,
-    color: colors.mutedForeground,
-  },
-  segmentTextActive: {
-    color: colors.primaryForeground,
-    fontWeight: fontWeights.medium,
   },
   saveButton: {
     borderRadius: 8,

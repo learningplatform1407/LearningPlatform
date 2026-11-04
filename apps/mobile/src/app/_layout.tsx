@@ -8,6 +8,7 @@ import {
 } from "@expo-google-fonts/figtree";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/lib/auth-context";
 import { Providers } from "@/lib/providers";
@@ -16,6 +17,12 @@ import { useTheme } from "@/lib/theme-context";
 function RootNavigator() {
   const { session, isLoading } = useAuth();
   const { colors, scheme } = useTheme();
+  // Edge-to-edge (Android 15+, every iPhone with a notch) draws under the
+  // status bar; one top inset here keeps every screen clear of it, the way
+  // the web keeps a page-coloured strip under the top inset (HARDEN-9).
+  // Bottom insets belong to whatever sits at the bottom: the tab bar, the
+  // review bar.
+  const insets = useSafeAreaInsets();
 
   if (isLoading) {
     return null;
@@ -25,7 +32,10 @@ function RootNavigator() {
     <>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       <Stack
-        screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.background, paddingTop: insets.top },
+        }}
       >
         <Stack.Protected guard={!session}>
           <Stack.Screen name="login" />

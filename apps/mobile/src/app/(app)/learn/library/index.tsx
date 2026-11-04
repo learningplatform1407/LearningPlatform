@@ -4,8 +4,9 @@ import { useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 interface BookRow {
   id: string;
@@ -83,7 +84,7 @@ export default function LibraryScreen() {
       contentContainerStyle={styles.listContent}
       data={rows}
       keyExtractor={(book) => book.id}
-      ListHeaderComponent={<Text style={styles.title}>Library</Text>}
+      ListHeaderComponent={<ScreenHeader kicker="Learn" title="Library" />}
       ListEmptyComponent={<Text style={styles.empty}>No books yet.</Text>}
       renderItem={({ item }) => (
         <Pressable
@@ -133,13 +134,6 @@ const useStyles = makeStyles((colors) => ({
   listContent: {
     padding: spacing.xl,
     gap: spacing.xs,
-  },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
-    marginBottom: spacing.md,
   },
   empty: {
     fontSize: fontSizes.sm,

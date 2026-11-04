@@ -4,8 +4,9 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 const LANGUAGES = [{ value: "en", label: "English" }] as const;
 
@@ -48,7 +49,7 @@ export default function LanguageSettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Languages</Text>
+      <ScreenHeader kicker="Settings" title="Languages" />
 
       <View style={styles.segmented}>
         {LANGUAGES.map((option) => (
@@ -92,12 +93,6 @@ const useStyles = makeStyles((colors) => ({
   },
   centered: {
     justifyContent: "center",
-  },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
   },
   segmented: {
     flexDirection: "row",

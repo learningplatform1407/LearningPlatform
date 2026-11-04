@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { OUTCOME_MARKS, QuestionRevealPanel } from "@/lib/question-reveal";
+import { OUTCOME_MARKS, OptionChoice, QuestionRevealPanel } from "@/lib/question-reveal";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
@@ -98,24 +98,17 @@ function QuestionCard({
       </View>
 
       <View style={styles.optionList}>
-        {question.options.map((option) => {
-          const checked = selected.includes(option.id);
-          return (
-            <Pressable
-              key={option.id}
-              style={styles.optionRow}
-              onPress={() => toggle(option.id)}
-              disabled={reveal !== null}
-              accessibilityRole={question.kind === "single" ? "radio" : "checkbox"}
-              accessibilityState={{ checked, disabled: reveal !== null }}
-            >
-              <Text style={styles.optionMark}>
-                {question.kind === "single" ? (checked ? "●" : "○") : checked ? "☑" : "☐"}
-              </Text>
-              <Text style={styles.optionText}>{option.text}</Text>
-            </Pressable>
-          );
-        })}
+        {question.options.map((option, index) => (
+          <OptionChoice
+            key={option.id}
+            kind={question.kind}
+            index={index}
+            text={option.text}
+            checked={selected.includes(option.id)}
+            disabled={reveal !== null}
+            onPress={() => toggle(option.id)}
+          />
+        ))}
       </View>
 
       <Text style={styles.meta}>

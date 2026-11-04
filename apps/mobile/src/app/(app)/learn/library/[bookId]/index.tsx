@@ -10,8 +10,9 @@ import { getApiClient } from "@/lib/api-client";
 import { sha256Hex } from "@/lib/checksum";
 import { ProgressBar } from "@/lib/progress-bar";
 import { supabase } from "@/lib/supabase";
-import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
@@ -112,7 +113,7 @@ function UncategorizedLessonsScreen() {
       contentContainerStyle={styles.listContent}
       data={lessons}
       keyExtractor={(doc) => doc.id}
-      ListHeaderComponent={<Text style={styles.title}>Uncategorized</Text>}
+      ListHeaderComponent={<ScreenHeader kicker="Library" title="Uncategorized" />}
       ListEmptyComponent={<Text style={styles.empty}>No lessons yet.</Text>}
       renderItem={({ item }) => (
         <View>
@@ -780,7 +781,7 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
       keyExtractor={(chapter) => chapter.id}
       ListHeaderComponent={
         <>
-          <Text style={styles.title}>Chapters</Text>
+          <ScreenHeader kicker="Library" title="Chapters" />
           {bookNode && (
             <View style={styles.overallProgress}>
               <ProgressBar
@@ -857,13 +858,6 @@ const useStyles = makeStyles((colors) => ({
   overallProgress: {
     marginTop: spacing.xs,
     maxWidth: 384,
-  },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
-    marginBottom: spacing.md,
   },
   empty: {
     fontSize: fontSizes.sm,

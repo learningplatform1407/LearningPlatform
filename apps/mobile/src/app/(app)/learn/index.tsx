@@ -6,8 +6,9 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { getApiClient } from "@/lib/api-client";
 import { DailyQuestionCard } from "@/lib/daily-question-card";
 import { DailyQuestionOverlay, useDailyQuestion } from "@/lib/daily-question-overlay";
-import { fontSizes, fontWeights, lineHeight, radii, shadows, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, radii, shadows, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 const STATUS_LABEL: Record<string, string> = {
   processing: "Processing...",
@@ -60,7 +61,7 @@ function LearnContent({
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Learn</Text>
+      <ScreenHeader kicker="Your course" title="Learn" />
 
       {continueLesson && (
         <Pressable
@@ -182,12 +183,6 @@ const useStyles = makeStyles((colors) => ({
   content: {
     padding: spacing.xl,
     gap: spacing.lg,
-  },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
   },
   continueCard: {
     borderWidth: 1,

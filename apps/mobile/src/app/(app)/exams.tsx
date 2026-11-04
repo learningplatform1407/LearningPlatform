@@ -14,10 +14,11 @@ import {
 } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { OptionResultRow, QuestionRevealPanel } from "@/lib/question-reveal";
+import { OptionChoice, OptionResultRow, QuestionRevealPanel } from "@/lib/question-reveal";
 import { ExpandableRow } from "@/lib/expandable-row";
-import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 function describeError(err: unknown): string {
   if (err instanceof ApiClientError) {
@@ -409,24 +410,17 @@ function QuestionCard({
         {question.position + 1}. {question.prompt}
       </Text>
       <View style={styles.optionList}>
-        {question.options.map((option) => {
-          const checked = selected.includes(option.id);
-          return (
-            <Pressable
-              key={option.id}
-              style={styles.optionRow}
-              onPress={() => toggle(option.id)}
-              disabled={disabled || locked}
-              accessibilityRole={question.kind === "single" ? "radio" : "checkbox"}
-              accessibilityState={{ checked, disabled: disabled || locked }}
-            >
-              <Text style={styles.optionMark}>
-                {question.kind === "single" ? (checked ? "●" : "○") : checked ? "☑" : "☐"}
-              </Text>
-              <Text style={styles.optionText}>{option.text}</Text>
-            </Pressable>
-          );
-        })}
+        {question.options.map((option, index) => (
+          <OptionChoice
+            key={option.id}
+            kind={question.kind}
+            index={index}
+            text={option.text}
+            checked={selected.includes(option.id)}
+            disabled={disabled || locked}
+            onPress={() => toggle(option.id)}
+          />
+        ))}
       </View>
       {reveal ? (
         <QuestionRevealPanel reveal={reveal} />
@@ -647,8 +641,8 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
             {question.points_awarded}/{question.points_possible})
           </Text>
           <View style={styles.optionResultList}>
-            {question.options.map((option) => (
-              <OptionResultRow key={option.id} option={option} />
+            {question.options.map((option, index) => (
+              <OptionResultRow key={option.id} option={option} index={index} />
             ))}
           </View>
           {question.explanation && <Text style={styles.rationale}>{question.explanation}</Text>}
@@ -720,7 +714,7 @@ export default function ExamsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Exam Hub</Text>
+      <ScreenHeader kicker="Practice" title="Exam Hub" />
       <Text style={styles.hint}>
         Build a custom quiz from any topics and tags. Scheduled mock exams will appear here too.
       </Text>
@@ -761,12 +755,6 @@ const useStyles = makeStyles((colors) => ({
   content: {
     padding: spacing.xl,
     gap: spacing.lg,
-  },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
   },
   form: {
     gap: spacing.md,
