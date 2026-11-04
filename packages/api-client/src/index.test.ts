@@ -182,6 +182,17 @@ describe("createApiClient", () => {
     });
   });
 
+  test("updateAnnotation PATCHes only the fields given", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "a1", type: "margin_note" }));
+
+    await client().updateAnnotation("d1", "a1", { note_text: "Edited" });
+
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe("http://api.test/v1/documents/d1/annotations/a1");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ note_text: "Edited" });
+  });
+
   test("deleteAnnotation DELETEs to /v1/documents/{id}/annotations/{annotationId}", async () => {
     fetchMock.mockResolvedValueOnce(noContentResponse());
 

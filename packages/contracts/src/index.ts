@@ -3,6 +3,7 @@ import type { z } from "zod";
 import type {
   accountSettingsSchema,
   annotationCreateRequestSchema,
+  annotationUpdateRequestSchema,
   annotationResponseSchema,
   bookCreateRequestSchema,
   bookResponseSchema,
@@ -94,6 +95,7 @@ export type LessonPageInk = z.infer<typeof lessonPageInkResponseSchema>;
 export type LessonPageInkUpdateRequest = z.infer<typeof lessonPageInkUpdateRequestSchema>;
 export type Annotation = z.infer<typeof annotationResponseSchema>;
 export type AnnotationCreateRequest = z.infer<typeof annotationCreateRequestSchema>;
+export type AnnotationUpdateRequest = z.infer<typeof annotationUpdateRequestSchema>;
 export type Book = z.infer<typeof bookResponseSchema>;
 export type BookCreateRequest = z.infer<typeof bookCreateRequestSchema>;
 export type Chapter = z.infer<typeof chapterResponseSchema>;

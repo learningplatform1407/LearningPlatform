@@ -3,8 +3,17 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.annotations.schemas import AnnotationCreateRequest, AnnotationResponse
-from app.annotations.service import create_annotation, delete_annotation, list_annotations
+from app.annotations.schemas import (
+    AnnotationCreateRequest,
+    AnnotationResponse,
+    AnnotationUpdateRequest,
+)
+from app.annotations.service import (
+    create_annotation,
+    delete_annotation,
+    list_annotations,
+    update_annotation,
+)
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
 from app.db.session import get_db
@@ -30,6 +39,18 @@ def create_annotation_route(
     db: Session = Depends(get_db),
 ) -> AnnotationResponse:
     annotation = create_annotation(db, document_id, user, data)
+    return AnnotationResponse.model_validate(annotation)
+
+
+@router.patch("/{annotation_id}", response_model=AnnotationResponse)
+def update_annotation_route(
+    document_id: UUID,
+    annotation_id: UUID,
+    data: AnnotationUpdateRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AnnotationResponse:
+    annotation = update_annotation(db, document_id, annotation_id, user.id, data)
     return AnnotationResponse.model_validate(annotation)
 
 

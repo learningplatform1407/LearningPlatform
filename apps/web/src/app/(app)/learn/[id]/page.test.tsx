@@ -13,6 +13,7 @@ const createSignedUrl = vi.fn();
 const listAnnotations = vi.fn();
 const createAnnotation = vi.fn();
 const deleteAnnotation = vi.fn();
+const updateAnnotation = vi.fn();
 const listQuestionBank = vi.fn();
 const getQuizAvailableCount = vi.fn();
 const listFlashcards = vi.fn();
@@ -35,6 +36,7 @@ vi.mock("@/lib/api-client.browser", () => ({
     getDocument,
     listAnnotations,
     createAnnotation,
+    updateAnnotation,
     deleteAnnotation,
     listQuestionBank,
     getQuizAvailableCount,
@@ -400,6 +402,26 @@ describe("LecturePage", () => {
     await userEvent.setup().click(bubble);
 
     expect(await screen.findByDisplayValue("Remember this")).toBeInTheDocument();
+  });
+
+  test("editing a margin note's text saves it in place, without recreating it", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listAnnotations.mockResolvedValue([
+      note({ id: "a1", start_offset: 6, end_offset: 11, note_text: "Remember this" }),
+    ]);
+    updateAnnotation.mockResolvedValue(note({ id: "a1", note_text: "Remember this too" }));
+
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Open note" }));
+    await user.type(await screen.findByDisplayValue("Remember this"), " too");
+    await user.tab();
+
+    await waitFor(() =>
+      expect(updateAnnotation).toHaveBeenCalledWith("d1", "a1", { note_text: "Remember this too" }),
+    );
+    expect(deleteAnnotation).not.toHaveBeenCalled();
+    expect(createAnnotation).not.toHaveBeenCalled();
   });
 
   test("a range-anchored margin note is underlined with a bubble, not highlighted", async () => {

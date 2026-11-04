@@ -1,6 +1,7 @@
 import type {
   Annotation,
   AnnotationCreateRequest,
+  AnnotationUpdateRequest,
   Book,
   BookCreateRequest,
   Chapter,
@@ -523,6 +524,11 @@ export function createApiClient(config: ApiClientConfig) {
     createAnnotation: (documentId: string, data: AnnotationCreateRequest) =>
       request<Annotation>(`/v1/documents/${documentId}/annotations`, {
         method: "POST",
+        body: JSON.stringify(data),
+      }),
+    updateAnnotation: (documentId: string, annotationId: string, data: AnnotationUpdateRequest) =>
+      request<Annotation>(`/v1/documents/${documentId}/annotations/${annotationId}`, {
+        method: "PATCH",
         body: JSON.stringify(data),
       }),
     deleteAnnotation: (documentId: string, annotationId: string) =>

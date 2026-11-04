@@ -47,7 +47,7 @@ the title line), the left tool notch, side panels and the review bar.
 | Favourite heart on questions | Not built | No favourites feature. |
 | TOC of headings with scroll-spy | Two sections: "In this lesson" (headings or the PDF outline) and "Lessons in this chapter" | The existing TOC listed sibling lessons; both are useful. |
 | One note per page in the Notebook panel | Pages through this lesson's margin notes and its notebook entries | The platform has two note stores. |
-| Editing a note inline | Saved on leave as delete + recreate | The annotations API has no update. |
+| Editing a note inline | Saved on leave with `PATCH /annotations/{id}` | Added for the redesign (DESIGN-4); the note keeps its id. |
 | PDF pages as pre-extracted images | pdf.js canvases, lazily rendered; word boxes from `getTextContent()` | Lessons store the PDF itself. Word highlights needed a backend column (`lesson_page_ink.highlights`, migration `c8e2a5d17f40`) — the redesign's one backend change. |
 | AI chat, Explain | Chat tab with a "coming soon" state; Explain disabled with a tooltip | No AI backend yet. |
 | No global navigation | Restyled left sidebar (web/tablet), bottom notch (phone); hidden inside a lesson | The platform has seven sections. |

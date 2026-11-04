@@ -416,6 +416,12 @@ export const annotationCreateRequestSchema = z.object({
   color: z.string().nullable().optional(),
 });
 
+/** PATCH body: only the fields sent change. */
+export const annotationUpdateRequestSchema = z.object({
+  note_text: z.string().nullable().optional(),
+  color: z.string().nullable().optional(),
+});
+
 export const strokePointSchema = z.object({
   x: z.number(),
   y: z.number(),

@@ -125,6 +125,10 @@ export default function LecturePage() {
     mutationFn: (body: AnnotationCreateRequest) =>
       getBrowserApiClient().createAnnotation(params.id, body),
   });
+  const updateAnnotation = useMutation({
+    mutationFn: ({ id, note_text }: { id: string; note_text: string }) =>
+      getBrowserApiClient().updateAnnotation(params.id, id, { note_text }),
+  });
   const deleteAnnotation = useMutation({
     mutationFn: (annotationId: string) =>
       getBrowserApiClient().deleteAnnotation(params.id, annotationId),
@@ -243,9 +247,15 @@ export default function LecturePage() {
 
   // Annotations have no update endpoint, so editing a note's text replaces
   // the note, keeping its anchor.
+  // Edited in place: the note keeps its id, so the panel stays on it.
   async function saveNoteText(note: Annotation, text: string) {
-    const [replacement] = await apply([note], [{ ...recreateRequest(note), note_text: text }]);
-    if (replacement) setFocusNoteId((current) => (current === note.id ? replacement.id : current));
+    try {
+      await updateAnnotation.mutateAsync({ id: note.id, note_text: text });
+    } catch {
+      toast("That change couldn't be saved.");
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: ["annotations", params.id] });
+    }
   }
 
   async function deleteNote(note: Annotation) {
