@@ -6,6 +6,7 @@ import {
   strokeHit,
   strokePath,
   wordAt,
+  wordsForQuote,
   wordsFromTextItems,
 } from "./pdf-geometry";
 
@@ -103,5 +104,18 @@ describe("strokePath", () => {
 
   test("a dot is still drawn", () => {
     expect(strokePath([{ x: 0.5, y: 0.5 }])).toContain("l0.01 0");
+  });
+});
+
+describe("wordsForQuote", () => {
+  const words = wordsFromTextItems(ITEMS, 600, 800);
+
+  test("finds a passage across lines, as word indexes", () => {
+    expect(wordsForQuote(words, "brave\n world")).toEqual([1, 2]);
+    expect(wordsForQuote(words, "Hello")).toEqual([0, 0]);
+  });
+
+  test("null when the page doesn't contain it", () => {
+    expect(wordsForQuote(words, "goodbye")).toBeNull();
   });
 });

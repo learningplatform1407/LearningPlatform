@@ -579,6 +579,7 @@ describe("flashcardCardSchema", () => {
       is_mine: true,
       due_at: "2026-10-06T10:00:00Z",
       is_new: false,
+      next_intervals: { again: 1, hard: 7, good: 15, easy: 40 },
     };
 
     expect(flashcardCardSchema.safeParse(payload).success).toBe(true);
@@ -594,6 +595,7 @@ describe("flashcardCardSchema", () => {
       is_mine: false,
       due_at: null,
       is_new: true,
+      next_intervals: { again: 1, hard: 1, good: 1, easy: 1 },
     };
 
     expect(flashcardCardSchema.safeParse(payload).success).toBe(true);
@@ -785,6 +787,7 @@ describe("questionResponseSchema", () => {
       correct_option_ids: ["a", "b"],
       rationales: { a: "Venodilation reduces venous return." },
       explanation: null,
+      source_quotes: [],
       difficulty: "medium",
       status: "published",
       created_by: "20501741-6a13-4701-9ee5-b70d713f5a85",

@@ -88,6 +88,7 @@ classDiagram
         +json correct_option_ids
         +json rationales
         +string explanation
+        +json source_quotes
         +string difficulty
         +string status
         +UUID created_by
@@ -156,22 +157,23 @@ The two edges carrying the design are `Profile → QuizSession` (many over time,
 
 ### 5.1 `questions` — the bank
 
-| Column                      | Type                     | Notes                                                                                   |
-| --------------------------- | ------------------------ | --------------------------------------------------------------------------------------- |
-| `id`                        | Uuid                     | PK                                                                                      |
-| `external_id`               | String, unique, nullable | Stable key for idempotent re-import                                                     |
-| `document_id`               | Uuid, nullable           | FK → `documents.id` `ON DELETE SET NULL`; lesson provenance                             |
-| `prompt`                    | String                   | The question stem                                                                       |
-| `kind`                      | String                   | `single` \| `multi`                                                                     |
-| `scoring_scheme`            | String                   | Registry key — `single_4` \| `multi_5_per_option` (§6.3)                                |
-| `options`                   | JSON                     | `[{"id": "a", "text": "..."}]` — safe to return verbatim                                |
-| `correct_option_ids`        | JSON                     | `["a", "c"]`                                                                            |
-| `rationales`                | JSON                     | `{"a": "right because...", "b": "wrong because..."}`                                    |
-| `explanation`               | String, nullable         | Overall rationale                                                                       |
-| `difficulty`                | String                   | `easy` \| `medium` \| `hard`, default `medium`. **Write-only in v1** — no filter, no UI |
-| `status`                    | String                   | `draft` \| `published` \| `archived`, default `draft`                                   |
-| `created_by`                | Uuid                     | FK → `profiles.id`                                                                      |
-| `created_at` / `updated_at` | DateTime(tz)             |                                                                                         |
+| Column                      | Type                     | Notes                                                                                                                                                                                     |
+| --------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                        | Uuid                     | PK                                                                                                                                                                                        |
+| `external_id`               | String, unique, nullable | Stable key for idempotent re-import                                                                                                                                                       |
+| `document_id`               | Uuid, nullable           | FK → `documents.id` `ON DELETE SET NULL`; lesson provenance                                                                                                                               |
+| `prompt`                    | String                   | The question stem                                                                                                                                                                         |
+| `kind`                      | String                   | `single` \| `multi`                                                                                                                                                                       |
+| `scoring_scheme`            | String                   | Registry key — `single_4` \| `multi_5_per_option` (§6.3)                                                                                                                                  |
+| `options`                   | JSON                     | `[{"id": "a", "text": "..."}]` — safe to return verbatim                                                                                                                                  |
+| `correct_option_ids`        | JSON                     | `["a", "c"]`                                                                                                                                                                              |
+| `rationales`                | JSON                     | `{"a": "right because...", "b": "wrong because..."}`                                                                                                                                      |
+| `explanation`               | String, nullable         | Overall rationale                                                                                                                                                                         |
+| `source_quotes`             | JSON, default `[]`       | Lesson sentences behind the options, quoted verbatim, for "See in lesson". Checked against the lesson text on write (whitespace-loose); returned only in a reveal, never before answering |
+| `difficulty`                | String                   | `easy` \| `medium` \| `hard`, default `medium`. **Write-only in v1** — no filter, no UI                                                                                                   |
+| `status`                    | String                   | `draft` \| `published` \| `archived`, default `draft`                                                                                                                                     |
+| `created_by`                | Uuid                     | FK → `profiles.id`                                                                                                                                                                        |
+| `created_at` / `updated_at` | DateTime(tz)             |                                                                                                                                                                                           |
 
 **The split-column shape is the security property.** Returning `options` cannot leak the answer key, so the naive read path is already correct — there is no `QuestionPublic` / `QuestionReveal` pair that has to be kept in sync, and no way for a forgotten response model to ship answers to the browser mid-quiz.
 

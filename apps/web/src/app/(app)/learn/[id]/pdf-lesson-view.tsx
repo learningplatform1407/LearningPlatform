@@ -30,6 +30,7 @@ import {
   strokeHit,
   strokePath,
   wordAt,
+  wordsForQuote,
   wordsFromTextItems,
   type PageWord,
 } from "./pdf-geometry";
@@ -91,6 +92,10 @@ interface PdfLessonViewProps {
   zoom?: number;
   onUndoChange?: (canUndo: boolean) => void;
   onOutline?: (items: PdfOutlineItem[]) => void;
+  /** Passages to paint in the quiz-source orange ("See in lesson"). */
+  sourceQuotes?: string[] | null;
+  /** Called once the passages were searched for: whether any was found. */
+  onSourcesShown?: (found: boolean) => void;
   ref?: Ref<PdfLessonHandle>;
 }
 
@@ -107,6 +112,8 @@ export function PdfLessonView({
   zoom = 100,
   onUndoChange,
   onOutline,
+  sourceQuotes = null,
+  onSourcesShown,
   ref,
 }: PdfLessonViewProps) {
   const queryClient = useQueryClient();
@@ -120,6 +127,13 @@ export function PdfLessonView({
   // clearing in the retrying effect's body, which react-hooks rejects.
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const [flash, setFlash] = useState<{ page: number; y: number; at: number } | null>(null);
+  // Keyed by the quotes they were found for, so clearing the quotes clears
+  // them without an effect having to reset state.
+  const [sources, setSources] = useState<{
+    key: string;
+    rects: Map<number, PageHighlight["rects"]>;
+  } | null>(null);
+  const sourcesKey = sourceQuotes?.length ? sourceQuotes.join("\u0000") : null;
   const undoStack = useRef<{ page: number; before: PageInk }[]>([]);
   const outlineRef = useRef<PdfOutlineItem[]>([]);
   // Once a stylus has touched any page, fingers only scroll (design.md §10).
@@ -234,6 +248,36 @@ export function PdfLessonView({
     return true;
   }, [save, onUndoChange]);
 
+  const latestSourcesShown = useRef(onSourcesShown);
+  useEffect(() => {
+    latestSourcesShown.current = onSourcesShown;
+  });
+
+  useEffect(() => {
+    if (!pdfDoc || !sourcesKey || !sourceQuotes) return;
+    let cancelled = false;
+    void findSources(pdfDoc, Math.min(pdfDoc.numPages, pageCount), sourceQuotes).then((rects) => {
+      if (cancelled) return;
+      setSources({ key: sourcesKey, rects });
+      latestSourcesShown.current?.(rects.size > 0);
+      // The first passage sits one third down the viewport (design.md §12).
+      const first = [...rects.keys()].sort((a, b) => a - b)[0];
+      const element = first ? document.getElementById(pageElementId(first)) : null;
+      const top = first ? Math.min(...rects.get(first)!.map(([, y0]) => y0)) : 0;
+      if (element) {
+        const y = element.getBoundingClientRect().top + window.scrollY + top * element.offsetHeight;
+        window.scrollTo({ top: y - window.innerHeight / 3, behavior: scrollBehavior() });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // sourceQuotes is read through sourcesKey, its stable identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfDoc, sourcesKey, pageCount]);
+
+  const sourceRects = sources && sources.key === sourcesKey ? sources.rects : null;
+
   useImperativeHandle(
     ref,
     () => ({
@@ -289,12 +333,50 @@ export function PdfLessonView({
             penSeen={penSeen}
             onPenSeen={markPenSeen}
             flashY={flash?.page === i + 1 ? flash : null}
+            sourceRects={sourceRects?.get(i + 1) ?? null}
             onEdit={edit}
             onUndo={undo}
           />
         ))}
     </div>
   );
+}
+
+/** A page's words with their boxes, in page units (pdf-geometry). */
+async function pageWords(page: PDFPageProxy): Promise<PageWord[]> {
+  const base = page.getViewport({ scale: 1 });
+  const content = await page.getTextContent();
+  const items = content.items.flatMap((item) =>
+    "str" in item
+      ? [
+          {
+            str: item.str,
+            transform: pdfjsLib.Util.transform(base.transform, item.transform),
+            width: item.width,
+          },
+        ]
+      : [],
+  );
+  return wordsFromTextItems(items, base.width, base.height);
+}
+
+/** Where each quoted passage falls, page by page. Searches every page --
+ * the passage could be anywhere, and pages far from the reader haven't
+ * loaded their words yet. */
+async function findSources(
+  pdfDoc: PDFDocumentProxy,
+  numPages: number,
+  quotes: string[],
+): Promise<Map<number, PageHighlight["rects"]>> {
+  const found = new Map<number, PageHighlight["rects"]>();
+  for (let n = 1; n <= numPages; n += 1) {
+    const words = await pageWords(await pdfDoc.getPage(n));
+    for (const quote of quotes) {
+      const range = wordsForQuote(words, quote);
+      if (range) found.set(n, [...(found.get(n) ?? []), ...rectsForRange(words, ...range)]);
+    }
+  }
+  return found;
 }
 
 function pageElementId(page: number) {
@@ -362,6 +444,7 @@ function PdfPage({
   penSeen,
   onPenSeen,
   flashY,
+  sourceRects,
   onEdit,
   onUndo,
 }: {
@@ -374,6 +457,7 @@ function PdfPage({
   penSeen: boolean;
   onPenSeen: () => void;
   flashY: { y: number; at: number } | null;
+  sourceRects: PageHighlight["rects"] | null;
   onEdit: (page: number, before: PageInk, after: PageInk) => void;
   onUndo: () => boolean;
 }) {
@@ -454,21 +538,8 @@ function PdfPage({
   useEffect(() => {
     if (!near || !page || words) return;
     let cancelled = false;
-    const base = page.getViewport({ scale: 1 });
-    void page.getTextContent().then((content) => {
-      if (cancelled) return;
-      const items = content.items.flatMap((item) =>
-        "str" in item
-          ? [
-              {
-                str: item.str,
-                transform: pdfjsLib.Util.transform(base.transform, item.transform),
-                width: item.width,
-              },
-            ]
-          : [],
-      );
-      setWords(wordsFromTextItems(items, base.width, base.height));
+    void pageWords(page).then((found) => {
+      if (!cancelled) setWords(found);
     });
     return () => {
       cancelled = true;
@@ -701,6 +772,15 @@ function PdfPage({
             />
           )),
         )}
+        {/* Quiz sources: orange fill with an underline (design.md §1). */}
+        {sourceRects?.map(([x0, y0, x1, y1], r) => (
+          <i
+            key={`s${r}`}
+            data-source=""
+            className="absolute rounded-[1px] bg-[rgba(255,140,0,0.22)] shadow-[inset_0_-2px_#ff7a00]"
+            style={rectStyle(x0, y0, x1, y1)}
+          />
+        ))}
         {preview?.map(([x0, y0, x1, y1], r) => (
           <i
             key={`p${r}`}

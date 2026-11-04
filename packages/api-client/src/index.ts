@@ -121,6 +121,9 @@ export interface QuestionReveal {
   points_possible: number;
   outcome: "correct" | "partial" | "incorrect";
   explanation: string | null;
+  /** Lesson sentences behind the options, for "See in lesson". Present
+   * once the question has been answered; absent from an older API. */
+  source_quotes?: string[];
   options: QuizOptionResult[];
 }
 
@@ -315,6 +318,9 @@ export interface QuizQuestionResult {
   points_possible: number;
   outcome: "correct" | "partial" | "incorrect";
   explanation: string | null;
+  /** Lesson sentences behind the options, for "See in lesson". Present
+   * once the question has been answered; absent from an older API. */
+  source_quotes?: string[];
   options: QuizOptionResult[];
 }
 

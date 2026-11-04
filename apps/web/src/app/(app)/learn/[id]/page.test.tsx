@@ -15,6 +15,7 @@ const createAnnotation = vi.fn();
 const deleteAnnotation = vi.fn();
 const updateAnnotation = vi.fn();
 const listQuestionBank = vi.fn();
+const answerBankQuestion = vi.fn();
 const getQuizAvailableCount = vi.fn();
 const listFlashcards = vi.fn();
 const listDueFlashcards = vi.fn();
@@ -39,6 +40,7 @@ vi.mock("@/lib/api-client.browser", () => ({
     updateAnnotation,
     deleteAnnotation,
     listQuestionBank,
+    answerBankQuestion,
     getQuizAvailableCount,
     listFlashcards,
     listDueFlashcards,
@@ -751,6 +753,75 @@ describe("LecturePage", () => {
 
     await screen.findByText(para("Hello world"));
     expect(screen.queryByRole("link", { name: /Chapter/ })).not.toBeInTheDocument();
+  });
+
+  test("a checked question's See in lesson paints its source, and the back bar returns to it", async () => {
+    getDocument.mockResolvedValue(
+      readyDocumentWithParagraph("Nitrates cause venodilation. This lowers preload."),
+    );
+    listQuestionBank.mockResolvedValue([
+      {
+        id: "q1",
+        prompt: "Which drug lowers preload?",
+        kind: "single",
+        difficulty: "medium",
+        points_possible: 4,
+        document_id: "d1",
+        options: [
+          { id: "a", text: "Nitrates" },
+          { id: "b", text: "Vasopressors" },
+        ],
+        tags: [],
+      },
+    ]);
+    answerBankQuestion.mockResolvedValue({
+      prompt: "Which drug lowers preload?",
+      kind: "single",
+      points_awarded: 4,
+      points_possible: 4,
+      outcome: "correct",
+      explanation: null,
+      source_quotes: ["This lowers preload."],
+      options: [
+        {
+          id: "a",
+          text: "Nitrates",
+          in_key: true,
+          selected: true,
+          classified_correctly: true,
+          rationale: null,
+        },
+        {
+          id: "b",
+          text: "Vasopressors",
+          in_key: false,
+          selected: false,
+          classified_correctly: true,
+          rationale: null,
+        },
+      ],
+    });
+
+    renderPage();
+    await screen.findByText(para("Nitrates cause venodilation. This lowers preload."));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Quizzes" }));
+
+    // Not offered before checking: the passage would give the answer away.
+    await user.click(await screen.findByText("Nitrates"));
+    expect(screen.queryByRole("button", { name: "↗ See in lesson" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Check answer" }));
+
+    await user.click(await screen.findByRole("button", { name: "↗ See in lesson" }));
+    expect(screen.getByRole("tab", { name: "Lesson" })).toHaveAttribute("aria-selected", "true");
+    const painted = [...document.querySelectorAll("[data-source]")].map((el) => el.textContent);
+    expect(painted).toEqual(["This", "lowers", "preload."]);
+
+    await user.click(screen.getByRole("button", { name: "← Back to quizzes" }));
+    expect(screen.getByRole("tab", { name: "Quizzes" })).toHaveAttribute("aria-selected", "true");
+    // Back to the same question, still showing its answer.
+    expect(screen.getByText("correct — 4/4 points")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "← Back to quizzes" })).not.toBeInTheDocument();
   });
 
   test("the Quizzes tab lists this lesson's questions without the answer key", async () => {

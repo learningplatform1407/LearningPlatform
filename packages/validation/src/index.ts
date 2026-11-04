@@ -513,6 +513,7 @@ export const questionResponseSchema = z.object({
   correct_option_ids: z.array(z.string()),
   rationales: z.record(z.string(), z.string()),
   explanation: z.string().nullable(),
+  source_quotes: z.array(z.string()),
   difficulty: questionDifficultySchema,
   status: questionStatusSchema,
   created_by: z.string(),
@@ -530,6 +531,8 @@ export const questionCreateRequestSchema = z.object({
   correct_option_ids: z.array(z.string()),
   rationales: z.record(z.string(), z.string()).optional(),
   explanation: z.string().nullable().optional(),
+  /** Lesson sentences behind the options, quoted verbatim (See in lesson). */
+  source_quotes: z.array(z.string()).max(10).optional(),
   difficulty: questionDifficultySchema.optional(),
   status: questionStatusSchema.optional(),
   tags: z.array(z.string()).optional(),
@@ -544,6 +547,8 @@ export const questionUpdateRequestSchema = z.object({
   correct_option_ids: z.array(z.string()).optional(),
   rationales: z.record(z.string(), z.string()).optional(),
   explanation: z.string().nullable().optional(),
+  /** Lesson sentences behind the options, quoted verbatim (See in lesson). */
+  source_quotes: z.array(z.string()).max(10).optional(),
   difficulty: questionDifficultySchema.optional(),
   status: questionStatusSchema.optional(),
   tags: z.array(z.string()).optional(),

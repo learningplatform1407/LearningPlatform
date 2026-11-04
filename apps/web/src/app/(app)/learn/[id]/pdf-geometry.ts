@@ -1,9 +1,13 @@
 import type { PageHighlight, Stroke, StrokePoint } from "@lp/contracts";
 
+import { findQuote } from "@/lib/text-offset";
+
 /** A word's box on a page, in page units ([0, 1] of width and height),
  * with its position in reading order. */
 export interface PageWord {
   index: number;
+  /** The word as pdf.js read it -- used to find quoted passages. */
+  text: string;
   x0: number;
   y0: number;
   x1: number;
@@ -45,6 +49,7 @@ export function wordsFromTextItems(
       const x1 = x0 + match[0].length * charWidth;
       words.push({
         index: words.length,
+        text: match[0],
         x0: x0 / pageWidth,
         // `f` is the baseline; the box reaches one font-height above it.
         y0: (f - fontHeight) / pageHeight,
@@ -54,6 +59,35 @@ export function wordsFromTextItems(
     }
   }
   return words;
+}
+
+/**
+ * The first and last word of a quoted passage on this page, in reading
+ * order, or null when the page doesn't contain it. Words are joined with
+ * single spaces and matched with findQuote's loose whitespace, so a
+ * passage that wraps across lines (or runs) on the page still matches.
+ */
+export function wordsForQuote(words: PageWord[], quote: string): [number, number] | null {
+  let text = "";
+  const starts: number[] = [];
+  for (const word of words) {
+    if (text) text += " ";
+    starts.push(text.length);
+    text += word.text;
+  }
+  const found = findQuote(text, quote);
+  if (!found) return null;
+  let first = -1;
+  let last = -1;
+  words.forEach((word, i) => {
+    const start = starts[i]!;
+    const end = start + word.text.length;
+    if (end > found.start && start < found.end) {
+      if (first < 0) first = word.index;
+      last = word.index;
+    }
+  });
+  return first < 0 ? null : [first, last];
 }
 
 /** The word under a point, or the nearest one within `reach` page units. */

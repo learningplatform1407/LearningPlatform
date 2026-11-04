@@ -64,11 +64,14 @@ export function TextLessonView({
   textScale,
   onMark,
   onOpenNote,
+  sources,
 }: {
   blocks: ExtractedBlock[];
   annotations: Annotation[];
   tool: LessonTool;
   textScale: number;
+  /** Quiz-source passages per block, painted orange ("See in lesson"). */
+  sources?: Map<number, { start: number; end: number }[]>;
   /** A finished drag (or tap) with a marking tool, split per block. */
   onMark: (ranges: BlockRange[]) => void;
   onOpenNote: (annotationId: string) => void;
@@ -203,6 +206,7 @@ export function TextLessonView({
             words={wordsByBlock.get(index) ?? []}
             firstWord={firstWordIndex.get(index) ?? 0}
             annotations={annotationsByBlock.get(index) ?? []}
+            sources={sources?.get(index)}
             onOpenNote={onOpenNote}
           />
         );
@@ -217,6 +221,7 @@ function Paragraph({
   words,
   firstWord,
   annotations,
+  sources,
   onOpenNote,
 }: {
   blockIndex: number;
@@ -224,6 +229,7 @@ function Paragraph({
   words: WordRange[];
   firstWord: number;
   annotations: Annotation[];
+  sources?: { start: number; end: number }[];
   onOpenNote: (annotationId: string) => void;
 }) {
   const segments = spliceAnnotations(text, annotations);
@@ -257,7 +263,12 @@ function Paragraph({
           data-block={blockIndex}
           data-ws={word.start}
           data-we={word.end}
-          className="rounded-[2px] data-preview:bg-[rgba(47,111,159,0.16)]"
+          data-source={
+            sources?.some((source) => word.start < source.end && word.end > source.start)
+              ? ""
+              : undefined
+          }
+          className="rounded-[2px] data-preview:bg-[rgba(47,111,159,0.16)] data-source:bg-[rgba(255,140,0,0.24)] data-source:shadow-[inset_0_-2px_#ff7a00]"
         >
           {text.slice(from, to)}
         </span>,

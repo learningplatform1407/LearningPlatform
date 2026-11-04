@@ -46,9 +46,11 @@ function ProgressMark({
 function QuestionCard({
   question,
   onAnswered,
+  onSeeInLesson,
 }: {
   question: QuestionBankItem;
   onAnswered: () => void;
+  onSeeInLesson?: SeeInLesson;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [reveal, setReveal] = useState<QuestionReveal | null>(null);
@@ -80,7 +82,10 @@ function QuestionCard({
   const latest = reveal ?? question.progress;
 
   return (
-    <li className="border-t border-border py-[20px]">
+    <li
+      id={questionElementId(question.id)}
+      className="scroll-mt-[96px] border-t border-border py-[20px]"
+    >
       <div className="mb-2.5 flex items-start justify-between gap-3">
         <p className="font-bold text-foreground">{question.prompt}</p>
         {latest && (
@@ -141,6 +146,17 @@ function QuestionCard({
             {answer.isPending ? "Checking..." : "Check answer"}
           </Button>
         )}
+        {/* Shown once checked, like the design: before that the passage
+            would give the answer away. */}
+        {reveal && onSeeInLesson && reveal.source_quotes && reveal.source_quotes.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onSeeInLesson(question.id, reveal.source_quotes!)}
+            className="text-toc font-bold text-accent hover:underline"
+          >
+            ↗ See in lesson
+          </button>
+        )}
         <span className="ml-auto flex flex-wrap items-center justify-end gap-1.5 text-caption font-bold text-muted-foreground">
           {question.kind === "single" ? "Single answer" : "Multiple answers"} ·{" "}
           {question.points_possible} points · {question.difficulty}
@@ -153,6 +169,14 @@ function QuestionCard({
   );
 }
 
+/** Jump to the passages a checked question came from. */
+export type SeeInLesson = (questionId: string, quotes: string[]) => void;
+
+/** The element a question renders as, so a "back to quizzes" can return to it. */
+export function questionElementId(questionId: string): string {
+  return `question-${questionId}`;
+}
+
 /**
  * Browse — and answer — published questions. Answering here records progress
  * like any other attempt and is repeatable: the bank is for study, not
@@ -162,10 +186,13 @@ export function QuestionBankList({
   filter,
   unassigned,
   emptyMessage = "No questions here yet.",
+  onSeeInLesson,
 }: {
   filter?: TopicFilter;
   unassigned?: boolean;
   emptyMessage?: string;
+  /** Offered inside a lesson only, where there is a lesson to show. */
+  onSeeInLesson?: SeeInLesson;
 }) {
   const queryClient = useQueryClient();
   const questions = useQuery({
@@ -209,6 +236,7 @@ export function QuestionBankList({
           <QuestionCard
             key={question.id}
             question={question}
+            onSeeInLesson={onSeeInLesson}
             onAnswered={() => {
               // Answering moves the counts in the tree above it, and the
               // stored progress behind every list this question appears in —

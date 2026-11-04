@@ -8,6 +8,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Annotation, AnnotationCreateRequest } from "@lp/contracts";
 
 import { useToast } from "@/components/toast";
+import { questionElementId } from "@/components/question-bank-list";
+import { findQuote } from "@/lib/text-offset";
 import { scrollBehavior } from "@/lib/use-media-query";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
@@ -75,6 +77,11 @@ export default function LecturePage() {
   // Lazy-initialized so a deep link like /learn/{id}?tab=review (e.g. from
   // the review dashboard) opens straight to that tab instead of always
   // starting on Lesson.
+  // A visit from a checked question to the passages behind it.
+  const [seeInLesson, setSeeInLesson] = useState<{
+    questionId: string;
+    quotes: string[];
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<LessonTab>(() => {
     const tabParam = searchParams.get("tab");
     return LESSON_TABS.some((tab) => tab.key === tabParam) ? (tabParam as LessonTab) : "lesson";
@@ -107,6 +114,13 @@ export default function LecturePage() {
 
   const version = data?.current_version;
   const blocks = version?.status === "ready" ? (version.extracted_content?.blocks ?? []) : [];
+  const sourcesByBlock = new Map<number, { start: number; end: number }[]>();
+  for (const quote of seeInLesson?.quotes ?? []) {
+    blocks.forEach((block, index) => {
+      const found = block.type === "paragraph" ? findQuote(block.text ?? "", quote) : null;
+      if (found) sourcesByBlock.set(index, [...(sourcesByBlock.get(index) ?? []), found]);
+    });
+  }
   // Only a PDF that actually processed is offered. `status` and
   // `error_message` used to be plumbed through the whole stack and read by
   // nobody, so a failed upload still rendered the toggle and dead-ended in
@@ -269,6 +283,49 @@ export default function LecturePage() {
     setPanelOpen(true);
   }
 
+  // -- "See in lesson" (design.md §12) ------------------------------------
+
+  /** Moving between tabs by hand ends a "See in lesson" visit. */
+  function changeTab(next: LessonTab) {
+    setActiveTab(next);
+    setSeeInLesson(null);
+  }
+
+  function showSources(questionId: string, quotes: string[]) {
+    // Text mode first when the passage is in the text; otherwise the PDF,
+    // which searches its own pages and reports back.
+    const inText = blocks.some(
+      (block) => block.type === "paragraph" && quotes.some((q) => findQuote(block.text ?? "", q)),
+    );
+    if (!inText && !readyLecturePdf) {
+      toast("That passage isn't in this lesson any more.");
+      return;
+    }
+    setSeeInLesson({ questionId, quotes });
+    setTool(null);
+    setActiveTab("lesson");
+    setViewMode(inText ? "text" : "pdf");
+    if (inText) {
+      requestAnimationFrame(() => {
+        const first = document.querySelector("[data-source]");
+        if (!first) return;
+        const y = first.getBoundingClientRect().top + window.scrollY;
+        window.scrollTo({ top: y - window.innerHeight / 3, behavior: scrollBehavior() });
+      });
+    }
+  }
+
+  function backToQuizzes() {
+    const questionId = seeInLesson?.questionId;
+    setSeeInLesson(null);
+    setActiveTab("quizzes");
+    requestAnimationFrame(() =>
+      document
+        .getElementById(questionElementId(questionId ?? ""))
+        ?.scrollIntoView({ behavior: scrollBehavior(), block: "start" }),
+    );
+  }
+
   function jumpToNote(note: Annotation) {
     setActiveTab("lesson");
     setViewMode("text");
@@ -321,7 +378,7 @@ export default function LecturePage() {
   useTabSwipe(!(activeTab === "lesson" && tool !== null), (direction) => {
     const index = LESSON_TABS.findIndex((tab) => tab.key === activeTab) + direction;
     const next = LESSON_TABS[index];
-    if (next) setActiveTab(next.key);
+    if (next) changeTab(next.key);
   });
 
   useLessonKeys(activeTab === "lesson", {
@@ -432,12 +489,22 @@ export default function LecturePage() {
     <div className="min-h-screen px-[max(16px,env(safe-area-inset-left,0px))] pb-[140px] max-[720px]:px-[50px]">
       <LessonTopNotch
         tab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={changeTab}
         title={data.title}
         context={subChapter?.title ?? null}
         showTitle={titleScrolledAway}
         {...dotsProps}
       />
+
+      {seeInLesson && activeTab === "lesson" && (
+        <button
+          type="button"
+          onClick={backToQuizzes}
+          className="fixed top-[72px] left-1/2 z-[52] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm font-bold text-background shadow-notch"
+        >
+          ← Back to quizzes
+        </button>
+      )}
 
       <ToolNotch
         tool={tool}
@@ -509,7 +576,13 @@ export default function LecturePage() {
 
         <div className="mt-md">
           {activeTab === "review" && <ReviewTab documentId={params.id} textScale={textScale} />}
-          {activeTab === "quizzes" && <QuizzesTab documentId={params.id} />}
+          {/* Kept mounted (hidden) during a "See in lesson" visit, so the
+              back bar returns to the question with its answer still shown. */}
+          {(activeTab === "quizzes" || seeInLesson) && (
+            <div hidden={activeTab !== "quizzes"}>
+              <QuizzesTab documentId={params.id} onSeeInLesson={showSources} />
+            </div>
+          )}
           {activeTab === "flashcards" && <FlashcardsTab documentId={params.id} />}
 
           {activeTab === "lesson" && mode === "pdf" && readyLecturePdf && (
@@ -522,6 +595,10 @@ export default function LecturePage() {
               zoom={zoom}
               onUndoChange={setPdfCanUndo}
               onOutline={handleOutline}
+              sourceQuotes={seeInLesson?.quotes ?? null}
+              onSourcesShown={(found) => {
+                if (!found) toast("That passage isn't in this lesson any more.");
+              }}
             />
           )}
 
@@ -544,6 +621,7 @@ export default function LecturePage() {
                   textScale={textScale}
                   onMark={(ranges) => void handleMark(ranges)}
                   onOpenNote={openNote}
+                  sources={sourcesByBlock}
                 />
               )}
             </>
