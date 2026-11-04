@@ -1,6 +1,6 @@
 import { lightColors } from "@lp/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { router } from "expo-router";
 
 import LectureScreen from "../[id]";
@@ -96,28 +96,10 @@ function renderScreen() {
   );
 }
 
-// Matches SELECTION_SETTLE_MS in [id].tsx — the debounce used to detect
-// "the user finished selecting" since RN's onSelectionChange has no
-// distinct "selection ended" event the way web's mouseup does.
-const SELECTION_SETTLE_MS = 400;
-
-// RNTL's fireEvent refuses to dispatch TextInput events (including
-// selectionChange) when editable={false} — it models RN's *documented*
-// behavior, not the undocumented leak (RN issue #35418) this feature
-// actually depends on to work at all on a real device. Calling the prop
-// directly is the only way to unit-test the debounce/mutation logic here;
-// it does not prove the real interaction works, only the code that runs
-// once a selection is reported.
-function selectText(input: ReturnType<typeof screen.getByTestId>, start: number, end: number) {
-  act(() => {
-    input.props.onSelectionChange({ nativeEvent: { selection: { start, end } } });
-  });
-}
-
-async function waitForSelectionSettle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, SELECTION_SETTLE_MS + 150));
-  });
+/** Marks a range the way a learner does: tap its first word, then its last. */
+function tapWords(first: number, last: number, block = 0) {
+  fireEvent.press(screen.getByTestId(`word-${block}-${first}`));
+  fireEvent.press(screen.getByTestId(`word-${block}-${last}`));
 }
 
 function readyDocumentWithParagraph(text: string) {
@@ -1048,7 +1030,7 @@ test("a highlight renders with its stored color", async () => {
   expect(mark.props.style).toEqual({ backgroundColor: lightColors.highlight4 });
 });
 
-test("activating the yellow highlight tool and selecting text creates a highlight, replacing the read-only paragraph with a selectable one", async () => {
+test("with the yellow highlight armed, tapping a word twice highlights exactly that word", async () => {
   mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
 
   renderScreen();
@@ -1056,12 +1038,11 @@ test("activating the yellow highlight tool and selecting text creates a highligh
 
   fireEvent.press(screen.getByLabelText("Highlight — yellow"));
 
-  // Swapped to the selectable TextInput — the long-press Pressable is gone.
+  // Swapped to tappable words — the long-press Pressable is gone.
   expect(screen.queryByTestId("paragraph-0")).toBeNull();
-  const input = screen.getByTestId("selectable-paragraph-0");
+  expect(screen.getByText("Tap the first word, then the last.")).toBeTruthy();
 
-  selectText(input, 0, 5);
-  await waitForSelectionSettle();
+  tapWords(0, 0);
 
   await waitFor(() =>
     expect(mockCreateAnnotation).toHaveBeenCalledWith("d1", {
@@ -1086,11 +1067,11 @@ test("deactivating the tool restores long-press-for-notes on the paragraph", asy
 
   fireEvent.press(yellowSwatch);
   expect(await screen.findByTestId("paragraph-0")).toBeTruthy();
-  expect(screen.queryByTestId("selectable-paragraph-0")).toBeNull();
+  expect(screen.queryByTestId("tappable-paragraph-0")).toBeNull();
 });
 
-test("the eraser splits a highlight when the erased selection is in the middle", async () => {
-  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("abcdefghij"));
+test("the eraser splits a highlight when the erased words are in the middle", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("alpha beta gamma delta"));
   mockListAnnotations.mockResolvedValue([
     {
       id: "a1",
@@ -1098,7 +1079,7 @@ test("the eraser splits a highlight when the erased selection is in the middle",
       type: "highlight",
       block_index: 0,
       start_offset: 0,
-      end_offset: 10,
+      end_offset: 22,
       note_text: null,
       color: "blue",
       created_at: "2026-01-01",
@@ -1106,26 +1087,24 @@ test("the eraser splits a highlight when the erased selection is in the middle",
   ]);
 
   renderScreen();
-  await screen.findByText("abcdefghij");
+  await screen.findByText("alpha beta gamma delta");
 
   fireEvent.press(screen.getByLabelText("Eraser"));
-  const input = screen.getByTestId("selectable-paragraph-0");
-  selectText(input, 3, 6);
-  await waitForSelectionSettle();
+  tapWords(6, 11); // "beta" .. "gamma"
 
   await waitFor(() => expect(mockDeleteAnnotation).toHaveBeenCalledWith("d1", "a1"));
   expect(mockCreateAnnotation).toHaveBeenCalledWith("d1", {
     type: "highlight",
     block_index: 0,
     start_offset: 0,
-    end_offset: 3,
+    end_offset: 6,
     color: "blue",
   });
   expect(mockCreateAnnotation).toHaveBeenCalledWith("d1", {
     type: "highlight",
     block_index: 0,
-    start_offset: 6,
-    end_offset: 10,
+    start_offset: 16,
+    end_offset: 22,
     color: "blue",
   });
 });
@@ -1150,9 +1129,7 @@ test("the eraser removes a highlight entirely with no remainder when fully erase
   await screen.findByText("Hello world");
 
   fireEvent.press(screen.getByLabelText("Eraser"));
-  const input = screen.getByTestId("selectable-paragraph-0");
-  selectText(input, 0, 5);
-  await waitForSelectionSettle();
+  tapWords(0, 0); // "Hello"
 
   await waitFor(() => expect(mockDeleteAnnotation).toHaveBeenCalledWith("d1", "a1"));
   expect(mockCreateAnnotation).not.toHaveBeenCalled();

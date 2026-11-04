@@ -240,11 +240,6 @@ function useScaledBody() {
 
 type ActiveTool = { type: "highlight"; color: string } | { type: "eraser" } | null;
 
-// Debounce for detecting "the user finished selecting" — RN's TextInput
-// onSelectionChange fires continuously while dragging, with no distinct
-// "selection ended" event the way web's mouseup gives us.
-const SELECTION_SETTLE_MS = 400;
-
 /**
  * The tool notch glued to the left edge (design.md §5): contents toggle,
  * the five swatches, then Explain and the eraser. Tapping the active swatch
@@ -329,39 +324,54 @@ function ToolNotch({
   );
 }
 
-function SelectableParagraph({
+/** A word's place in its block's text. */
+type WordSpan = { start: number; end: number };
+
+/**
+ * A paragraph whose words can be tapped while a marking tool is armed
+ * (design.md §9, word-level marking). Touch has no "drag over words" here,
+ * so a range is two taps: the first word, then the last -- tapping the
+ * first word again marks just that word. Either way the range snaps to
+ * whole words, like the web's drag.
+ */
+function TappableParagraph({
   text,
   blockIndex,
-  onSelectionSettled,
+  anchor,
+  onTapWord,
 }: {
   text: string;
   blockIndex: number;
-  onSelectionSettled: (blockIndex: number, start: number, end: number) => void;
+  /** The first word of a range in progress, when it's in this block. */
+  anchor: WordSpan | null;
+  onTapWord: (blockIndex: number, word: WordSpan) => void;
 }) {
   const styles = useStyles();
   const body = useScaledBody();
-  const [selection, setSelection] = useState({ start: 0, end: 0 });
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const pieces: React.ReactNode[] = [];
+  let at = 0;
+  for (const match of text.matchAll(/\S+/g)) {
+    const word = { start: match.index, end: match.index + match[0].length };
+    if (word.start > at) pieces.push(text.slice(at, word.start));
+    const isAnchor = anchor?.start === word.start;
+    pieces.push(
+      <Text
+        key={word.start}
+        testID={`word-${blockIndex}-${word.start}`}
+        onPress={() => onTapWord(blockIndex, word)}
+        style={isAnchor ? styles.wordAnchor : undefined}
+        accessibilityRole="button"
+      >
+        {match[0]}
+      </Text>,
+    );
+    at = word.end;
+  }
+  if (at < text.length) pieces.push(text.slice(at));
   return (
-    <TextInput
-      testID={`selectable-paragraph-${blockIndex}`}
-      style={[styles.paragraph, body]}
-      value={text}
-      editable={false}
-      multiline
-      selection={selection}
-      onSelectionChange={(event) => {
-        const next = event.nativeEvent.selection;
-        setSelection(next);
-        if (timerRef.current) clearTimeout(timerRef.current);
-        if (next.start === next.end) return;
-        timerRef.current = setTimeout(() => {
-          onSelectionSettled(blockIndex, next.start, next.end);
-          setSelection({ start: 0, end: 0 });
-        }, SELECTION_SETTLE_MS);
-      }}
-    />
+    <Text testID={`tappable-paragraph-${blockIndex}`} style={[styles.paragraph, body]}>
+      {pieces}
+    </Text>
   );
 }
 
@@ -1285,7 +1295,28 @@ export default function LectureScreen() {
   );
   const [tocOpen, setTocOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
-  const [activeTool, setActiveTool] = useState<ActiveTool>(null);
+  const [activeTool, setActiveToolState] = useState<ActiveTool>(null);
+  // The first tapped word of a range being marked (see TappableParagraph).
+  const [markAnchor, setMarkAnchor] = useState<(WordSpan & { blockIndex: number }) | null>(null);
+  function setActiveTool(tool: ActiveTool) {
+    setActiveToolState(tool);
+    setMarkAnchor(null);
+  }
+
+  function tapWord(blockIndex: number, word: WordSpan) {
+    // A second tap in the same paragraph completes the range; a tap in
+    // another paragraph starts over there (marks are per paragraph).
+    if (!markAnchor || markAnchor.blockIndex !== blockIndex) {
+      setMarkAnchor({ blockIndex, ...word });
+      return;
+    }
+    setMarkAnchor(null);
+    handleSelectionSettled(
+      blockIndex,
+      Math.min(markAnchor.start, word.start),
+      Math.max(markAnchor.end, word.end),
+    );
+  }
   // Defaults to "text" -- the PDF/Text toggle itself only renders when the
   // lesson has a *ready* lecture_pdf attached (see `readyLecturePdf` below).
   const [lessonViewMode, setLessonViewMode] = useState<"text" | "pdf">("text");
@@ -1618,6 +1649,13 @@ export default function LectureScreen() {
 
           {activeTab === "lesson" && lessonViewMode === "text" && (
             <>
+              {activeTool && (
+                <Text style={styles.markHint}>
+                  {markAnchor
+                    ? "Now tap the last word — or the same word again for just that one."
+                    : "Tap the first word, then the last."}
+                </Text>
+              )}
               {!version && <Text style={styles.hint}>Not processed yet.</Text>}
               {version?.status === "processing" && <Text style={styles.hint}>Processing...</Text>}
               {version?.status === "failed" && (
@@ -1642,11 +1680,12 @@ export default function LectureScreen() {
                   }
                   if (activeTool) {
                     return (
-                      <SelectableParagraph
+                      <TappableParagraph
                         key={index}
                         text={block.text ?? ""}
                         blockIndex={index}
-                        onSelectionSettled={handleSelectionSettled}
+                        anchor={markAnchor?.blockIndex === index ? markAnchor : null}
+                        onTapWord={tapWord}
                       />
                     );
                   }
@@ -1887,6 +1926,16 @@ export default function LectureScreen() {
 }
 
 const useStyles = makeStyles((colors) => ({
+  markHint: {
+    fontSize: 13,
+    fontWeight: fontWeights.semibold,
+    color: colors.mutedForeground,
+  },
+  wordAnchor: {
+    backgroundColor: colors.clozeBg,
+    textDecorationLine: "underline",
+    textDecorationColor: colors.accent,
+  },
   hidden: {
     display: "none",
   },
