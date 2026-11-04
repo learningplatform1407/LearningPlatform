@@ -9,14 +9,20 @@ export function QuizzesTab({ documentId }: { documentId: string }) {
   // link between a lesson and a question. Lessons carry no tags of their
   // own, so "this lesson's questions" means exactly this.
   return (
-    <div className="flex flex-col gap-md">
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-1">
+        <h2 className="text-heading leading-[1.25] font-extrabold">Questions in this lesson</h2>
+        <Link
+          href="/exams"
+          className="rounded-full border border-border px-3 py-[5px] text-caption font-bold text-muted-foreground hover:border-foreground hover:text-foreground"
+        >
+          Practise in an exam →
+        </Link>
+      </div>
       <QuestionBankList
         filter={{ documentIds: [documentId] }}
         emptyMessage="No questions for this lesson yet."
       />
-      <Link href="/exams" className="text-sm text-accent hover:underline">
-        Practise in an exam →
-      </Link>
     </div>
   );
 }

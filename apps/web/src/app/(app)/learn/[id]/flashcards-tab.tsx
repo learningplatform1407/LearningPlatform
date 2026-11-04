@@ -11,8 +11,12 @@ import type {
   ReviewRating,
 } from "@lp/contracts";
 
+import { BottomNotch } from "@/components/bottom-notch";
 import { Button } from "@/components/button";
+import { Chip, Tag } from "@/components/chip";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+
+import { GradeButtons, ShowButton, useGradeKeys } from "./grade-bar";
 
 const SCOPE_FILTERS = [
   { key: "all", label: "All" },
@@ -28,32 +32,26 @@ function ScopeToggle({
   onChange: (scope: FlashcardScopeFilter) => void;
 }) {
   return (
-    <div role="group" aria-label="Filter flashcards" className="flex gap-xs">
+    <div role="group" aria-label="Filter flashcards" className="flex gap-2">
       {SCOPE_FILTERS.map((filter) => (
-        <button
+        <Chip
           key={filter.key}
-          type="button"
           aria-pressed={scope === filter.key}
           onClick={() => onChange(filter.key)}
-          className={`rounded-md border px-sm py-xs text-xs ${
-            scope === filter.key
-              ? "border-primary bg-muted text-foreground"
-              : "border-border text-muted-foreground hover:bg-muted"
-          }`}
         >
           {filter.label}
-        </button>
+        </Chip>
       ))}
     </div>
   );
 }
 
 /** Official vs personal, always paired with a word rather than colour alone. */
-function ScopeBadge({ scope }: { scope: FlashcardScope }) {
+function ScopeBadge({ scope, onPaper = false }: { scope: FlashcardScope; onPaper?: boolean }) {
   return (
-    <span className="rounded-md border border-border px-xs py-[0.0625rem] text-xs text-muted-foreground">
+    <Tag className={onPaper ? "border-black/15 text-paper-muted-foreground" : ""}>
       {scope === "official" ? "Official" : "Mine"}
-    </span>
+    </Tag>
   );
 }
 
@@ -76,27 +74,23 @@ function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: 
 
   return (
     <form
-      className="flex w-full max-w-[32rem] flex-col gap-sm rounded-md border border-border p-md"
+      className="flex w-full flex-col gap-sm border-t border-border pt-md"
       onSubmit={(event) => {
         event.preventDefault();
         create.mutate();
       }}
     >
-      <label className="flex flex-col gap-xs text-sm text-foreground">
+      <label className="flex flex-col gap-xs text-sm font-semibold text-foreground">
         Front
-        <input
-          value={front}
-          onChange={(event) => setFront(event.target.value)}
-          className="w-full rounded-md border border-border bg-background px-sm py-xs text-sm"
-        />
+        <input value={front} onChange={(event) => setFront(event.target.value)} className="field" />
       </label>
-      <label className="flex flex-col gap-xs text-sm text-foreground">
+      <label className="flex flex-col gap-xs text-sm font-semibold text-foreground">
         Back
         <textarea
           value={back}
           onChange={(event) => setBack(event.target.value)}
           rows={3}
-          className="w-full rounded-md border border-border bg-background px-sm py-xs text-sm"
+          className="field"
         />
       </label>
       {error && (
@@ -159,19 +153,19 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
 
   if (editing) {
     return (
-      <li className="flex flex-col gap-xs rounded-md border border-border p-sm">
+      <li className="flex flex-col gap-xs border-t border-border py-3">
         <input
           aria-label="Front"
           value={front}
           onChange={(event) => setFront(event.target.value)}
-          className="w-full rounded-md border border-border bg-background px-sm py-xs text-sm"
+          className="field"
         />
         <textarea
           aria-label="Back"
           value={back}
           onChange={(event) => setBack(event.target.value)}
           rows={2}
-          className="w-full rounded-md border border-border bg-background px-sm py-xs text-sm"
+          className="field"
         />
         {error && (
           <p role="alert" className="text-xs text-danger">
@@ -195,13 +189,13 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
 
   return (
     <li
-      className={`flex items-start justify-between gap-sm rounded-md border border-border px-md py-sm ${
+      className={`flex items-start justify-between gap-sm border-t border-border py-3 ${
         card.suspended ? "opacity-60" : ""
       }`}
     >
       <div className="min-w-0">
-        <p className="text-sm text-foreground">{card.front_text}</p>
-        <p className="text-xs text-muted-foreground">{card.back_text}</p>
+        <p className="text-ui font-bold text-foreground">{card.front_text}</p>
+        <p className="text-sm text-muted-foreground">{card.back_text}</p>
         {error && (
           <p role="alert" className="text-xs text-danger">
             {error}
@@ -210,11 +204,7 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
       </div>
       <div className="flex shrink-0 items-center gap-xs">
         <ScopeBadge scope={card.scope} />
-        {card.suspended && (
-          <span className="rounded-md border border-border px-xs py-[0.0625rem] text-xs text-muted-foreground">
-            Not in rotation
-          </span>
-        )}
+        {card.suspended && <Tag>Not in rotation</Tag>}
         {/* Offered on every visible card, official included — suspension is
             the caller's own review state, not a change to shared content.
             This row is the only place a suspended card is still listed, so
@@ -224,7 +214,7 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
           aria-pressed={!card.suspended}
           disabled={suspension.isPending}
           onClick={() => suspension.mutate()}
-          className="text-xs text-accent hover:underline"
+          className="text-xs font-bold text-accent hover:underline"
         >
           {card.suspended ? "Include in reviews" : "Exclude from reviews"}
         </button>
@@ -232,7 +222,7 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
           <button
             type="button"
             onClick={openEditor}
-            className="text-xs text-accent hover:underline"
+            className="text-xs font-bold text-accent hover:underline"
           >
             Edit
           </button>
@@ -242,7 +232,7 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
             type="button"
             disabled={remove.isPending}
             onClick={() => remove.mutate()}
-            className="text-xs text-danger hover:underline"
+            className="text-xs font-bold text-danger hover:underline"
           >
             {/* Retiring an official card archives it for everyone; deleting
                 your own personal card removes it. Different verbs because
@@ -351,6 +341,17 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
   const completed = gradedIds.size - againCards.length;
   const revealed = currentCard !== undefined && revealedCardId === currentCard.id;
 
+  function grade(rating: ReviewRating) {
+    if (currentCard && revealed && !reviewMutation.isPending) {
+      reviewMutation.mutate({ cardId: currentCard.id, rating });
+    }
+  }
+
+  useGradeKeys(currentCard !== undefined, {
+    onShow: () => currentCard && setRevealedCardId(currentCard.id),
+    onGrade: grade,
+  });
+
   if (deckQuery.isPending) {
     return <p className="text-sm text-muted-foreground">Loading...</p>;
   }
@@ -367,7 +368,7 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
 
   return (
     <div className="flex flex-col items-center gap-md">
-      <div className="flex w-full max-w-[32rem] items-center justify-between gap-sm">
+      <div className="flex w-full flex-wrap items-center justify-between gap-sm">
         <ScopeToggle
           scope={scope}
           onChange={(next) => {
@@ -412,57 +413,36 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
 
       {currentCard && (
         <>
-          <p className="text-xs text-muted-foreground">
-            Card {completed + 1} of {completed + queue.length}
-          </p>
           <button
             type="button"
             aria-expanded={revealed}
             onClick={() => setRevealedCardId(currentCard.id)}
-            className="flex min-h-[10rem] w-full max-w-[32rem] flex-col items-center justify-center gap-sm rounded-md border border-border p-xl text-center hover:bg-muted"
+            // Paper in both themes, like the review cards (design.md §11).
+            className="mt-sm flex min-h-[12rem] w-[min(560px,100%)] flex-col gap-3.5 rounded-sheet bg-paper px-[30px] pt-[30px] pb-lg text-left text-card leading-[1.5] text-paper-foreground shadow-card"
           >
-            <ScopeBadge scope={currentCard.scope} />
-            <p className="text-lg font-medium text-foreground">{currentCard.front_text}</p>
+            <span className="flex w-full items-center justify-between gap-2.5 text-xs font-bold tracking-[0.1em] text-paper-muted-foreground uppercase">
+              <ScopeBadge scope={currentCard.scope} onPaper />
+              <span>
+                Card {completed + 1} of {completed + queue.length}
+              </span>
+            </span>
+            <p className="font-bold">{currentCard.front_text}</p>
             {revealed ? (
-              <p className="border-t border-border pt-sm text-sm text-foreground">
-                {currentCard.back_text}
-              </p>
+              <p className="border-t border-black/10 pt-3">{currentCard.back_text}</p>
             ) : (
-              <span className="text-xs text-muted-foreground">Tap to reveal</span>
+              <span className="text-sm font-semibold text-paper-muted-foreground">
+                Tap to reveal
+              </span>
             )}
           </button>
 
-          {revealed && (
-            <div className="flex flex-wrap items-center justify-center gap-sm">
-              <Button
-                variant="danger"
-                disabled={reviewMutation.isPending}
-                onClick={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "again" })}
-              >
-                Again
-              </Button>
-              <Button
-                variant="warning"
-                disabled={reviewMutation.isPending}
-                onClick={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "hard" })}
-              >
-                Hard
-              </Button>
-              <Button
-                disabled={reviewMutation.isPending}
-                onClick={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "good" })}
-              >
-                Good
-              </Button>
-              <Button
-                variant="success"
-                disabled={reviewMutation.isPending}
-                onClick={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "easy" })}
-              >
-                Easy
-              </Button>
-            </div>
-          )}
+          <BottomNotch label="Flashcard controls">
+            {revealed ? (
+              <GradeButtons onGrade={grade} disabled={reviewMutation.isPending} />
+            ) : (
+              <ShowButton onShow={() => setRevealedCardId(currentCard.id)} />
+            )}
+          </BottomNotch>
 
           {revealed && (
             // Offered at the moment you've just seen the answer and decided
@@ -472,7 +452,7 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
               type="button"
               disabled={excludeMutation.isPending}
               onClick={() => excludeMutation.mutate(currentCard.id)}
-              className="text-xs text-muted-foreground hover:underline"
+              className="text-xs font-semibold text-muted-foreground hover:underline"
             >
               Exclude this card from reviews
             </button>
@@ -480,7 +460,7 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
         </>
       )}
 
-      {feedback && <p className="text-xs text-muted-foreground">{feedback}</p>}
+      {feedback && <p className="text-sm font-semibold text-muted-foreground">{feedback}</p>}
       {actionError && (
         <p role="alert" className="text-xs text-danger">
           {actionError}
@@ -494,8 +474,8 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
       )}
 
       {lessonCards.length > 0 && (
-        <section className="w-full max-w-[32rem]">
-          <h2 className="mb-xs text-sm font-medium text-foreground">
+        <section className="mt-lg w-full">
+          <h2 className="label-caps mb-sm">
             All cards in this lesson
             {excludedCount > 0 && (
               <span className="ml-xs font-normal text-muted-foreground">
@@ -503,7 +483,7 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
               </span>
             )}
           </h2>
-          <ul className="flex flex-col gap-xs">
+          <ul className="border-b border-border">
             {lessonCards.map((card) => (
               <LessonCardRow key={card.id} card={card} onChanged={refresh} />
             ))}
