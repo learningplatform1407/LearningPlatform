@@ -55,6 +55,21 @@ function QuestionCard({
   const [selected, setSelected] = useState<string[]>([]);
   const [reveal, setReveal] = useState<QuestionReveal | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  // Shown at once; the server is told in the background, and a failure
+  // puts the heart back.
+  const [favourite, setFavourite] = useState(question.is_favourite ?? false);
+  const favouriteMutation = useMutation({
+    mutationFn: (on: boolean) =>
+      on
+        ? getBrowserApiClient().favouriteQuestion(question.id)
+        : getBrowserApiClient().unfavouriteQuestion(question.id),
+    onError: (_error, on) => {
+      setFavourite(!on);
+      setError("Could not save that favourite.");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["question-bank"] }),
+  });
 
   const answer = useMutation({
     mutationFn: () => getBrowserApiClient().answerBankQuestion(question.id, selected),
@@ -88,16 +103,32 @@ function QuestionCard({
     >
       <div className="mb-2.5 flex items-start justify-between gap-3">
         <p className="font-bold text-foreground">{question.prompt}</p>
-        {latest && (
-          <ProgressMark
-            outcome={latest.outcome}
-            pointsAwarded={latest.points_awarded}
-            pointsPossible={latest.points_possible}
-            // Only the stored row knows the count; a fresh reveal does not
-            // carry one, and inventing "+1" would be a guess.
-            attemptCount={question.progress?.attempt_count}
-          />
-        )}
+        <span className="flex shrink-0 items-center gap-3">
+          {latest && (
+            <ProgressMark
+              outcome={latest.outcome}
+              pointsAwarded={latest.points_awarded}
+              pointsPossible={latest.points_possible}
+              // Only the stored row knows the count; a fresh reveal does not
+              // carry one, and inventing "+1" would be a guess.
+              attemptCount={question.progress?.attempt_count}
+            />
+          )}
+          <button
+            type="button"
+            aria-label="Favourite"
+            aria-pressed={favourite}
+            title={favourite ? "Remove from favourites" : "Add to favourites"}
+            onClick={() => {
+              setError(null);
+              setFavourite(!favourite);
+              favouriteMutation.mutate(!favourite);
+            }}
+            className="text-[18px] leading-none text-again"
+          >
+            {favourite ? "♥" : "♡"}
+          </button>
+        </span>
       </div>
 
       {reveal ? (
@@ -187,24 +218,27 @@ export function QuestionBankList({
   unassigned,
   emptyMessage = "No questions here yet.",
   onSeeInLesson,
+  favourites,
 }: {
   filter?: TopicFilter;
   unassigned?: boolean;
+  /** Only the learner's favourites. */
+  favourites?: boolean;
   emptyMessage?: string;
   /** Offered inside a lesson only, where there is a lesson to show. */
   onSeeInLesson?: SeeInLesson;
 }) {
   const queryClient = useQueryClient();
   const questions = useQuery({
-    queryKey: ["question-bank", filter ?? null, unassigned ?? false],
-    queryFn: () => getBrowserApiClient().listQuestionBank({ ...filter, unassigned }),
+    queryKey: ["question-bank", filter ?? null, unassigned ?? false, favourites ?? false],
+    queryFn: () => getBrowserApiClient().listQuestionBank({ ...filter, unassigned, favourites }),
   });
   const total = useQuery({
     queryKey: ["question-bank-total", filter ?? null],
     queryFn: () => getBrowserApiClient().getQuizAvailableCount(filter),
-    // The unassigned bucket has no equivalent count endpoint, and there the
-    // list is the whole truth anyway.
-    enabled: !unassigned,
+    // The unassigned bucket and the favourites have no equivalent count
+    // endpoint, and there the list is the whole truth anyway.
+    enabled: !unassigned && !favourites,
   });
 
   if (questions.isPending) {

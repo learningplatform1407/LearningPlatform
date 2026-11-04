@@ -193,6 +193,17 @@ describe("createApiClient", () => {
     expect(JSON.parse(init.body as string)).toEqual({ note_text: "Edited" });
   });
 
+  test("favouriteQuestion PUTs and unfavouriteQuestion DELETEs the same path", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await client().favouriteQuestion("q1");
+    expect(lastCall(fetchMock)[0]).toBe("http://api.test/v1/question-bank/q1/favourite");
+    expect(lastCall(fetchMock)[1].method).toBe("PUT");
+
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await client().unfavouriteQuestion("q1");
+    expect(lastCall(fetchMock)[1].method).toBe("DELETE");
+  });
+
   test("deleteAnnotation DELETEs to /v1/documents/{id}/annotations/{annotationId}", async () => {
     fetchMock.mockResolvedValueOnce(noContentResponse());
 

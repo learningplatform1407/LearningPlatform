@@ -140,6 +140,8 @@ class QuestionBankItem(BaseModel):
     # classified correctly, not which ones — the caller already knows what it
     # picked, and it only ever describes that caller's own past attempt.
     progress: QuestionProgressSummary | None = None
+    # The caller's own heart on it (design.md §12).
+    is_favourite: bool = False
 
 
 class TagResponse(BaseModel):

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -43,3 +43,21 @@ class QuestionProgress(Base):
     # second-granularity and ties break ordering, the same reason
     # record_lesson_view timestamps in Python.
     last_answered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class QuestionFavourite(Base):
+    """A question a learner has marked with the heart (design.md §12), to
+    find again from the question bank. Presence is the whole state: there is
+    no "unfavourited" row. Lives beside progress for the same reason -- it is
+    one user's relation to a question, written from the bank -- and goes when
+    either the user or the question does."""
+
+    __tablename__ = "question_favourites"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("profiles.id", ondelete="CASCADE"), primary_key=True
+    )
+    question_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("questions.id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

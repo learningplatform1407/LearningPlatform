@@ -436,6 +436,8 @@ export interface QuestionBankItem {
   tags: QuestionBankTag[];
   /** `null` when never attempted — distinct from attempted and scoring zero. */
   progress: QuestionProgress | null;
+  /** The caller's own heart on it; absent from an older API. */
+  is_favourite?: boolean;
 }
 
 export interface ApiClientConfig {
@@ -618,10 +620,17 @@ export function createApiClient(config: ApiClientConfig) {
       }),
     listTags: () => request<Tag[]>("/v1/tags"),
     listQuestionBank: (
-      params?: TopicFilter & { unassigned?: boolean; limit?: number; offset?: number },
+      params?: TopicFilter & {
+        unassigned?: boolean;
+        /** Only the caller's favourites. */
+        favourites?: boolean;
+        limit?: number;
+        offset?: number;
+      },
     ) => {
       const query = topicParams(params);
       if (params?.unassigned) query.set("unassigned", "true");
+      if (params?.favourites) query.set("favourites", "true");
       if (params?.limit !== undefined) query.set("limit", String(params.limit));
       if (params?.offset !== undefined) query.set("offset", String(params.offset));
       const qs = query.toString();
@@ -633,6 +642,12 @@ export function createApiClient(config: ApiClientConfig) {
         method: "POST",
         body: JSON.stringify({ selected_option_ids: selectedOptionIds }),
       }),
+    /** Hearts a question; idempotent. */
+    favouriteQuestion: (questionId: string) =>
+      request<void>(`/v1/question-bank/${questionId}/favourite`, { method: "PUT" }),
+    /** Removes the heart; idempotent. */
+    unfavouriteQuestion: (questionId: string) =>
+      request<void>(`/v1/question-bank/${questionId}/favourite`, { method: "DELETE" }),
     /** Today's question, drawn server-side on first read of the day. */
     getDailyQuestion: () => request<DailyQuestion>("/v1/daily-question"),
     getDailyQuestionCalendar: (params: { start: string; end: string }) => {

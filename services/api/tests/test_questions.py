@@ -718,3 +718,41 @@ def test_import_reports_a_quote_the_lesson_does_not_contain(
     ).json()
     assert body["skipped"] == 1
     assert [error["field"] for error in body["errors"]] == ["source_quotes"]
+
+
+# --- favourites -------------------------------------------------------------
+
+
+def test_favouriting_marks_the_question_and_filters_the_bank(admin_client: TestClient) -> None:
+    first = admin_client.post("/v1/questions", json=_single_payload()).json()["id"]
+    admin_client.post("/v1/questions", json=_multi_payload())
+    student = _as_student(admin_client)
+
+    assert student.put(f"/v1/question-bank/{first}/favourite").status_code == 204
+    # Idempotent: a second heart is not an error.
+    assert student.put(f"/v1/question-bank/{first}/favourite").status_code == 204
+
+    bank = student.get("/v1/question-bank").json()
+    assert {item["id"]: item["is_favourite"] for item in bank}[first] is True
+    assert sum(item["is_favourite"] for item in bank) == 1
+    only = student.get("/v1/question-bank", params={"favourites": True}).json()
+    assert [item["id"] for item in only] == [first]
+
+    assert student.delete(f"/v1/question-bank/{first}/favourite").status_code == 204
+    assert student.delete(f"/v1/question-bank/{first}/favourite").status_code == 204
+    assert student.get("/v1/question-bank", params={"favourites": True}).json() == []
+
+
+def test_favourites_are_per_learner(admin_client: TestClient) -> None:
+    question_id = admin_client.post("/v1/questions", json=_single_payload()).json()["id"]
+    _as_student(admin_client).put(f"/v1/question-bank/{question_id}/favourite")
+
+    app.dependency_overrides[get_current_user] = lambda: AuthenticatedUser(
+        id=uuid4(), email="someone-else@example.com"
+    )
+    assert admin_client.get("/v1/question-bank").json()[0]["is_favourite"] is False
+
+
+def test_cannot_favourite_a_draft(admin_client: TestClient) -> None:
+    draft = admin_client.post("/v1/questions", json=_single_payload(status="draft")).json()["id"]
+    assert _as_student(admin_client).put(f"/v1/question-bank/{draft}/favourite").status_code == 404

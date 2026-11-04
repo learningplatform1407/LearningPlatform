@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, aliased
 
 from app.common.errors import ApiError, FieldError
 from app.documents.models import Document
+from app.progress.models import QuestionFavourite
 from app.questions.constants import (
     MAX_FILTER_TAGS,
     MAX_IMPORT_QUESTIONS,
@@ -479,6 +480,7 @@ def list_published_questions(
     limit: int,
     offset: int,
     unassigned: bool = False,
+    favourites_of: uuid.UUID | None = None,
 ) -> tuple[list[Question], dict[uuid.UUID, list[Tag]]]:
     """Backs the student-facing bank browse. Published questions only, and
     the caller must shape these with `QuestionBankItem`, which omits the
@@ -490,6 +492,14 @@ def list_published_questions(
         # all. Those sit under no node of the bank tree, so without this they
         # are browsable only by fetching the whole unfiltered bank.
         query = query.where(Question.document_id.is_(None))
+    if favourites_of is not None:
+        query = query.where(
+            Question.id.in_(
+                select(QuestionFavourite.question_id).where(
+                    QuestionFavourite.user_id == favourites_of
+                )
+            )
+        )
     questions = list(
         db.scalars(query.order_by(Question.created_at.desc()).limit(limit).offset(offset))
     )

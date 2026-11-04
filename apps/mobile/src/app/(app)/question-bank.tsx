@@ -1,6 +1,7 @@
 import type { BankTreeChapter, BankTreeLesson, BankTreeSubChapter } from "@lp/api-client";
 import { sumBankStatsCounts } from "@lp/api-client";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
@@ -9,7 +10,7 @@ import { ExpandableRow } from "@/lib/expandable-row";
 import { QuestionBankList } from "@/lib/question-bank-list";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
-import { ScreenHeader } from "@/lib/ui/primitives";
+import { ScreenHeader, SegmentedSwitch } from "@/lib/ui/primitives";
 
 function ProgressBadge({ answered, total }: { answered: number; total: number }) {
   const styles = useStyles();
@@ -90,7 +91,13 @@ function ChapterRow({ chapter }: { chapter: BankTreeChapter }) {
   );
 }
 
+const VIEWS = [
+  { value: "all", label: "All questions" },
+  { value: "favourites", label: "Favourites" },
+] as const;
+
 export default function QuestionBankScreen() {
+  const [view, setView] = useState<(typeof VIEWS)[number]["value"]>("all");
   const styles = useStyles();
   const tree = useQuery({
     queryKey: ["question-bank-tree"],
@@ -150,67 +157,82 @@ export default function QuestionBankScreen() {
         attempts are recorded, and you can retry.
       </Text>
 
-      {!isEmpty && (
-        <View style={styles.overviewCard}>
-          <Text style={styles.overviewTitle}>Overall</Text>
-          <Text style={styles.hint}>
-            {overall.answered_count}/{overall.question_count} answered
-          </Text>
-          <BankStatsLine counts={overall} />
-        </View>
-      )}
+      <SegmentedSwitch label="Which questions" options={VIEWS} value={view} onChange={setView} />
 
-      {isEmpty ? (
-        <Text style={styles.hint}>The question bank is empty.</Text>
+      {view === "favourites" ? (
+        <QuestionBankList
+          favourites
+          emptyMessage="No favourites yet. Tap ♡ on any question to keep it here."
+        />
       ) : (
-        <View style={styles.list}>
-          {data.books.map((book) => (
-            <ExpandableRow
-              key={book.id}
-              title={book.title}
-              badge={<ProgressBadge answered={book.answered_count} total={book.question_count} />}
-            >
-              <BankStatsLine counts={book} />
-              {book.chapters.length === 0 ? (
-                <Text style={styles.hint}>No chapters.</Text>
-              ) : (
-                <View style={styles.list}>
-                  {book.chapters.map((chapter) => (
-                    <ChapterRow key={chapter.id} chapter={chapter} />
-                  ))}
-                </View>
-              )}
-            </ExpandableRow>
-          ))}
-
-          {data.uncategorized_lessons.length > 0 && (
-            <ExpandableRow
-              title="Uncategorized lessons"
-              badge={<ProgressBadge answered={uncategorizedAnswered} total={uncategorizedTotal} />}
-            >
-              <BankStatsLine counts={sumBankStatsCounts(data.uncategorized_lessons)} />
-              <LessonList lessons={data.uncategorized_lessons} />
-            </ExpandableRow>
+        <>
+          {!isEmpty && (
+            <View style={styles.overviewCard}>
+              <Text style={styles.overviewTitle}>Overall</Text>
+              <Text style={styles.hint}>
+                {overall.answered_count}/{overall.question_count} answered
+              </Text>
+              <BankStatsLine counts={overall} />
+            </View>
           )}
 
-          {/* Questions whose document_id is null belong to no lesson, so they
+          {isEmpty ? (
+            <Text style={styles.hint}>The question bank is empty.</Text>
+          ) : (
+            <View style={styles.list}>
+              {data.books.map((book) => (
+                <ExpandableRow
+                  key={book.id}
+                  title={book.title}
+                  badge={
+                    <ProgressBadge answered={book.answered_count} total={book.question_count} />
+                  }
+                >
+                  <BankStatsLine counts={book} />
+                  {book.chapters.length === 0 ? (
+                    <Text style={styles.hint}>No chapters.</Text>
+                  ) : (
+                    <View style={styles.list}>
+                      {book.chapters.map((chapter) => (
+                        <ChapterRow key={chapter.id} chapter={chapter} />
+                      ))}
+                    </View>
+                  )}
+                </ExpandableRow>
+              ))}
+
+              {data.uncategorized_lessons.length > 0 && (
+                <ExpandableRow
+                  title="Uncategorized lessons"
+                  badge={
+                    <ProgressBadge answered={uncategorizedAnswered} total={uncategorizedTotal} />
+                  }
+                >
+                  <BankStatsLine counts={sumBankStatsCounts(data.uncategorized_lessons)} />
+                  <LessonList lessons={data.uncategorized_lessons} />
+                </ExpandableRow>
+              )}
+
+              {/* Questions whose document_id is null belong to no lesson, so they
               hang under no node above — without this row they'd be
               unreachable from the bank entirely. */}
-          {data.unassigned_question_count > 0 && (
-            <ExpandableRow
-              title="Questions not linked to a lesson"
-              badge={
-                <ProgressBadge
-                  answered={data.unassigned_answered_count}
-                  total={data.unassigned_question_count}
-                />
-              }
-            >
-              <BankStatsLine counts={unassignedCounts} />
-              <QuestionBankList unassigned emptyMessage="Nothing here." />
-            </ExpandableRow>
+              {data.unassigned_question_count > 0 && (
+                <ExpandableRow
+                  title="Questions not linked to a lesson"
+                  badge={
+                    <ProgressBadge
+                      answered={data.unassigned_answered_count}
+                      total={data.unassigned_question_count}
+                    />
+                  }
+                >
+                  <BankStatsLine counts={unassignedCounts} />
+                  <QuestionBankList unassigned emptyMessage="Nothing here." />
+                </ExpandableRow>
+              )}
+            </View>
           )}
-        </View>
+        </>
       )}
     </ScrollView>
   );

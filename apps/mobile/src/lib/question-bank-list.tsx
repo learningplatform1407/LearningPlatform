@@ -62,6 +62,22 @@ function QuestionCard({
   const [reveal, setReveal] = useState<QuestionReveal | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const queryClient = useQueryClient();
+  // Shown at once; the server is told in the background, and a failure
+  // puts the heart back.
+  const [favourite, setFavourite] = useState(question.is_favourite ?? false);
+  const favouriteMutation = useMutation({
+    mutationFn: (on: boolean) =>
+      on
+        ? getApiClient().favouriteQuestion(question.id)
+        : getApiClient().unfavouriteQuestion(question.id),
+    onError: (_error, on) => {
+      setFavourite(!on);
+      setError("Could not save that favourite.");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["question-bank"] }),
+  });
+
   const answer = useMutation({
     mutationFn: () => getApiClient().answerBankQuestion(question.id, selected),
     onSuccess: (result) => {
@@ -100,6 +116,19 @@ function QuestionCard({
             attemptCount={question.progress?.attempt_count}
           />
         )}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Favourite"
+          accessibilityState={{ selected: favourite }}
+          hitSlop={8}
+          onPress={() => {
+            setError(null);
+            setFavourite(!favourite);
+            favouriteMutation.mutate(!favourite);
+          }}
+        >
+          <Text style={styles.heart}>{favourite ? "♥" : "♡"}</Text>
+        </Pressable>
       </View>
 
       <View style={styles.optionList}>
@@ -187,23 +216,26 @@ export function QuestionBankList({
   unassigned,
   emptyMessage = "No questions here yet.",
   onSeeInLesson,
+  favourites,
 }: {
   filter?: TopicFilter;
   unassigned?: boolean;
   emptyMessage?: string;
   /** Offered inside a lesson only, where there is a lesson to show. */
   onSeeInLesson?: SeeInLesson;
+  /** Only the learner's favourites. */
+  favourites?: boolean;
 }) {
   const styles = useStyles();
   const queryClient = useQueryClient();
   const questions = useQuery({
-    queryKey: ["question-bank", filter ?? null, unassigned ?? false],
-    queryFn: () => getApiClient().listQuestionBank({ ...filter, unassigned }),
+    queryKey: ["question-bank", filter ?? null, unassigned ?? false, favourites ?? false],
+    queryFn: () => getApiClient().listQuestionBank({ ...filter, unassigned, favourites }),
   });
   const total = useQuery({
     queryKey: ["question-bank-total", filter ?? null],
     queryFn: () => getApiClient().getQuizAvailableCount(filter),
-    enabled: !unassigned,
+    enabled: !unassigned && !favourites,
   });
 
   if (questions.isPending) {
@@ -242,6 +274,11 @@ export function QuestionBankList({
 }
 
 const useStyles = makeStyles((colors) => ({
+  heart: {
+    fontSize: 20,
+    lineHeight: 22,
+    color: colors.again,
+  },
   seeInLesson: {
     fontSize: 14,
     fontWeight: fontWeights.bold,
