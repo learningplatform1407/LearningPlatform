@@ -466,7 +466,7 @@ export default function LecturePage() {
         </header>
 
         <div className="mt-md">
-          {activeTab === "review" && <ReviewTab documentId={params.id} />}
+          {activeTab === "review" && <ReviewTab documentId={params.id} textScale={textScale} />}
           {activeTab === "quizzes" && <QuizzesTab documentId={params.id} />}
           {activeTab === "flashcards" && <FlashcardsTab documentId={params.id} />}
 

@@ -1284,14 +1284,14 @@ describe("LecturePage", () => {
     // The whole lesson (heading included) stays visible during review, not
     // just the paragraph containing the due word.
     expect(await screen.findByText("Cell Biology")).toBeInTheDocument();
-    expect(screen.getByText("[...]")).toBeInTheDocument();
+    expect(screen.getByText("[ … ]")).toBeInTheDocument();
     expect(screen.queryByText("mitochondria")).not.toBeInTheDocument();
     expect(screen.getByText("1 word left to review")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Show" }));
 
     expect(screen.getByText("mitochondria")).toBeInTheDocument();
-    expect(screen.queryByText("[...]")).not.toBeInTheDocument();
+    expect(screen.queryByText("[ … ]")).not.toBeInTheDocument();
     for (const label of ["Again", "Hard", "Good", "Easy"]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
@@ -1311,25 +1311,24 @@ describe("LecturePage", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("tab", { name: "Review" }));
 
-    // Both due words start hidden, each as its own "[...]" segment.
-    expect(await screen.findAllByText("[...]")).toHaveLength(2);
+    // Both due words start hidden, each as its own gap.
+    expect(await screen.findAllByText("[ … ]")).toHaveLength(2);
     expect(screen.getByText("2 words left to review")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Show" }));
     expect(screen.getByText("database")).toBeInTheDocument();
-    expect(screen.getAllByText("[...]")).toHaveLength(1); // "index" still queued
+    expect(screen.getAllByText("[ … ]")).toHaveLength(1); // "index" still queued
 
     await user.click(screen.getByRole("button", { name: "Good" }));
     await waitFor(() => expect(screen.getByText("1 word left to review")).toBeInTheDocument());
-    // "database" is no longer its own cloze span once graded -- it merges
-    // back into the surrounding plain-text run, so it's matched by
-    // substring here rather than as an isolated node.
-    expect(screen.getByText(/database/)).toBeInTheDocument();
-    expect(screen.getByText("[...]")).toBeInTheDocument(); // "index" still hidden, Show not pressed yet
+    // A graded word stays in the text, tinted with its grade, for the
+    // rest of the session.
+    expect(screen.getByText("database")).toHaveClass("text-good");
+    expect(screen.getByText("[ … ]")).toBeInTheDocument(); // "index" still hidden, Show not pressed yet
 
     await user.click(screen.getByRole("button", { name: "Show" }));
     expect(screen.getByText("index")).toBeInTheDocument();
-    expect(screen.queryByText("[...]")).not.toBeInTheDocument();
+    expect(screen.queryByText("[ … ]")).not.toBeInTheDocument();
   });
 
   test("grading a Review word submits the rating and shows the next-interval feedback", async () => {
@@ -1356,6 +1355,92 @@ describe("LecturePage", () => {
 
     await waitFor(() => expect(submitClozeReview).toHaveBeenCalledWith("d1", "c1", "good"));
     expect(await screen.findByText("Next review in 6 days.")).toBeInTheDocument();
+  });
+
+  test("Space reveals and the number keys grade, from the keyboard", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("The mitochondria produces energy."));
+    listDueClozeCards.mockResolvedValue([
+      { id: "c1", document_id: "d1", block_index: 0, start_offset: 4, end_offset: 16 },
+    ]);
+    submitClozeReview.mockResolvedValue({
+      id: "s1",
+      cloze_card_id: "c1",
+      ease_factor: 2.5,
+      interval_days: 1,
+      repetitions: 1,
+      due_at: "2026-01-02",
+      last_reviewed_at: "2026-01-01",
+    });
+
+    renderPage();
+    await screen.findByText(para("The mitochondria produces energy."));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Review" }));
+    await screen.findByRole("button", { name: "Show" });
+
+    await user.keyboard(" ");
+    expect(screen.getByText("mitochondria")).toBeInTheDocument();
+    await user.keyboard("2");
+
+    await waitFor(() => expect(submitClozeReview).toHaveBeenCalledWith("d1", "c1", "hard"));
+  });
+
+  test("'Only what you missed' brings back the words graded Again or Hard", async () => {
+    getDocument.mockResolvedValue(
+      readyDocumentWithParagraph("The database index accelerates lookups."),
+    );
+    listDueClozeCards.mockResolvedValue([
+      { id: "c1", document_id: "d1", block_index: 0, start_offset: 4, end_offset: 12 },
+      { id: "c2", document_id: "d1", block_index: 0, start_offset: 13, end_offset: 18 },
+    ]);
+    submitClozeReview.mockResolvedValue({
+      id: "s",
+      cloze_card_id: "c",
+      ease_factor: 2.5,
+      interval_days: 1,
+      repetitions: 1,
+      due_at: "2026-01-02",
+      last_reviewed_at: "2026-01-01",
+    });
+
+    renderPage();
+    await screen.findByText(para("The database index accelerates lookups."));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Review" }));
+
+    await user.click(await screen.findByRole("button", { name: "Show" }));
+    await user.click(screen.getByRole("button", { name: "Again" }));
+    await user.click(await screen.findByRole("button", { name: "Show" }));
+    await user.click(screen.getByRole("button", { name: "Good" }));
+    expect(
+      await screen.findByText("You're all caught up — nothing to review right now."),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Only what you missed" }));
+
+    expect(screen.getByText("1 missed word to go again")).toBeInTheDocument();
+    expect(screen.getAllByText("[ … ]")).toHaveLength(1);
+    expect(screen.getByText("index")).toBeInTheDocument();
+  });
+
+  test("the cards view shows only the sentence holding the gap", async () => {
+    getDocument.mockResolvedValue(
+      readyDocumentWithParagraph("Bones heal slowly. The femur is the longest bone. Rest helps."),
+    );
+    listDueClozeCards.mockResolvedValue([
+      { id: "c1", document_id: "d1", block_index: 0, start_offset: 23, end_offset: 28 },
+    ]);
+
+    renderPage();
+    await screen.findByText(para("Bones heal slowly. The femur is the longest bone. Rest helps."));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Review" }));
+    await user.click(await screen.findByRole("button", { name: "Cards, one at a time" }));
+
+    const card = screen.getByRole("dialog", { name: "Review card" });
+    expect(card).toHaveTextContent("The [ … ] is the longest bone.");
+    expect(card).not.toHaveTextContent("Bones heal slowly");
+    expect(card).not.toHaveTextContent("Rest helps");
   });
 
   test("the Review tab shows an empty state, with the lesson still fully readable, when nothing is due", async () => {
