@@ -43,7 +43,7 @@ the title line), the left tool notch, side panels and the review bar.
 | Again / Hard / Good | Again / Hard / Good / **Easy** (`easy` = accent blue) | The SM-2 scheduler has four ratings; dropping one would change scheduling. |
 | Next interval under each grade | Shown after grading, as a toast | The due-card response carries no review state, so it can't be previewed. |
 | Cloze type hints, "hide hints" dot | Every gap is "[ … ]"; no hints dot | Cloze cards have no hint field. |
-| "See in lesson" on quiz questions, back bar | Not built | Questions have no source anchor. |
+| "See in lesson" on quiz questions, back bar | Built on `questions.source_quotes` (quoted sentences, not offsets) | Quotes survive a lecture-text replace and are what an import author can write (DESIGN-3). Questions show the link only once they have quotes. |
 | Favourite heart on questions | Not built | No favourites feature. |
 | TOC of headings with scroll-spy | Two sections: "In this lesson" (headings or the PDF outline) and "Lessons in this chapter" | The existing TOC listed sibling lessons; both are useful. |
 | One note per page in the Notebook panel | Pages through this lesson's margin notes and its notebook entries | The platform has two note stores. |

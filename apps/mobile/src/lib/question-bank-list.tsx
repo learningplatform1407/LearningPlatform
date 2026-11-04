@@ -44,12 +44,17 @@ function ProgressMark({
   );
 }
 
+/** Jump to the passages a checked question came from. */
+export type SeeInLesson = (questionId: string, quotes: string[]) => void;
+
 function QuestionCard({
   question,
   onAnswered,
+  onSeeInLesson,
 }: {
   question: QuestionBankItem;
   onAnswered: () => void;
+  onSeeInLesson?: SeeInLesson;
 }) {
   const styles = useStyles();
   const colors = useThemeColors();
@@ -130,6 +135,16 @@ function QuestionCard({
       {reveal ? (
         <>
           <QuestionRevealPanel reveal={reveal} />
+          {/* Shown once checked, like the design: before that the passage
+              would give the answer away. */}
+          {onSeeInLesson && reveal.source_quotes && reveal.source_quotes.length > 0 && (
+            <Pressable
+              onPress={() => onSeeInLesson(question.id, reveal.source_quotes!)}
+              accessibilityRole="link"
+            >
+              <Text style={styles.seeInLesson}>↗ See in lesson</Text>
+            </Pressable>
+          )}
           <Pressable
             style={styles.button}
             onPress={() => {
@@ -171,10 +186,13 @@ export function QuestionBankList({
   filter,
   unassigned,
   emptyMessage = "No questions here yet.",
+  onSeeInLesson,
 }: {
   filter?: TopicFilter;
   unassigned?: boolean;
   emptyMessage?: string;
+  /** Offered inside a lesson only, where there is a lesson to show. */
+  onSeeInLesson?: SeeInLesson;
 }) {
   const styles = useStyles();
   const queryClient = useQueryClient();
@@ -212,6 +230,7 @@ export function QuestionBankList({
         <QuestionCard
           key={question.id}
           question={question}
+          onSeeInLesson={onSeeInLesson}
           onAnswered={() => {
             queryClient.invalidateQueries({ queryKey: ["question-bank-tree"] });
             queryClient.invalidateQueries({ queryKey: ["question-bank"] });
@@ -223,6 +242,11 @@ export function QuestionBankList({
 }
 
 const useStyles = makeStyles((colors) => ({
+  seeInLesson: {
+    fontSize: 14,
+    fontWeight: fontWeights.bold,
+    color: colors.accent,
+  },
   list: {
     gap: spacing.sm,
   },

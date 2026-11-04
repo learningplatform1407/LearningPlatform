@@ -13,6 +13,7 @@ import {
   HIGHLIGHT_COLOR_NAMES,
   clozeGap,
   describeInterval,
+  findQuote,
   formatInterval,
   highlightIndex,
   pageColors,
@@ -22,6 +23,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { createContext, useContext, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Modal,
   Pressable,
@@ -29,6 +31,8 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
+  type ScrollViewInstance,
 } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
@@ -39,7 +43,7 @@ import {
 } from "@/lib/notebook-entry-editor";
 import { Overlay } from "@/lib/overlay";
 import { PdfLessonView } from "@/lib/pdf-lesson-view";
-import { QuestionBankList } from "@/lib/question-bank-list";
+import { QuestionBankList, type SeeInLesson } from "@/lib/question-bank-list";
 import { supabase } from "@/lib/supabase";
 import { fontSizes, fontWeights, lineHeight, shadows, spacing } from "@/lib/theme";
 import { spliceAnnotations, spliceClozeSpans } from "@/lib/text-offset";
@@ -96,24 +100,61 @@ function ExtractedImage({ path }: { path: string }) {
   );
 }
 
+/** Cuts text segments further wherever a source passage starts or ends,
+ * marking the pieces inside one -- quiz sources paint over highlights. */
+function splitBySources<T extends { text: string }>(
+  segments: T[],
+  sources: { start: number; end: number }[],
+): (T & { source: boolean })[] {
+  const out: (T & { source: boolean })[] = [];
+  let at = 0;
+  for (const segment of segments) {
+    const start = at;
+    const end = at + segment.text.length;
+    at = end;
+    const cuts = new Set([start, end]);
+    for (const source of sources) {
+      if (source.start > start && source.start < end) cuts.add(source.start);
+      if (source.end > start && source.end < end) cuts.add(source.end);
+    }
+    const points = [...cuts].sort((a, b) => a - b);
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const from = points[i]!;
+      const to = points[i + 1]!;
+      out.push({
+        ...segment,
+        text: segment.text.slice(from - start, to - start),
+        source: sources.some((source) => from >= source.start && to <= source.end),
+      });
+    }
+  }
+  return out;
+}
+
 function AnnotatedParagraph({
   text,
   blockIndex,
   annotations,
+  sources = [],
   onLongPress,
   onOpenNote,
+  onLayoutY,
 }: {
   text: string;
   blockIndex: number;
   annotations: Annotation[];
+  /** Quiz-source passages in this paragraph ("See in lesson"). */
+  sources?: { start: number; end: number }[];
   onLongPress: () => void;
   onOpenNote: (note: Annotation) => void;
+  /** Where the paragraph sits in the scroll content, for jumping to it. */
+  onLayoutY?: (y: number) => void;
 }) {
   const styles = useStyles();
   const colors = useThemeColors();
   const body = useScaledBody();
   const blockAnnotations = annotations.filter((a) => a.block_index === blockIndex);
-  const segments = spliceAnnotations(text, blockAnnotations);
+  const segments = splitBySources(spliceAnnotations(text, blockAnnotations), sources);
   // RN's Text can only nest more Text as inline children — a note glyph
   // can't be placed inline mid-paragraph the way web does with a <span>, so
   // every margin note (block-level or range-anchored) surfaces as a badge
@@ -121,11 +162,15 @@ function AnnotatedParagraph({
   const notes = blockAnnotations.filter((a) => a.type === "margin_note");
 
   return (
-    <View>
+    <View onLayout={(event) => onLayoutY?.(event.nativeEvent.layout.y)}>
       <Pressable testID={`paragraph-${blockIndex}`} onLongPress={onLongPress}>
         <Text style={[styles.paragraph, body]}>
           {segments.map((segment, index) =>
-            segment.annotation?.type === "highlight" ? (
+            segment.source ? (
+              <Text key={index} testID="quiz-source" style={styles.quizSource}>
+                {segment.text}
+              </Text>
+            ) : segment.annotation?.type === "highlight" ? (
               <Text
                 key={index}
                 style={{ backgroundColor: highlightMarkColor(colors, segment.annotation.color) }}
@@ -319,7 +364,13 @@ function SelectableParagraph({
   );
 }
 
-function QuizzesTab({ documentId }: { documentId: string }) {
+function QuizzesTab({
+  documentId,
+  onSeeInLesson,
+}: {
+  documentId: string;
+  onSeeInLesson: SeeInLesson;
+}) {
   const styles = useStyles();
   // Scoped by questions.document_id — a question's provenance, and the only
   // link between a lesson and a question. Lessons carry no tags of their
@@ -329,6 +380,7 @@ function QuizzesTab({ documentId }: { documentId: string }) {
       <QuestionBankList
         filter={{ documentIds: [documentId] }}
         emptyMessage="No questions for this lesson yet."
+        onSeeInLesson={onSeeInLesson}
       />
       <Pressable onPress={() => router.push("/exams")}>
         <Text style={styles.tabLink}>Practise in an exam →</Text>
@@ -1242,6 +1294,17 @@ export default function LectureScreen() {
   // The lesson title stays on screen: once the page's h1 scrolls under the
   // top notch, a compact title line appears inside the notch instead.
   const [titleBottom, setTitleBottom] = useState<number | null>(null);
+  // "See in lesson" (design.md §12): the question it came from, its
+  // passages, and where the Quizzes tab was scrolled to, for the way back.
+  const [seeInLesson, setSeeInLesson] = useState<{
+    questionId: string;
+    quotes: string[];
+    returnY: number;
+  } | null>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const scrollY = useRef(0);
+  const pendingSourceBlock = useRef<number | null>(null);
+  const { height: windowHeight } = useWindowDimensions();
   const [titleHidden, setTitleHidden] = useState(false);
 
   const themeMutation = useMutation({
@@ -1370,6 +1433,39 @@ export default function LectureScreen() {
     );
   }
 
+  const blocks = version?.status === "ready" ? (version.extracted_content?.blocks ?? []) : [];
+  const sourcesByBlock = new Map<number, { start: number; end: number }[]>();
+  for (const quote of seeInLesson?.quotes ?? []) {
+    blocks.forEach((block, index) => {
+      const found = block.type === "paragraph" ? findQuote(block.text ?? "", quote) : null;
+      if (found) sourcesByBlock.set(index, [...(sourcesByBlock.get(index) ?? []), found]);
+    });
+  }
+
+  function showSources(questionId: string, quotes: string[]) {
+    const first = blocks.findIndex(
+      (block) => block.type === "paragraph" && quotes.some((q) => findQuote(block.text ?? "", q)),
+    );
+    // react-native-pdf exposes no text, so the passage is shown in the text
+    // view only.
+    if (first < 0) {
+      Alert.alert("See in lesson", "That passage isn't in this lesson's text any more.");
+      return;
+    }
+    setSeeInLesson({ questionId, quotes, returnY: scrollY.current });
+    pendingSourceBlock.current = first;
+    setActiveTool(null);
+    setLessonViewMode("text");
+    setActiveTab("lesson");
+  }
+
+  function backToQuizzes() {
+    const returnY = seeInLesson?.returnY ?? 0;
+    setSeeInLesson(null);
+    setActiveTab("quizzes");
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: returnY, animated: false }));
+  }
+
   const subChapter = data.sub_chapter;
   const tabLabel = TABS.find((tab) => tab.key === activeTab)!.label;
   const textTools = activeTab === "lesson" && lessonViewMode === "text";
@@ -1472,7 +1568,13 @@ export default function LectureScreen() {
               hints={review.hints}
             />
           )}
-          {activeTab === "quizzes" && <QuizzesTab documentId={id} />}
+          {/* Kept mounted (hidden) during a "See in lesson" visit, so the
+              way back finds the question with its answer still shown. */}
+          {(activeTab === "quizzes" || seeInLesson) && (
+            <View style={activeTab !== "quizzes" && styles.hidden}>
+              <QuizzesTab documentId={id} onSeeInLesson={showSources} />
+            </View>
+          )}
           {activeTab === "flashcards" && <FlashcardsTab documentId={id} />}
 
           {activeTab === "lesson" && lessonViewMode === "pdf" && readyLecturePdf && (
@@ -1523,8 +1625,15 @@ export default function LectureScreen() {
                       text={block.text ?? ""}
                       blockIndex={index}
                       annotations={annotations}
+                      sources={sourcesByBlock.get(index)}
                       onLongPress={() => setActionMenuBlockIndex(index)}
                       onOpenNote={setViewingNote}
+                      onLayoutY={(y) => {
+                        // The first passage, a third of the way down.
+                        if (pendingSourceBlock.current !== index) return;
+                        pendingSourceBlock.current = null;
+                        scrollRef.current?.scrollTo({ y: Math.max(0, y - windowHeight / 3) });
+                      }}
                     />
                   );
                 })}
@@ -1539,6 +1648,7 @@ export default function LectureScreen() {
             onChange={(key) => {
               setActiveTab(key);
               setActiveTool(null);
+              setSeeInLesson(null);
             }}
             label="Lesson sections"
             header={
@@ -1553,6 +1663,12 @@ export default function LectureScreen() {
             }
           />
         </View>
+
+        {seeInLesson && activeTab === "lesson" && (
+          <Pressable style={styles.backBar} onPress={backToQuizzes} accessibilityRole="button">
+            <Text style={styles.backBarText}>← Back to quizzes</Text>
+          </Pressable>
+        )}
 
         <ToolNotch
           activeTool={activeTool}
@@ -1728,6 +1844,29 @@ export default function LectureScreen() {
 }
 
 const useStyles = makeStyles((colors) => ({
+  hidden: {
+    display: "none",
+  },
+  quizSource: {
+    backgroundColor: pageColors.quizSourceFillText,
+    textDecorationLine: "underline",
+    textDecorationColor: pageColors.quizSourceLine,
+  },
+  backBar: {
+    position: "absolute",
+    top: 72,
+    alignSelf: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.foreground,
+    ...shadows.notch,
+  },
+  backBarText: {
+    fontSize: 14,
+    fontWeight: fontWeights.bold,
+    color: colors.background,
+  },
   lessonHeader: {
     paddingTop: 30,
   },

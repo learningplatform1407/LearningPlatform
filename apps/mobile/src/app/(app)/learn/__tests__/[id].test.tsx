@@ -1346,3 +1346,67 @@ test("an official card offers Retire to an admin, never Edit", async () => {
   expect(await screen.findByText("Retire")).toBeTruthy();
   expect(screen.queryByText("Edit")).toBeNull();
 });
+
+test("See in lesson paints a checked question's source and the back pill returns to Quizzes", async () => {
+  mockGetDocument.mockResolvedValue(
+    readyDocumentWithParagraph("Nitrates cause venodilation. This lowers preload."),
+  );
+  mockListQuestionBank.mockResolvedValue([
+    {
+      id: "q1",
+      prompt: "Which drug lowers preload?",
+      kind: "single",
+      difficulty: "medium",
+      points_possible: 4,
+      document_id: "d1",
+      options: [
+        { id: "a", text: "Nitrates" },
+        { id: "b", text: "Vasopressors" },
+      ],
+      tags: [],
+    },
+  ]);
+  mockAnswerBankQuestion.mockResolvedValue({
+    prompt: "Which drug lowers preload?",
+    kind: "single",
+    points_awarded: 4,
+    points_possible: 4,
+    outcome: "correct",
+    explanation: null,
+    source_quotes: ["This lowers preload."],
+    options: [
+      {
+        id: "a",
+        text: "Nitrates",
+        in_key: true,
+        selected: true,
+        classified_correctly: true,
+        rationale: null,
+      },
+      {
+        id: "b",
+        text: "Vasopressors",
+        in_key: false,
+        selected: false,
+        classified_correctly: true,
+        rationale: null,
+      },
+    ],
+  });
+
+  renderScreen();
+  await screen.findByText(/Nitrates cause venodilation/);
+  fireEvent.press(screen.getByText("Quizzes"));
+
+  fireEvent.press(await screen.findByText("Nitrates"));
+  expect(screen.queryByText("↗ See in lesson")).toBeNull();
+  fireEvent.press(screen.getByText("Check answer"));
+
+  fireEvent.press(await screen.findByText("↗ See in lesson"));
+  expect((await screen.findByTestId("quiz-source")).props.children).toBe("This lowers preload.");
+
+  fireEvent.press(screen.getByText("← Back to quizzes"));
+  // The same question, still showing its answer.
+  expect(await screen.findByText("correct — 4/4 points")).toBeTruthy();
+  expect(screen.queryByText("← Back to quizzes")).toBeNull();
+});
