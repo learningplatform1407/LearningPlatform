@@ -175,7 +175,7 @@ function ImportForm() {
           onChange={(event) => handleTextChange(event.target.value)}
           rows={24}
           placeholder={'{"allow_new_tags": false, "questions": [...]}'}
-          className="w-full resize-y rounded-md border border-border px-sm py-xs font-mono text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="field resize-y font-mono text-xs!"
         />
       </label>
 

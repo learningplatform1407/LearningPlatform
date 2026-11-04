@@ -26,18 +26,20 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
     <div className="flex flex-col md:flex-row">
       <nav
         aria-label="Settings sections"
-        className="border-b border-border p-lg md:w-48 md:shrink-0 md:border-r md:border-b-0"
+        className="border-b border-border px-md pt-[22px] pb-md md:sticky md:top-0 md:h-screen md:w-56 md:shrink-0 md:overflow-y-auto md:border-r md:border-b-0 md:pr-3 md:pl-3.5"
       >
-        <ul className="flex flex-col gap-xs">
+        <h2 className="label-caps mb-3 ml-1.5">Settings</h2>
+        <ul className="flex flex-wrap gap-0.5 md:flex-col md:flex-nowrap">
           {SECTIONS.map((section) => {
             const active = pathname === section.href;
             return (
               <li key={section.href}>
                 <Link
                   href={section.href}
-                  className={`block rounded-md px-sm py-xs text-sm font-medium ${
+                  aria-current={active ? "page" : undefined}
+                  className={`block rounded-sm px-2 py-1.5 text-toc leading-[1.3] font-semibold ${
                     active
-                      ? "bg-primary/10 text-primary"
+                      ? "bg-muted font-extrabold text-foreground"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
                 >

@@ -300,6 +300,20 @@
   color: var(--muted-foreground);
 }
 
+/* Drawers and panels slide over the page (design.md §6-7). Entry only: they
+   unmount on close, so there is nothing to animate out. */
+@keyframes drawer-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes drawer-in-right {
+  from {
+    transform: translateX(100%);
+  }
+}
+
 /* Book pages (and everything drawn on them) are inverted as one unit in dark
    mode rather than recoloured -- the PDF is an image of a printed page. */
 .book-page {

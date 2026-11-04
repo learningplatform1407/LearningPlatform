@@ -147,7 +147,7 @@ export function UncategorizedLessonsPage({ showAdminTools }: { showAdminTools: b
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 required
-                className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="field"
               />
             </label>
             <label className="flex flex-col gap-xs text-sm text-foreground">
@@ -472,7 +472,7 @@ function LessonList({
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               required
-              className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="field"
             />
           </label>
           <label className="flex flex-col gap-xs text-sm text-foreground">
@@ -658,7 +658,7 @@ function ChapterRow({
                   value={newSubChapterTitle}
                   onChange={(event) => setNewSubChapterTitle(event.target.value)}
                   required
-                  className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="field"
                 />
               </label>
               {createError && (
@@ -785,7 +785,7 @@ export function BookChaptersPage({
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               required
-              className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="field"
             />
           </label>
           {createError && (

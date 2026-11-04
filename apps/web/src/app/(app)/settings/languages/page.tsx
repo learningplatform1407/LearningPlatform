@@ -65,7 +65,7 @@ export default function LanguageSettingsPage() {
           <select
             value={language}
             onChange={(event) => setLanguage(event.target.value)}
-            className="w-fit rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="field w-fit!"
           >
             {LANGUAGES.map((option) => (
               <option key={option.value} value={option.value}>

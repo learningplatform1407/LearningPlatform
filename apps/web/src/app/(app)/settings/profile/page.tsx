@@ -155,7 +155,7 @@ export default function ProfileSettingsPage() {
             type="text"
             value={displayName}
             onChange={(event) => setDisplayName(event.target.value)}
-            className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="field"
           />
         </label>
         <label className="flex flex-col gap-xs text-sm text-foreground">
@@ -164,7 +164,7 @@ export default function ProfileSettingsPage() {
             type="text"
             value={university}
             onChange={(event) => setUniversity(event.target.value)}
-            className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="field"
           />
         </label>
         {saveMutation.isError && (

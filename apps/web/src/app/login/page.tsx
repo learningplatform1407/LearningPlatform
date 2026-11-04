@@ -16,29 +16,23 @@ export default function LoginPage() {
 
   return (
     <AuthLayout>
-      <h1 className="text-2xl font-semibold text-foreground">Log in</h1>
+      <h1 className="text-[26px] leading-[1.15] font-extrabold text-foreground">Log in</h1>
       <Suspense fallback={null}>
         <PasswordChangedNotice />
       </Suspense>
       <form action={formAction} className="mt-lg flex flex-col gap-md">
-        <label className="flex flex-col gap-xs text-sm text-foreground">
+        <label className="flex flex-col gap-xs text-sm font-semibold text-foreground">
           Email
-          <input
-            type="email"
-            name="email"
-            required
-            autoComplete="email"
-            className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
+          <input type="email" name="email" required autoComplete="email" className="field" />
         </label>
-        <label className="flex flex-col gap-xs text-sm text-foreground">
+        <label className="flex flex-col gap-xs text-sm font-semibold text-foreground">
           Password
           <input
             type="password"
             name="password"
             required
             autoComplete="current-password"
-            className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="field"
           />
         </label>
         {state.error && (

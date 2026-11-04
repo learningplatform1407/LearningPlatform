@@ -169,7 +169,7 @@ export function LibraryPageContent({
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               required
-              className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="field"
             />
           </label>
           {createError && (

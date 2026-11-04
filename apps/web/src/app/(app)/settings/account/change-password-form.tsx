@@ -8,8 +8,7 @@ import { changePassword, type ChangePasswordState } from "./actions";
 
 const initialState: ChangePasswordState = { error: null };
 
-const inputClass =
-  "rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
+const inputClass = "rounded-md border border-border px-sm py-xs text-base focus:border-primary";
 
 export function ChangePasswordForm() {
   const [state, formAction, pending] = useActionState(changePassword, initialState);

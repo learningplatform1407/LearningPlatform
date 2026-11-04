@@ -70,7 +70,7 @@ export function DailyQuestionRail({
           type="button"
           aria-label="Previous month"
           onClick={() => setMonth(shiftMonth(month, -1))}
-          className="rounded-md px-sm py-xs text-sm text-muted-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="rounded-md px-sm py-xs text-sm text-muted-foreground hover:bg-muted"
         >
           <span aria-hidden="true">«</span>
         </button>
@@ -82,7 +82,7 @@ export function DailyQuestionRail({
           // for a learner, so paging forward would only show an empty grid.
           disabled={month >= currentMonth}
           onClick={() => setMonth(shiftMonth(month, 1))}
-          className="rounded-md px-sm py-xs text-sm text-muted-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-40"
+          className="rounded-md px-sm py-xs text-sm text-muted-foreground hover:bg-muted disabled:opacity-40"
         >
           <span aria-hidden="true">»</span>
         </button>
@@ -129,7 +129,7 @@ export function DailyQuestionRail({
               type="button"
               aria-label={dayLabel(cell.date, row, cell.isToday)}
               onClick={() => onOpenDay(cell.date)}
-              className={`aspect-square rounded-full py-xs text-center text-xs font-medium hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/30 ${
+              className={`aspect-square rounded-full py-xs text-center text-xs font-medium hover:bg-muted ${
                 cell.isToday
                   ? "bg-primary font-semibold text-primary-foreground hover:bg-primary/90"
                   : (mark?.className ?? "text-foreground")

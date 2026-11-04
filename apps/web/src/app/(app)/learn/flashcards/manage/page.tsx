@@ -193,7 +193,7 @@ function ImportForm() {
           placeholder={
             '{"flashcards": [{"external_id": "fc-1", "document_id": "...", "front_text": "...", "back_text": "..."}]}'
           }
-          className="w-full resize-y rounded-md border border-border px-sm py-xs font-mono text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="field resize-y font-mono text-xs!"
         />
       </label>
 

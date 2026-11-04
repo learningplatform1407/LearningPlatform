@@ -232,7 +232,7 @@ function TagPicker({
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search tags..."
-                className="w-full rounded-md border border-border px-sm py-xs text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="field text-sm!"
               />
             </div>
             <div className="flex max-h-64 flex-col gap-xs overflow-y-auto p-sm">
