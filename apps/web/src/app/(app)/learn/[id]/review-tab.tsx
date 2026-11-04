@@ -168,7 +168,7 @@ export function ReviewTab({
           <Fragment key={i}>
             {gap.lead}
             <span
-              className={`${CLOZE_BASE} border-b-2 border-cloze bg-cloze-bg text-[0.88em] font-semibold whitespace-nowrap text-cloze ${
+              className={`${CLOZE_BASE} mx-[3px] border-b-2 border-cloze bg-cloze-bg text-[0.88em] font-semibold whitespace-nowrap text-cloze ${
                 isCurrent ? "outline-2 outline-offset-2 outline-cloze" : ""
               }`}
             >
