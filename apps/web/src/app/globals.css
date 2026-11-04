@@ -263,6 +263,43 @@
   }
 }
 
+/* Text inputs, selects and textareas: the design's chat input (15px, radius
+   10, rule border, page background). One utility instead of the same eight
+   classes repeated on every form. */
+@utility field {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.4;
+  padding: 9px 12px;
+
+  &::placeholder {
+    color: var(--muted-foreground);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 0;
+    border-color: var(--accent);
+  }
+  &:disabled {
+    opacity: 0.5;
+  }
+}
+
+/* Small uppercase label above a group (the design's TOC header / kicker). */
+@utility label-caps {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
 /* Book pages (and everything drawn on them) are inverted as one unit in dark
    mode rather than recoloured -- the PDF is an image of a printed page. */
 .book-page {

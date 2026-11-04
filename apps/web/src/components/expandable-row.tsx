@@ -27,20 +27,25 @@ export function ExpandableRow({
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   return (
-    <li className="rounded-md border border-border">
-      <div className="flex w-full items-center gap-sm px-md py-sm">
+    <li className="border-t border-border first:border-t-0">
+      <div className="flex w-full items-center gap-sm py-2.5">
         <button
           type="button"
           onClick={() => setExpanded((open) => !open)}
           aria-expanded={expanded}
-          className="flex flex-1 items-center justify-between gap-sm text-left hover:underline"
+          className="flex flex-1 items-center gap-sm rounded-sm text-left"
         >
-          <span className="text-sm font-medium text-foreground">{title}</span>
-          <span className="text-xs text-muted-foreground">{expanded ? "▲" : "▼"}</span>
+          <span
+            aria-hidden="true"
+            className={`text-lg leading-none font-semibold text-muted-foreground transition-transform ${expanded ? "rotate-90" : ""}`}
+          >
+            ›
+          </span>
+          <span className="flex-1 text-toc font-bold text-foreground">{title}</span>
         </button>
         {badge}
       </div>
-      {expanded && <div className="border-t border-border px-md py-md">{children}</div>}
+      {expanded && <div className="pb-md pl-lg">{children}</div>}
     </li>
   );
 }
