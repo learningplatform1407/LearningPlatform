@@ -20,3 +20,6 @@ apps/mobile/assets/
 # Test/build artifacts.
 apps/web/test-results/
 apps/web/playwright-report/
+
+# Design spec and demo, handed over as reference -- not reformatted by tooling.
+docs/design/

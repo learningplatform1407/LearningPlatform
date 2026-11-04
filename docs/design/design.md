@@ -29,68 +29,47 @@ Define these as CSS custom properties on `:root`. Map them into Tailwind (or the
 
 ```css
 :root {
-  --bg: #f7f6f2; /* page + notch background */
-  --paper: #ffffff; /* cards, Anki grade buttons */
-  --ink: #1d1f23; /* text, filled buttons */
-  --muted: #6c6f76; /* secondary text, unselected tabs */
-  --rule: #dedbd2; /* 1px lines and borders */
-  --soft: rgba(110, 110, 120, 0.13); /* active pill, pressed/hover fill, AI bubble */
-  --accent: #2f6f9f; /* links, Focus gaps, notes */
-  --red: #c8372d; /* favourite heart */
-  --again: #c8372d;
-  --hard: #c27a10;
-  --good: #2f8a4f;
-  --cloze: #2f6f9f;
-  --cloze-bg: rgba(47, 111, 159, 0.1);
+  --bg: #f7f6f2;        /* page + notch background */
+  --paper: #ffffff;     /* cards, Anki grade buttons */
+  --ink: #1d1f23;       /* text, filled buttons */
+  --muted: #6c6f76;     /* secondary text, unselected tabs */
+  --rule: #dedbd2;      /* 1px lines and borders */
+  --soft: rgba(110,110,120,.13); /* active pill, pressed/hover fill, AI bubble */
+  --accent: #2f6f9f;    /* links, Focus gaps, notes */
+  --red: #c8372d;       /* favourite heart */
+  --again: #c8372d; --hard: #c27a10; --good: #2f8a4f;
+  --cloze: #2f6f9f; --cloze-bg: rgba(47,111,159,.10);
   /* highlighter fills: yellow, blue, purple, red, green */
-  --h0: rgba(255, 212, 0, 0.45);
-  --h1: rgba(80, 170, 255, 0.35);
-  --h2: rgba(170, 110, 255, 0.33);
-  --h3: rgba(255, 90, 90, 0.33);
-  --h4: rgba(80, 200, 110, 0.35);
+  --h0: rgba(255,212,0,.45); --h1: rgba(80,170,255,.35); --h2: rgba(170,110,255,.33);
+  --h3: rgba(255,90,90,.33); --h4: rgba(80,200,110,.35);
   --sans: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --shadow: 0 8px 22px rgba(0, 0, 0, 0.08);
-  --chatw: 380px; /* right panel width, user-resizable */
+  --shadow: 0 8px 22px rgba(0,0,0,.08);
+  --chatw: 380px;       /* right panel width, user-resizable */
 }
 ```
 
 Dark values (see section 13 for how dark mode is applied):
 
 ```css
---bg: #17181b;
---paper: #f4f2ec;
---ink: #e9e8e4;
---muted: #a2a39f;
---rule: #34363b;
---soft: rgba(200, 200, 210, 0.13);
---accent: #7db3db;
---gold: #e3b23c;
---hot: #ef7a52;
---red: #e0574c;
---again: #e0574c;
---hard: #e0a03a;
---good: #5cbf7d;
---cloze: #86bfe6;
---cloze-bg: rgba(134, 191, 230, 0.14);
---h0: rgba(255, 212, 0, 0.32);
---h1: rgba(80, 170, 255, 0.32);
---h2: rgba(170, 110, 255, 0.34);
---h3: rgba(255, 90, 90, 0.32);
---h4: rgba(80, 200, 110, 0.3);
---shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
+--bg: #17181b; --paper: #f4f2ec; --ink: #e9e8e4; --muted: #a2a39f; --rule: #34363b;
+--soft: rgba(200,200,210,.13); --accent: #7db3db; --gold: #e3b23c; --hot: #ef7a52; --red: #e0574c;
+--again: #e0574c; --hard: #e0a03a; --good: #5cbf7d; --cloze: #86bfe6; --cloze-bg: rgba(134,191,230,.14);
+--h0: rgba(255,212,0,.32); --h1: rgba(80,170,255,.32); --h2: rgba(170,110,255,.34);
+--h3: rgba(255,90,90,.32); --h4: rgba(80,200,110,.30);
+--shadow: 0 8px 22px rgba(0,0,0,.4);
 ```
 
 Fixed, non-themed colours (these sit on the lesson page itself):
 
-| Use                                                     | Value                                                                                  |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Toolbar swatch chips (yellow, blue, purple, red, green) | `#f5c400`, `#4ea8ff`, `#9b6bff`, `#f05a5a`, `#3cb46e`                                  |
-| Pen ink, same colour order                              | `#d9a400`, `#1e7fe0`, `#7d4fe0`, `#d93636`, `#2f9e55`                                  |
-| Quiz-source highlight on PDF                            | fill `rgba(255,140,0,.22)`, `box-shadow: inset 0 -2px #ff7a00` (text mode: fill `.24`) |
-| Note anchor underline on PDF                            | `border-bottom: 2px dashed #2f6f9f` (text mode uses `var(--accent)`)                   |
-| Note selection in progress                              | `rgba(47,111,159,.16)`                                                                 |
-| Note bubble                                             | `#2f6f9f` with a white icon                                                            |
-| "Jump to heading" flash                                 | `rgba(255,200,0,.5)`                                                                   |
+| Use | Value |
+|---|---|
+| Toolbar swatch chips (yellow, blue, purple, red, green) | `#f5c400`, `#4ea8ff`, `#9b6bff`, `#f05a5a`, `#3cb46e` |
+| Pen ink, same colour order | `#d9a400`, `#1e7fe0`, `#7d4fe0`, `#d93636`, `#2f9e55` |
+| Quiz-source highlight on PDF | fill `rgba(255,140,0,.22)`, `box-shadow: inset 0 -2px #ff7a00` (text mode: fill `.24`) |
+| Note anchor underline on PDF | `border-bottom: 2px dashed #2f6f9f` (text mode uses `var(--accent)`) |
+| Note selection in progress | `rgba(47,111,159,.16)` |
+| Note bubble | `#2f6f9f` with a white icon |
+| "Jump to heading" flash | `rgba(255,200,0,.5)` |
 
 ## 2. Typography
 
@@ -127,9 +106,9 @@ Fixed, non-themed colours (these sit on the lesson page itself):
   1. TOC toggle, as a `›`/`‹` glyph at 22px, weight 600
   2. Five colour swatches, each a 13×20 chip with radius 4px
   3. A separator (22×1px, `--rule`, margin `3px 0`)
-  4. Pen (only on pdf mode)
-  5. Eraser
-  6. "Aa" option for font
+  6. Pen (only on pdf mode)
+  7. Eraser
+  8. "Aa" option for font
 - Icons are 24-unit line icons, 18px, stroke 1.9, round caps and joins (Lucide-style). Match the demo's SVGs.
 - Tools only work on the Lesson tab. The pen is disabled outside PDF mode, with a tooltip saying so.
 - With a swatch active, clicking the same swatch turns the marker off. With the pen active, a swatch changes the pen colour.
