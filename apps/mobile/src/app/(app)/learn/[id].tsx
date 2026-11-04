@@ -49,16 +49,14 @@ import { supabase } from "@/lib/supabase";
 import { useTabSwipe } from "@/lib/use-tab-swipe";
 import { fontSizes, fontWeights, lineHeight, shadows, spacing } from "@/lib/theme";
 import { spliceAnnotations, spliceClozeSpans } from "@/lib/text-offset";
-import { makeStyles, useTheme, useThemeColors, type ThemeColors } from "@/lib/theme-context";
+import { makeStyles, useThemeColors, type ThemeColors } from "@/lib/theme-context";
 import {
   ArrowLeftIcon,
   BulbIcon,
   BulbOffIcon,
   CardsIcon,
   EraserIcon,
-  MoonIcon,
   SparkleIcon,
-  SunIcon,
 } from "@/lib/ui/icons";
 import { NotchTabs } from "@/lib/ui/notch-tabs";
 import { Dot, SegmentedSwitch } from "@/lib/ui/primitives";
@@ -205,8 +203,8 @@ function AnnotatedParagraph({
 }
 
 const VIEW_MODES = [
-  { value: "pdf", label: "PDF" },
   { value: "text", label: "Text" },
+  { value: "pdf", label: "PDF" },
 ] as const;
 
 const TABS = [
@@ -254,12 +252,15 @@ function ToolNotch({
   toolsEnabled,
   onContents,
   onExplain,
+  onTextScale,
 }: {
   activeTool: ActiveTool;
   onToolChange: (tool: ActiveTool) => void;
   toolsEnabled: boolean;
   onContents: () => void;
   onExplain: () => void;
+  /** Text size, on every tab: it sizes the Review text too. */
+  onTextScale: () => void;
 }) {
   const styles = useStyles();
   const colors = useThemeColors();
@@ -322,6 +323,15 @@ function ToolNotch({
           </Pressable>
         </>
       )}
+      <View style={styles.toolSeparator} />
+      <Pressable
+        onPress={onTextScale}
+        style={styles.tool}
+        accessibilityRole="button"
+        accessibilityLabel="Text size"
+      >
+        <Text style={styles.toolAa}>Aa</Text>
+      </Pressable>
     </View>
   );
 }
@@ -1402,7 +1412,6 @@ export default function LectureScreen() {
   // lesson has a *ready* lecture_pdf attached (see `readyLecturePdf` below).
   const [lessonViewMode, setLessonViewMode] = useState<"text" | "pdf">("text");
   const review = useClozeReview(id, activeTab === "review");
-  const { scheme } = useTheme();
   const [textScale, setTextScale] = useState<(typeof TEXT_SCALES)[number]>(100);
   // The lesson title stays on screen: once the page's h1 scrolls under the
   // top notch, a compact title line appears inside the notch instead.
@@ -1419,11 +1428,6 @@ export default function LectureScreen() {
   const pendingSourceBlock = useRef<number | null>(null);
   const { height: windowHeight } = useWindowDimensions();
   const [titleHidden, setTitleHidden] = useState(false);
-
-  const themeMutation = useMutation({
-    mutationFn: (theme: "light" | "dark") => getApiClient().updateMe({ theme }),
-    onSuccess: (updated) => queryClient.setQueryData(["me"], updated),
-  });
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["documents", id],
@@ -1672,27 +1676,6 @@ export default function LectureScreen() {
             >
               <ArrowLeftIcon color={colors.foreground} />
             </Dot>
-            <Dot
-              label={`Text size, ${textScale}%`}
-              onPress={() =>
-                setTextScale(
-                  (current) =>
-                    TEXT_SCALES[(TEXT_SCALES.indexOf(current) + 1) % TEXT_SCALES.length]!,
-                )
-              }
-            >
-              <Text style={styles.dotText}>Aa</Text>
-            </Dot>
-            <Dot
-              label={scheme === "dark" ? "Light theme" : "Dark theme"}
-              onPress={() => themeMutation.mutate(scheme === "dark" ? "light" : "dark")}
-            >
-              {scheme === "dark" ? (
-                <SunIcon color={colors.foreground} />
-              ) : (
-                <MoonIcon color={colors.foreground} />
-              )}
-            </Dot>
             {activeTab === "lesson" && readyLecturePdf && (
               <SegmentedSwitch
                 label="Lesson view mode"
@@ -1827,6 +1810,11 @@ export default function LectureScreen() {
           toolsEnabled={textTools && version?.status === "ready"}
           onContents={() => setTocOpen(true)}
           onExplain={() => setExplainComingSoonVisible(true)}
+          onTextScale={() =>
+            setTextScale(
+              (current) => TEXT_SCALES[(TEXT_SCALES.indexOf(current) + 1) % TEXT_SCALES.length]!,
+            )
+          }
         />
 
         <Pressable
@@ -2008,6 +1996,11 @@ export default function LectureScreen() {
 }
 
 const useStyles = makeStyles((colors) => ({
+  toolAa: {
+    fontSize: 13,
+    fontWeight: fontWeights.extrabold,
+    color: colors.foreground,
+  },
   flashcardHint: {
     fontSize: fontSizes.sm,
     fontWeight: fontWeights.semibold,
@@ -2126,8 +2119,9 @@ const useStyles = makeStyles((colors) => ({
   notchTitle: {
     paddingHorizontal: 8,
     paddingBottom: 4,
-    fontSize: 13,
-    fontWeight: fontWeights.bold,
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: fontWeights.extrabold,
     color: colors.foreground,
   },
   notchKicker: {

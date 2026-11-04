@@ -1635,6 +1635,39 @@ describe("LecturePage", () => {
     expect(screen.queryByDisplayValue("Another lesson's")).not.toBeInTheDocument();
   });
 
+  test("All notes lists the whole notebook in the panel and opens any note there", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listNotebookEntries.mockResolvedValue([
+      entry({ id: "n1", content: "First note" }),
+      entry({ id: "other", content: "Another lesson's", source_document_id: "d9" }),
+    ]);
+    updateNotebookEntry.mockResolvedValue(
+      entry({ id: "other", content: "Another lesson's, edited" }),
+    );
+
+    renderPage();
+    await screen.findByText(para("Hello world"));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Notebook and AI chat" }));
+    await screen.findByText("Note 1 of 1");
+
+    await user.click(screen.getByRole("button", { name: "All notes" }));
+    const list = screen.getByRole("navigation", { name: "All notes" });
+    expect(within(list).getByRole("button", { name: "First note" })).toBeInTheDocument();
+    await user.click(within(list).getByRole("button", { name: "Another lesson's" }));
+
+    // Opened in the panel, not on the Notebook page, and editable there.
+    expect(screen.getByText("From your notebook")).toBeInTheDocument();
+    const textarea = screen.getByRole("textbox", { name: "Note" });
+    expect(textarea).toHaveValue("Another lesson's");
+    await user.type(textarea, ", edited");
+    await user.click(screen.getByRole("button", { name: "‹ This lesson" }));
+    expect(updateNotebookEntry).toHaveBeenCalledWith("other", {
+      content: "Another lesson's, edited",
+    });
+    expect(screen.getByText("Note 1 of 1")).toBeInTheDocument();
+  });
+
   test("+ starts a note tagged with this lesson; an empty one is never created", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
     createNotebookEntry.mockResolvedValue(entry({ id: "n2", content: "New note" }));

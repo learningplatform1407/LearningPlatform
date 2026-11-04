@@ -3,13 +3,12 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { ArrowLeftIcon, MinusIcon, MoonIcon, PlusIcon, SunIcon } from "@/components/icons";
+import { ArrowLeftIcon, MinusIcon, PlusIcon } from "@/components/icons";
 import { NotchTabs } from "@/components/notch-tabs";
 import { SegmentedSwitch } from "@/components/segmented-switch";
-import { useTheme } from "@/lib/theme";
 import { useMediaQuery, WIDE_QUERY } from "@/lib/use-media-query";
 
-import type { LessonTab, LessonViewMode, TextScale } from "./lesson-tools";
+import type { LessonTab, LessonViewMode } from "./lesson-tools";
 
 export const LESSON_TABS = [
   { key: "lesson", label: "Lesson" },
@@ -19,8 +18,8 @@ export const LESSON_TABS = [
 ] as const satisfies readonly { key: LessonTab; label: string }[];
 
 const VIEW_MODES = [
-  { value: "pdf", label: "PDF" },
   { value: "text", label: "Text" },
+  { value: "pdf", label: "PDF" },
 ] as const;
 
 const DOT =
@@ -39,8 +38,6 @@ export function LessonTopNotch({
   context,
   showTitle,
   backHref,
-  textScale,
-  onTextScale,
   viewMode,
   onViewMode,
   showViewMode,
@@ -53,8 +50,6 @@ export function LessonTopNotch({
   context: string | null;
   showTitle: boolean;
   backHref: string;
-  textScale: TextScale;
-  onTextScale: () => void;
   viewMode: LessonViewMode;
   onViewMode: (mode: LessonViewMode) => void;
   showViewMode: boolean;
@@ -65,7 +60,7 @@ export function LessonTopNotch({
   return (
     <header className="pointer-events-none sticky top-[env(safe-area-inset-top,0px)] z-50 flex items-start justify-center gap-2.5">
       <div className="flex flex-1 justify-end gap-2 pt-2.5">
-        {wide && <LeftDots backHref={backHref} textScale={textScale} onTextScale={onTextScale} />}
+        {wide && <BackDot href={backHref} />}
       </div>
 
       <NotchTabs
@@ -80,7 +75,7 @@ export function LessonTopNotch({
               showTitle ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
             }`}
           >
-            <p className="m-0 truncate overflow-hidden px-1 pt-0.5 text-center text-caption leading-[1.4] font-bold text-foreground">
+            <p className="m-0 truncate overflow-hidden px-1 pt-1 pb-0.5 text-center text-base leading-[1.35] font-extrabold text-foreground">
               {context && <span className="text-muted-foreground">{context} · </span>}
               {title}
             </p>
@@ -100,16 +95,12 @@ export function LessonTopNotch({
  * under the title instead (the design's `.mobile-dots`). */
 export function LessonMobileDots({
   backHref,
-  textScale,
-  onTextScale,
   viewMode,
   onViewMode,
   showViewMode,
   zoom,
 }: {
   backHref: string;
-  textScale: TextScale;
-  onTextScale: () => void;
   viewMode: LessonViewMode;
   onViewMode: (mode: LessonViewMode) => void;
   showViewMode: boolean;
@@ -119,52 +110,25 @@ export function LessonMobileDots({
   if (wide) return null;
   return (
     <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2">
-      <LeftDots backHref={backHref} textScale={textScale} onTextScale={onTextScale} />
+      <BackDot href={backHref} />
       {showViewMode && <ViewSwitch mode={viewMode} onChange={onViewMode} />}
       {zoom && <ZoomDots {...zoom} />}
     </div>
   );
 }
 
-function LeftDots({
-  backHref,
-  textScale,
-  onTextScale,
-}: {
-  backHref: string;
-  textScale: TextScale;
-  onTextScale: () => void;
-}) {
-  const { resolved, setPreference } = useTheme();
+/** Back to the lesson's place in the library. Text size lives in the tool
+ * notch, and the theme in the sidebar and Settings. */
+function BackDot({ href }: { href: string }) {
   return (
-    <div className="pointer-events-auto flex gap-2">
-      <Link
-        href={backHref}
-        aria-label="Back to the library"
-        title="Back to the library"
-        className={DOT}
-      >
-        <ArrowLeftIcon />
-      </Link>
-      <button
-        type="button"
-        aria-label="Text size"
-        title={`Text size: ${textScale}%`}
-        onClick={onTextScale}
-        className={DOT}
-      >
-        Aa
-      </button>
-      <button
-        type="button"
-        aria-label={resolved === "dark" ? "Light theme" : "Dark theme"}
-        title={resolved === "dark" ? "Light theme" : "Dark theme"}
-        onClick={() => setPreference(resolved === "dark" ? "light" : "dark", { persist: true })}
-        className={DOT}
-      >
-        {resolved === "dark" ? <SunIcon /> : <MoonIcon />}
-      </button>
-    </div>
+    <Link
+      href={href}
+      aria-label="Back to the library"
+      title="Back to the library"
+      className={`${DOT} pointer-events-auto`}
+    >
+      <ArrowLeftIcon />
+    </Link>
   );
 }
 

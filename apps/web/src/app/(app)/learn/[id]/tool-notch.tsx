@@ -12,6 +12,7 @@ import {
   type LessonTool,
   type LessonViewMode,
   type SwatchIndex,
+  type TextScale,
 } from "./lesson-tools";
 
 /**
@@ -31,6 +32,8 @@ export function ToolNotch({
   onSwatch,
   onTool,
   onUndo,
+  textScale,
+  onTextScale,
 }: {
   tool: LessonTool;
   viewMode: LessonViewMode;
@@ -41,6 +44,8 @@ export function ToolNotch({
   onSwatch: (color: SwatchIndex) => void;
   onTool: (kind: "pen" | "eraser" | "note") => void;
   onUndo: () => void;
+  textScale: TextScale;
+  onTextScale: () => void;
 }) {
   const toast = useToast();
 
@@ -141,6 +146,13 @@ export function ToolNotch({
           onClick={guard(canUndo, "Nothing to undo.", onUndo)}
         >
           <UndoIcon />
+        </ToolButton>
+
+        <span aria-hidden="true" className="my-[3px] h-px w-[22px] bg-border" />
+
+        {/* Text size works on every tab: it sizes the Review text too. */}
+        <ToolButton label="Text size" title={`Text size: ${textScale}%`} onClick={onTextScale}>
+          <span className="text-[13px] leading-none font-extrabold">Aa</span>
         </ToolButton>
       </div>
     </aside>

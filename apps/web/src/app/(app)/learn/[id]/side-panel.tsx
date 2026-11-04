@@ -11,7 +11,7 @@ import { PlusIcon, SparkleIcon, TrashIcon } from "@/components/icons";
 import { NotchTabs } from "@/components/notch-tabs";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
-import { DrawingEntryEditor, useNotebookEntries } from "../notebook/notebook-entries";
+import { DrawingEntryEditor, firstLine, useNotebookEntries } from "../notebook/notebook-entries";
 
 export type SidePanelTab = "notebook" | "chat";
 
@@ -189,8 +189,9 @@ const LINED_PAPER: React.CSSProperties = {
 
 /**
  * This lesson's notes, one at a time: notes anchored to a passage (made with
- * the note tool) and notebook entries written from this lesson. The full
- * notebook, across lessons, stays on its own page.
+ * the note tool) and notebook entries written from this lesson. "All notes"
+ * lists the whole notebook inside the panel, so any note -- this lesson's or
+ * another's -- opens here without leaving the lesson.
  */
 function NotebookPane({
   documentId,
@@ -215,6 +216,10 @@ function NotebookPane({
   const entries = useNotebookEntries();
   const [currentKey, setCurrentKey] = useState<string | null>(focusNoteId);
   const [hasDraft, setHasDraft] = useState(false);
+  // The "All notes" list, and a note from elsewhere in the notebook opened
+  // from it (it isn't one of this lesson's, so ‹ › don't step through it).
+  const [listing, setListing] = useState(false);
+  const [outsideId, setOutsideId] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Follow a note the page asks for (note tool, note bubble) -- adjusted
@@ -223,7 +228,11 @@ function NotebookPane({
   const [followed, setFollowed] = useState(focusNoteId);
   if (focusNoteId !== followed) {
     setFollowed(focusNoteId);
-    if (focusNoteId) setCurrentKey(focusNoteId);
+    if (focusNoteId) {
+      setCurrentKey(focusNoteId);
+      setListing(false);
+      setOutsideId(null);
+    }
   }
 
   const items: NoteItem[] = [
@@ -250,7 +259,25 @@ function NotebookPane({
     0,
     items.findIndex((item) => item.key === currentKey),
   );
-  const current = items.length > 0 ? items[Math.min(index, items.length - 1)] : undefined;
+  const outside = outsideId ? entries.data?.find((entry) => entry.id === outsideId) : undefined;
+  const current: NoteItem | undefined = outside
+    ? { key: outside.id, kind: "entry", createdAt: outside.created_at, entry: outside }
+    : items.length > 0
+      ? items[Math.min(index, items.length - 1)]
+      : undefined;
+  const otherEntries = (entries.data ?? []).filter(
+    (entry) => entry.source_document_id !== documentId,
+  );
+
+  function openFromList(key: string, inThisLesson: boolean) {
+    setListing(false);
+    if (inThisLesson) {
+      setOutsideId(null);
+      setCurrentKey(key);
+    } else {
+      setOutsideId(key);
+    }
+  }
 
   const updateEntry = useMutation({
     mutationFn: ({ id, content }: { id: string; content: string }) =>
@@ -280,7 +307,13 @@ function NotebookPane({
     if (next) setCurrentKey(next.key);
   }
 
+  function backToLesson() {
+    setOutsideId(null);
+  }
+
   function newNote() {
+    setListing(false);
+    setOutsideId(null);
     setHasDraft(true);
     setCurrentKey("draft");
     requestAnimationFrame(() => textareaRef.current?.focus());
@@ -291,6 +324,10 @@ function NotebookPane({
     if (current.kind === "anchored") onDeleteNote(current.annotation);
     if (current.kind === "entry") deleteEntry.mutate(current.entry.id);
     if (current.kind === "draft") setHasDraft(false);
+    if (outside) {
+      setOutsideId(null);
+      return;
+    }
     setCurrentKey(items[index - 1]?.key ?? items[index + 1]?.key ?? null);
   }
 
@@ -324,31 +361,84 @@ function NotebookPane({
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-1.5 px-[18px] pt-4 pb-1.5">
-        <NavButton label="Previous note" disabled={index <= 0} onClick={() => go(-1)}>
-          ‹
-        </NavButton>
-        <span className="flex-1 text-center text-sm font-extrabold">
-          {items.length === 0 ? "Notebook" : `Note ${index + 1} of ${items.length}`}
-        </span>
-        <NavButton label="Next note" disabled={index >= items.length - 1} onClick={() => go(1)}>
-          ›
-        </NavButton>
-        <NavButton label="Delete note" disabled={!current} onClick={remove}>
-          <TrashIcon size={17} />
-        </NavButton>
+        {listing ? (
+          <span className="flex-1 text-center text-sm font-extrabold">All notes</span>
+        ) : outside ? (
+          <>
+            <button
+              type="button"
+              onClick={backToLesson}
+              className="text-sm font-bold text-accent hover:underline"
+            >
+              ‹ This lesson
+            </button>
+            <span className="flex-1 text-center text-sm font-extrabold">From your notebook</span>
+          </>
+        ) : (
+          <>
+            <NavButton label="Previous note" disabled={index <= 0} onClick={() => go(-1)}>
+              ‹
+            </NavButton>
+            <span className="flex-1 text-center text-sm font-extrabold">
+              {items.length === 0 ? "Notebook" : `Note ${index + 1} of ${items.length}`}
+            </span>
+            <NavButton label="Next note" disabled={index >= items.length - 1} onClick={() => go(1)}>
+              ›
+            </NavButton>
+          </>
+        )}
+        {!listing && (
+          <NavButton label="Delete note" disabled={!current} onClick={remove}>
+            <TrashIcon size={17} />
+          </NavButton>
+        )}
       </div>
 
-      {!current && (
+      {listing && (
+        <nav aria-label="All notes" className="min-h-0 flex-1 overflow-y-auto px-[18px] pb-[80px]">
+          <NoteList
+            heading="This lesson"
+            rows={items
+              .filter((item) => item.kind !== "draft")
+              .map((item) => ({
+                key: item.key,
+                title: noteTitle(item, blocks),
+                current: !outside && item.key === current?.key,
+                onOpen: () => openFromList(item.key, true),
+              }))}
+            empty="No notes for this lesson yet."
+          />
+          <NoteList
+            heading="Other notes"
+            rows={otherEntries.map((entry) => ({
+              key: entry.id,
+              title:
+                entry.type === "drawing" ? "Drawing" : firstLine(entry.content ?? "") || "Untitled",
+              current: entry.id === outsideId,
+              onOpen: () => openFromList(entry.id, false),
+            }))}
+            empty="Nothing else in your notebook yet."
+          />
+          <Link
+            href="/learn/notebook"
+            className="mt-md inline-block text-sm font-bold text-accent hover:underline"
+          >
+            Open the full notebook →
+          </Link>
+        </nav>
+      )}
+
+      {!listing && !current && (
         <p className="px-[18px] pt-sm text-sm text-muted-foreground">
           No notes for this lesson yet. Drag over a passage with the note tool (W), or start one
           with +.
         </p>
       )}
 
-      {current && (
+      {!listing && current && (
         <>
           <p className="px-[18px] text-caption font-semibold text-muted-foreground">
-            <b className="text-foreground">{lessonTitle}</b> · {kindLabel}
+            <b className="text-foreground">{outside ? "Notebook" : lessonTitle}</b> · {kindLabel}
             {current.createdAt && <> · {formatWhen(current.createdAt)}</>}
           </p>
           {current.kind === "anchored" && quote && (
@@ -394,13 +484,65 @@ function NotebookPane({
       >
         <PlusIcon size={22} />
       </Dot>
-      <Link
-        href="/learn/notebook"
+      <button
+        type="button"
+        aria-pressed={listing}
+        onClick={() => setListing((open) => !open)}
         className="absolute right-[18px] bottom-[26px] text-sm font-bold text-accent hover:underline"
       >
-        All notes →
-      </Link>
+        {listing ? "Back to the note" : "All notes"}
+      </button>
     </div>
+  );
+}
+
+/** What a note is called in the list: its passage, its first line, or
+ * "Drawing". */
+function noteTitle(item: NoteItem, blocks: ExtractedContent["blocks"]): string {
+  if (item.kind === "anchored") {
+    return (
+      item.annotation.note_text?.trim() || quoteOf(blocks, item.annotation) || "Note on a passage"
+    );
+  }
+  if (item.kind === "entry") {
+    return item.entry.type === "drawing"
+      ? "Drawing"
+      : firstLine(item.entry.content ?? "") || "Untitled";
+  }
+  return "New note";
+}
+
+function NoteList({
+  heading,
+  rows,
+  empty,
+}: {
+  heading: string;
+  rows: { key: string; title: string; current: boolean; onOpen: () => void }[];
+  empty: string;
+}) {
+  return (
+    <section className="mt-sm">
+      <h3 className="label-caps mb-1.5">{heading}</h3>
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{empty}</p>
+      ) : (
+        <ul>
+          {rows.map((row) => (
+            <li key={row.key}>
+              <button
+                type="button"
+                onClick={row.onOpen}
+                aria-current={row.current || undefined}
+                className="block w-full truncate rounded-sm px-2 py-1.5 text-left text-toc font-semibold text-foreground hover:bg-muted aria-current:bg-muted aria-current:font-extrabold"
+              >
+                {row.title}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

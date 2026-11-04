@@ -469,8 +469,6 @@ export default function LecturePage() {
   const tabLabel = LESSON_TABS.find((t) => t.key === activeTab)!.label;
   const dotsProps = {
     backHref,
-    textScale,
-    onTextScale: cycleTextScale,
     viewMode: mode,
     onViewMode: changeViewMode,
     showViewMode: activeTab === "lesson" && readyLecturePdf !== null,
@@ -516,6 +514,8 @@ export default function LecturePage() {
         onSwatch={chooseSwatch}
         onTool={chooseTool}
         onUndo={() => void undo()}
+        textScale={textScale}
+        onTextScale={cycleTextScale}
       />
 
       <TocDrawer
