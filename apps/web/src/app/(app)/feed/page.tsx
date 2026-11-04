@@ -38,7 +38,7 @@ function LinkifiedBody({ body }: { body: string }) {
             href={segment.href}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary underline underline-offset-2"
+            className="text-accent underline underline-offset-2"
           >
             {segment.text}
           </a>

@@ -51,13 +51,13 @@ export default function LoginPage() {
         </Button>
       </form>
       <p className="mt-md text-sm text-muted-foreground">
-        <Link href="/forgot-password" className="text-primary hover:underline">
+        <Link href="/forgot-password" className="text-accent hover:underline">
           Forgot your password?
         </Link>
       </p>
       <p className="mt-xs text-sm text-muted-foreground">
         Don&apos;t have an account?{" "}
-        <Link href="/signup" className="text-primary hover:underline">
+        <Link href="/signup" className="text-accent hover:underline">
           Sign up
         </Link>
       </p>

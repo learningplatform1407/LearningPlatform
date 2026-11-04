@@ -24,7 +24,7 @@ export function ForgotPasswordForm({ expired }: { expired: boolean }) {
           can only be used once.
         </p>
         <p className="mt-lg text-sm text-muted-foreground">
-          <Link href="/login" className="text-primary hover:underline">
+          <Link href="/login" className="text-accent hover:underline">
             Back to log in
           </Link>
         </p>
@@ -67,7 +67,7 @@ export function ForgotPasswordForm({ expired }: { expired: boolean }) {
       </form>
       <p className="mt-md text-sm text-muted-foreground">
         Remembered it?{" "}
-        <Link href="/login" className="text-primary hover:underline">
+        <Link href="/login" className="text-accent hover:underline">
           Log in
         </Link>
       </p>

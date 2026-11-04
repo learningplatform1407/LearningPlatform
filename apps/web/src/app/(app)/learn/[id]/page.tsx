@@ -240,7 +240,7 @@ function QuizzesTab({ documentId }: { documentId: string }) {
         filter={{ documentIds: [documentId] }}
         emptyMessage="No questions for this lesson yet."
       />
-      <Link href="/exams" className="text-sm text-primary hover:underline">
+      <Link href="/exams" className="text-sm text-accent hover:underline">
         Practise in an exam →
       </Link>
     </div>
@@ -457,7 +457,7 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
           aria-pressed={!card.suspended}
           disabled={suspension.isPending}
           onClick={() => suspension.mutate()}
-          className="text-xs text-primary hover:underline"
+          className="text-xs text-accent hover:underline"
         >
           {card.suspended ? "Include in reviews" : "Exclude from reviews"}
         </button>
@@ -465,7 +465,7 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
           <button
             type="button"
             onClick={openEditor}
-            className="text-xs text-primary hover:underline"
+            className="text-xs text-accent hover:underline"
           >
             Edit
           </button>
@@ -1629,7 +1629,7 @@ export default function LecturePage() {
                 </span>
                 <button
                   type="button"
-                  className="text-xs font-medium text-primary hover:underline"
+                  className="text-xs font-medium text-accent hover:underline"
                   onClick={() => setShowExplainComingSoon(false)}
                 >
                   Got it

@@ -59,7 +59,7 @@ export default function SignupPage() {
       </form>
       <p className="mt-md text-sm text-muted-foreground">
         Already have an account?{" "}
-        <Link href="/login" className="text-primary hover:underline">
+        <Link href="/login" className="text-accent hover:underline">
           Log in
         </Link>
       </p>

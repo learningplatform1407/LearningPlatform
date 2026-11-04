@@ -3,33 +3,186 @@
 /*
  * Design tokens — mirrors packages/ui/src/tokens/*.ts. CSS can't import JS
  * values directly, so these are kept in sync by hand; globals.tokens.test.ts
- * asserts the two stay identical.
+ * asserts the two stay identical, for both themes.
  *
- * Line-heights are intentionally not overridden here — Tailwind's built-in
- * leading-tight/normal/relaxed utilities are close enough to our tokens'
- * intent (see packages/ui/src/tokens/typography.ts for the exact ratios).
+ * Colours are plain custom properties on :root, swapped per theme below, and
+ * `@theme inline` points Tailwind's colour utilities at them -- so every
+ * `bg-background` / `text-muted-foreground` in the app re-themes without the
+ * component knowing a theme exists.
+ *
+ * Theme selection (docs/design/design.md §13): no attribute follows the OS;
+ * `data-theme="light|dark"` on <html> forces one. The dark block therefore
+ * appears twice -- once under the media query, guarded so a forced light
+ * theme wins, and once for a forced dark theme.
  */
+:root {
+  --background: #f7f6f2;
+  --foreground: #1d1f23;
+  --muted: rgba(110, 110, 120, 0.13);
+  --muted-foreground: #6c6f76;
+  --border: #dedbd2;
+  --primary: #1d1f23;
+  --primary-foreground: #f7f6f2;
+  --secondary: rgba(110, 110, 120, 0.13);
+  --secondary-foreground: #1d1f23;
+  --accent: #2f6f9f;
+  --accent-foreground: #ffffff;
+  --paper: #ffffff;
+  --paper-foreground: #1d1f23;
+  --paper-muted-foreground: #6c6f76;
+  --danger: #c8372d;
+  --danger-foreground: #ffffff;
+  --success: #2f8a4f;
+  --warning: #c27a10;
+  --again: #c8372d;
+  --hard: #c27a10;
+  --good: #2f8a4f;
+  --easy: #2f6f9f;
+  --again-tint: rgba(200, 55, 45, 0.18);
+  --hard-tint: rgba(194, 122, 16, 0.18);
+  --good-tint: rgba(47, 138, 79, 0.16);
+  --easy-tint: rgba(47, 111, 159, 0.16);
+  --cloze: #2f6f9f;
+  --cloze-bg: rgba(47, 111, 159, 0.1);
+  --highlight0: rgba(255, 212, 0, 0.45);
+  --highlight1: rgba(80, 170, 255, 0.35);
+  --highlight2: rgba(170, 110, 255, 0.33);
+  --highlight3: rgba(255, 90, 90, 0.33);
+  --highlight4: rgba(80, 200, 110, 0.35);
+  --scrim: rgba(247, 246, 242, 0.92);
+
+  --notch-shadow: 0 8px 22px rgba(0, 0, 0, 0.08);
+  /* Inverts book pages in dark mode; nothing in light mode. */
+  --page-filter: none;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #17181b;
+    --foreground: #e9e8e4;
+    --muted: rgba(200, 200, 210, 0.13);
+    --muted-foreground: #a2a39f;
+    --border: #34363b;
+    --primary: #e9e8e4;
+    --primary-foreground: #17181b;
+    --secondary: rgba(200, 200, 210, 0.13);
+    --secondary-foreground: #e9e8e4;
+    --accent: #7db3db;
+    --accent-foreground: #17181b;
+    --paper: #f4f2ec;
+    --paper-foreground: #1d1f23;
+    --paper-muted-foreground: #6c6f76;
+    --danger: #e0574c;
+    --danger-foreground: #ffffff;
+    --success: #5cbf7d;
+    --warning: #e0a03a;
+    --again: #e0574c;
+    --hard: #e0a03a;
+    --good: #5cbf7d;
+    --easy: #7db3db;
+    --again-tint: rgba(224, 87, 76, 0.18);
+    --hard-tint: rgba(224, 160, 58, 0.18);
+    --good-tint: rgba(92, 191, 125, 0.16);
+    --easy-tint: rgba(125, 179, 219, 0.16);
+    --cloze: #86bfe6;
+    --cloze-bg: rgba(134, 191, 230, 0.14);
+    --highlight0: rgba(255, 212, 0, 0.32);
+    --highlight1: rgba(80, 170, 255, 0.32);
+    --highlight2: rgba(170, 110, 255, 0.34);
+    --highlight3: rgba(255, 90, 90, 0.32);
+    --highlight4: rgba(80, 200, 110, 0.3);
+    --scrim: rgba(23, 24, 27, 0.92);
+
+    --notch-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
+    --page-filter: invert(0.9) hue-rotate(180deg);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --background: #17181b;
+  --foreground: #e9e8e4;
+  --muted: rgba(200, 200, 210, 0.13);
+  --muted-foreground: #a2a39f;
+  --border: #34363b;
+  --primary: #e9e8e4;
+  --primary-foreground: #17181b;
+  --secondary: rgba(200, 200, 210, 0.13);
+  --secondary-foreground: #e9e8e4;
+  --accent: #7db3db;
+  --accent-foreground: #17181b;
+  --paper: #f4f2ec;
+  --paper-foreground: #1d1f23;
+  --paper-muted-foreground: #6c6f76;
+  --danger: #e0574c;
+  --danger-foreground: #ffffff;
+  --success: #5cbf7d;
+  --warning: #e0a03a;
+  --again: #e0574c;
+  --hard: #e0a03a;
+  --good: #5cbf7d;
+  --easy: #7db3db;
+  --again-tint: rgba(224, 87, 76, 0.18);
+  --hard-tint: rgba(224, 160, 58, 0.18);
+  --good-tint: rgba(92, 191, 125, 0.16);
+  --easy-tint: rgba(125, 179, 219, 0.16);
+  --cloze: #86bfe6;
+  --cloze-bg: rgba(134, 191, 230, 0.14);
+  --highlight0: rgba(255, 212, 0, 0.32);
+  --highlight1: rgba(80, 170, 255, 0.32);
+  --highlight2: rgba(170, 110, 255, 0.34);
+  --highlight3: rgba(255, 90, 90, 0.32);
+  --highlight4: rgba(80, 200, 110, 0.3);
+  --scrim: rgba(23, 24, 27, 0.92);
+
+  --notch-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
+  --page-filter: invert(0.9) hue-rotate(180deg);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-paper: var(--paper);
+  --color-paper-foreground: var(--paper-foreground);
+  --color-paper-muted-foreground: var(--paper-muted-foreground);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-again: var(--again);
+  --color-hard: var(--hard);
+  --color-good: var(--good);
+  --color-easy: var(--easy);
+  --color-again-tint: var(--again-tint);
+  --color-hard-tint: var(--hard-tint);
+  --color-good-tint: var(--good-tint);
+  --color-easy-tint: var(--easy-tint);
+  --color-cloze: var(--cloze);
+  --color-cloze-bg: var(--cloze-bg);
+  --color-highlight0: var(--highlight0);
+  --color-highlight1: var(--highlight1);
+  --color-highlight2: var(--highlight2);
+  --color-highlight3: var(--highlight3);
+  --color-highlight4: var(--highlight4);
+  --color-scrim: var(--scrim);
+
+  --font-sans: var(--font-figtree), system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --shadow-notch: var(--notch-shadow);
+}
+
 @theme {
-  --color-background: #ffffff;
-  --color-foreground: #0f172a;
-
-  --color-muted: #f1f5f9;
-  --color-muted-foreground: #64748b;
-
-  --color-border: #e2e8f0;
-
-  --color-primary: #2563eb;
-  --color-primary-foreground: #ffffff;
-
-  --color-secondary: #f1f5f9;
-  --color-secondary-foreground: #0f172a;
-
-  --color-danger: #dc2626;
-  --color-danger-foreground: #ffffff;
-
-  --color-success: #16a34a;
-  --color-warning: #d97706;
-
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 16px;
@@ -39,11 +192,89 @@
   --spacing-3xl: 64px;
 
   --text-xs: 12px;
+  --text-caption: 13px;
   --text-sm: 14px;
+  --text-toc: 14.5px;
+  --text-ui: 15px;
   --text-base: 16px;
+  --text-body: 17px;
   --text-lg: 18px;
+  --text-card: 19px;
   --text-xl: 20px;
+  --text-heading: 22px;
   --text-2xl: 24px;
   --text-3xl: 30px;
+  --text-title: 34px;
   --text-4xl: 36px;
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-sheet: 18px;
+  --radius-notch: 22px;
+
+  --shadow-dot: 0 3px 10px rgba(0, 0, 0, 0.08);
+  --shadow-edge-left: 4px 0 16px rgba(0, 0, 0, 0.08);
+  --shadow-edge-right: -4px 0 16px rgba(0, 0, 0, 0.12);
+  --shadow-bar: 0 -6px 22px rgba(0, 0, 0, 0.08);
+  --shadow-page: 0 1px 3px rgba(0, 0, 0, 0.16), 0 6px 18px rgba(0, 0, 0, 0.07);
+  --shadow-card: 0 20px 50px rgba(0, 0, 0, 0.15);
+  --shadow-bubble: 0 2px 6px rgba(0, 0, 0, 0.25);
+
+  --ease-pill: cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+
+@layer base {
+  html,
+  body {
+    background: var(--background);
+    color: var(--foreground);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: 17px;
+    line-height: 1.6;
+    font-weight: 500;
+  }
+
+  /* A fixed strip of page colour under the top safe-area inset, so content
+     scrolling up never shows beneath a notch or status bar. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px);
+    z-index: 90;
+    background: var(--background);
+    pointer-events: none;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+/* Book pages (and everything drawn on them) are inverted as one unit in dark
+   mode rather than recoloured -- the PDF is an image of a printed page. */
+.book-page {
+  filter: var(--page-filter);
+}
+
+/* Transitions only: the heading flash is an animation that carries meaning
+   ("you landed here"), so it stays. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
+  }
 }
