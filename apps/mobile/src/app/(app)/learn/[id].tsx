@@ -797,7 +797,7 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
             {revealed ? (
               <Text style={styles.flashcardBack}>{currentCard.back_text}</Text>
             ) : (
-              <Text style={styles.hint}>Tap to reveal</Text>
+              <Text style={styles.flashcardHint}>Tap to reveal</Text>
             )}
           </Pressable>
 
@@ -2008,6 +2008,11 @@ export default function LectureScreen() {
 }
 
 const useStyles = makeStyles((colors) => ({
+  flashcardHint: {
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.semibold,
+    color: "#5F6269",
+  },
   reviewBarInline: {
     alignItems: "center",
     gap: spacing.sm,
@@ -2116,7 +2121,7 @@ const useStyles = makeStyles((colors) => ({
     top: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 50,
+    paddingHorizontal: 12,
   },
   notchTitle: {
     paddingHorizontal: 8,
@@ -2222,10 +2227,10 @@ const useStyles = makeStyles((colors) => ({
     color: "#1D1F23",
   },
   gradeButton: {
-    minWidth: 72,
+    minWidth: 62,
     alignItems: "center",
     paddingVertical: 10,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: "#DEDBD2",
@@ -2488,7 +2493,7 @@ const useStyles = makeStyles((colors) => ({
   reviewGradeRow: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: 8,
+    gap: 6,
   },
   flashcardsTab: {
     gap: spacing.md,
@@ -2540,33 +2545,32 @@ const useStyles = makeStyles((colors) => ({
     justifyContent: "center",
     gap: spacing.sm,
     minHeight: 160,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 18,
     padding: spacing.xl,
+    backgroundColor: colors.paper,
+    ...shadows.card,
   },
   flashcardFront: {
     fontSize: fontSizes.lg,
     lineHeight: lineHeight(fontSizes.lg),
     fontWeight: fontWeights.medium,
-    color: colors.foreground,
+    color: "#1D1F23",
     textAlign: "center",
   },
   flashcardBack: {
     fontSize: fontSizes.sm,
     lineHeight: lineHeight(fontSizes.sm),
-    color: colors.foreground,
+    color: "#1D1F23",
     textAlign: "center",
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: "rgba(0, 0, 0, 0.1)",
     paddingTop: spacing.sm,
     alignSelf: "stretch",
   },
   gradeRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
     justifyContent: "center",
-    gap: spacing.sm,
+    gap: 6,
   },
   cardForm: {
     alignSelf: "stretch",
@@ -2642,14 +2646,8 @@ const useStyles = makeStyles((colors) => ({
     color: colors.foreground,
   },
   myCardRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-    borderWidth: 0,
-    borderRadius: 0,
+    gap: 6,
     paddingVertical: spacing.sm,
-    paddingHorizontal: 0,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
@@ -2661,7 +2659,8 @@ const useStyles = makeStyles((colors) => ({
   },
   myCardActions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
 }));

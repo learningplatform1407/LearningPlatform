@@ -304,8 +304,9 @@ const useStyles = makeStyles((colors) => ({
   },
   prompt: {
     flex: 1,
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: fontWeights.bold,
     color: colors.foreground,
   },
   progressMark: {
@@ -360,21 +361,20 @@ const useStyles = makeStyles((colors) => ({
   },
   button: {
     alignSelf: "flex-start",
-    borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: 10,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.primary,
   },
   buttonDisabled: {
     opacity: 0.5,
   },
   buttonText: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
-    color: colors.foreground,
+    fontSize: 15,
+    fontWeight: fontWeights.bold,
+    color: colors.primaryForeground,
   },
   reveal: {
     borderWidth: 1,

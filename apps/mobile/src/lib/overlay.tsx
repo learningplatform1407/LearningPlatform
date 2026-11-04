@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
@@ -36,12 +36,17 @@ export function Overlay({
   children: ReactNode;
 }) {
   const overlayStyles = useOverlayStyles();
+  // 85% of the screen, at most 360 -- computed, so it doesn't depend on
+  // percentage widths resolving inside a transparent Modal.
+  const { width: screenWidth } = useWindowDimensions();
+  const panelWidth = Math.min(360, Math.round(screenWidth * 0.85));
   const panel = (
     <View
       style={[
         overlayStyles.container,
         side && overlayStyles.sidePanel,
         side && overlayStyles[side],
+        side && { width: panelWidth },
       ]}
     >
       <View style={overlayStyles.header}>
@@ -83,10 +88,12 @@ export const useOverlayStyles = makeStyles((colors) => ({
     flex: 1,
     backgroundColor: colors.background,
   },
+  // Spelled out rather than `flex: 0`: react-native-web turns that into a
+  // flex-basis of 0%, which wins over the width and collapses the panel.
   sidePanel: {
-    flex: 0,
-    width: "85%",
-    maxWidth: 360,
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: "auto",
     height: "100%",
   },
   left: {

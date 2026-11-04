@@ -12,6 +12,10 @@ import { BookIcon, ExamIcon, FeedIcon, MapIcon, SparkleIcon, UserIcon } from "./
  * screen. Same list the tablet drawer filters. */
 export const HIDDEN_TAB_ROUTES = new Set(["index", "settings", "question-bank"]);
 
+/** The tab a buttonless screen belongs to, so the pill stays meaningful
+ * there: the Question Bank is opened from Learn, Settings from Profile. */
+const PARENT_TAB: Record<string, string> = { "question-bank": "learn", settings: "profile" };
+
 const ICONS: Record<string, typeof BookIcon> = {
   learn: BookIcon,
   exams: ExamIcon,
@@ -42,7 +46,11 @@ export function NotchTabBar({
   const placed = useRef(false);
 
   const routes = state.routes.filter((route) => !HIDDEN_TAB_ROUTES.has(route.name));
-  const activeKey = state.routes[state.index]?.key;
+  const current = state.routes[state.index];
+  const parentName = current ? PARENT_TAB[current.name] : undefined;
+  const activeKey = parentName
+    ? state.routes.find((route) => route.name === parentName)?.key
+    : current?.key;
   const active = activeKey ? layouts[activeKey] : undefined;
 
   useEffect(() => {
@@ -91,7 +99,11 @@ export function NotchTabBar({
                   target: route.key,
                   canPreventDefault: true,
                 });
-                if (!focused && !event.defaultPrevented) navigateToTab(route.key);
+                // The real screen, not the highlighted tab: Learn must still
+                // navigate when the Question Bank is open.
+                if (route.key !== current?.key && !event.defaultPrevented) {
+                  navigateToTab(route.key);
+                }
               }}
               style={styles.tab}
             >

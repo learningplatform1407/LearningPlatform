@@ -131,10 +131,13 @@ export default function AppLayout() {
       <Tabs.Screen name="roadmap" options={{ title: "Roadmap" }} />
       <Tabs.Screen name="feed" options={{ title: "Feed" }} />
       <Tabs.Screen name="profile" options={{ title: "Profile" }} />
-      <Tabs.Screen name="settings" options={{ href: null }} />
-      {/* Reachable only from inside Learn, not as its own tab — see the
-          NAV_ITEMS comment in apps/web/src/components/sidebar.tsx. */}
-      <Tabs.Screen name="question-bank" options={{ href: null }} />
+      {/* Settings (from Profile) and the Question Bank (from Learn) are real
+          tabs without a button: NotchTabBar leaves them out by name. Not
+          `href: null` -- since Expo Router 58 that hides the route itself,
+          and navigating to a hidden tab redirects to the first one, so both
+          screens were unreachable on a phone. */}
+      <Tabs.Screen name="settings" options={{ title: "Settings" }} />
+      <Tabs.Screen name="question-bank" options={{ title: "Question Bank" }} />
     </Tabs>
   );
 }

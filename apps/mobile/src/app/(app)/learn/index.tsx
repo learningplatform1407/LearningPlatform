@@ -197,13 +197,16 @@ const useStyles = makeStyles((colors) => ({
   },
   continueLabel: {
     fontSize: fontSizes.xs,
-    fontWeight: fontWeights.medium,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
     color: colors.mutedForeground,
   },
   continueTitle: {
     marginTop: spacing.xs,
-    fontSize: fontSizes.lg,
-    fontWeight: fontWeights.semibold,
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: fontWeights.extrabold,
     color: colors.foreground,
   },
   section: {
