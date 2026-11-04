@@ -263,6 +263,25 @@ A lesson gains a second, independent artifact: the **official reference PDF**, r
 | **INK-10** | 🔗 Verify the reader on iOS                      | INK-7        | **Not started.** `expo run:ios` has never been executed — it needs **full Xcode**, not the Command Line Tools (`xcode-select -p` showing `/Library/Developer/CommandLineTools` means no `xcodebuild`), and CocoaPods alone is not enough. Four things are known to differ, none exercised: the `trustAllCerts` exception was diagnosed in Android-only `ReactNativeBlobUtilUtils.java`; overlay geometry depends on what the **native** iOS view reports to `onLoadComplete`; `edgeToEdgeEnabled` is Android-only but a notch/Dynamic Island makes top-row clipping _more_ likely (HARDEN-9); and `LargeSecureStore` has only run against the Android Keystore, not the iOS Keychain. Design doc §8.3. |
 | **INK-11** | Deferred follow-ups                              | INK-7        | Ink visible while reading on mobile, needing either a pan-offset upstream or rendering the PDF ourselves; export an annotated page or book to a flat PDF; ink on the lecture **text** view (today PDF-only, while the text view has highlights/margin-notes instead); carrying ink across a PDF replace, which design doc §3 argues is actively undesirable rather than merely unbuilt.                                                                                                                                                                                                                                                                                                                |
 
+## Epic: DESIGN — Quiet-book redesign follow-ups
+
+Notes: [`docs/design/implementation-notes.md`](./docs/design/implementation-notes.md). The redesign
+itself is done on both platforms; these are the parts of the demo it could not follow without new
+data or features, plus the mobile checks it could not run.
+
+| Key           | Summary                                            | Depends on | Notes                                                                                                                                                                                                                                             |
+| ------------- | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DESIGN-1**  | Review state on due cards → interval previews      |            | Backend: include each card's current interval/ease in the due-card response, so the grade buttons can show "1d · 3d · 7d" before grading, as the demo does. Today the interval appears in a toast afterwards.                                     |
+| **DESIGN-2**  | Optional `hint` on cloze cards                     |            | Migration + authoring field. Then gaps show "[ hint ]" and the Review bar gets the demo's hide-hints dot.                                                                                                                                         |
+| **DESIGN-3**  | Source anchors on questions → "See in lesson"      |            | Optional `block_index` + offsets on a question. Then the Quizzes tab can paint the source sentence and show the demo's back bar.                                                                                                                  |
+| **DESIGN-4**  | `PATCH /annotations/{id}`                          |            | Margin-note edits are saved as delete + recreate today, which changes the note's id and creation time.                                                                                                                                            |
+| **DESIGN-5**  | AI chat panel + Explain                            | AI-\*      | The panel's Chat tab and the Explain tool exist as "coming soon" on web; Explain shows a "coming soon" sheet on mobile.                                                                                                                           |
+| **DESIGN-6**  | Favourite questions                                |            | The demo's heart on each question. Needs a per-user table.                                                                                                                                                                                        |
+| **DESIGN-7**  | 📱 Device pass on Android                          |            | Mobile was verified by tsc and jest only. Check: Figtree loads, dark mode follows Settings, the bottom-notch tab bar, the lesson's top notch and title line, the tool notch, side panels, the review bar, and the top safe-area inset (HARDEN-9). |
+| **DESIGN-8**  | Mobile screen-by-screen visual pass                | DESIGN-7   | Beyond the shared pieces, mobile screens keep their old layouts in themed colours: boxed rows, button shapes, Profile tiles, Feed, Exam Hub runner. Bring them to the web's ruled-row style.                                                      |
+| **DESIGN-9**  | Mobile word-level marking and Review cards overlay |            | Mobile marks text through native selection; the web marks whole words by dragging. Also: swipe between lesson tabs and the cards overlay, both web-only.                                                                                          |
+| **DESIGN-10** | 🔗 iOS                                             | INK-10     | Nothing in the redesign has run on iOS.                                                                                                                                                                                                           |
+
 ## Epic: ROADMAP (placeholder only)
 
 | Key           | Summary                              | Depends on   | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -290,20 +309,20 @@ Explicitly lowest priority — described as a future implementation. Real work a
 
 Cross-cutting, joint, and further out — kept lighter/indicative since scope will sharpen closer to the time.
 
-| Key              | Summary                                                                       | Notes                                  |
-| ---------------- | ----------------------------------------------------------------------------- | -------------------------------------- |
-| **HARDEN-1**     | Structured logging + request-ID middleware                                    | Backend.                               |
-| **HARDEN-2**     | Audit events table + sensitive-action logging                                 |                                        |
-| **HARDEN-3**     | Backup/restore procedure, documented + tested                                 |                                        |
-| **HARDEN-4** 🔗  | Security review — Auth, Storage policies, signed URL expiry, tenant isolation | Joint review session.                  |
-| **HARDEN-5**     | Load-test API + processing pipeline                                           |                                        |
-| **HARDEN-6**     | Evaluate Render → Cloud Run migration                                         | Decision ticket, not necessarily code. |
-| **HARDEN-7**     | Client-side error tracking/monitoring                                         | Web + mobile.                          |
-| **HARDEN-8** 🔗  | Decide what account deletion does to authored content                         | Product decision, then one migration.  |
-| **HARDEN-9**     | Safe-area insets on mobile — nothing handles them                             | App-wide, not feature-specific.        |
-| **HARDEN-10** 🔗 | Rename the placeholder bundle identifier / package                            | Product decision, before any release.  |
+| Key              | Summary                                                                       | Notes                                                                       |
+| ---------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **HARDEN-1**     | Structured logging + request-ID middleware                                    | Backend.                                                                    |
+| **HARDEN-2**     | Audit events table + sensitive-action logging                                 |                                                                             |
+| **HARDEN-3**     | Backup/restore procedure, documented + tested                                 |                                                                             |
+| **HARDEN-4** 🔗  | Security review — Auth, Storage policies, signed URL expiry, tenant isolation | Joint review session.                                                       |
+| **HARDEN-5**     | Load-test API + processing pipeline                                           |                                                                             |
+| **HARDEN-6**     | Evaluate Render → Cloud Run migration                                         | Decision ticket, not necessarily code.                                      |
+| **HARDEN-7**     | Client-side error tracking/monitoring                                         | Web + mobile.                                                               |
+| **HARDEN-8** 🔗  | Decide what account deletion does to authored content                         | Product decision, then one migration.                                       |
+| **HARDEN-9**     | ✅ Safe-area insets on mobile                                                 | Top inset at the root stack; bottom by the tab bar. Device check: DESIGN-7. |
+| **HARDEN-10** 🔗 | Rename the placeholder bundle identifier / package                            | Product decision, before any release.                                       |
 
-**HARDEN-9 detail.** `android/gradle.properties` sets `edgeToEdgeEnabled=true`, `(app)/_layout.tsx`
+**HARDEN-9 detail.** _Addressed by the quiet-book redesign: the root stack pads every screen by the top inset, and the bottom-notch tab bar and review bar pad by the bottom one. Not yet seen on a device (DESIGN-7)._ The original finding: `android/gradle.properties` sets `edgeToEdgeEnabled=true`, `(app)/_layout.tsx`
 sets `headerShown: false` on both the Tabs and Stack branches, and **nothing in `apps/mobile/src`
 handles safe-area insets at all** — zero references to `useSafeAreaInsets`, `SafeAreaView` or
 `safe-area-context`, despite `react-native-safe-area-context` being a dependency. Android 15
