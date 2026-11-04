@@ -26,8 +26,35 @@ describe("wordsFromTextItems", () => {
     expect(hello!.x0).toBeCloseTo(50 / 600);
     expect(hello!.x1).toBeCloseTo(100 / 600);
     expect(brave!.x0).toBeCloseTo(110 / 600);
-    expect(hello!.y0).toBeCloseTo(90 / 800);
-    expect(hello!.y1).toBeCloseTo(100 / 800);
+    // From the font's ascent above the baseline (y=100) to its descent
+    // below it: typical 80% / 20% of the 10px font when pdf.js gives none.
+    expect(hello!.y0).toBeCloseTo(92 / 800, 6);
+    expect(hello!.y1).toBeCloseTo(102 / 800, 6);
+  });
+
+  test("uses the font's own ascent and descent when pdf.js reports them", () => {
+    const [word] = wordsFromTextItems(
+      [{ str: "Hi", transform: [10, 0, 0, 10, 0, 100], width: 20, ascent: 0.9, descent: -0.3 }],
+      600,
+      800,
+    );
+    expect(word!.y0).toBeCloseTo(91 / 800, 6);
+    expect(word!.y1).toBeCloseTo(103 / 800, 6);
+  });
+
+  test("with a measure, words end where their letters do, not at an even share", () => {
+    // "iii WWW": narrow letters then wide ones, 70px of advance in all.
+    const measure = (text: string) => [...text].reduce((w, ch) => w + (ch === "W" ? 3 : 1), 0);
+    const [narrow, wide] = wordsFromTextItems(
+      [{ str: "iii WWW", transform: [10, 0, 0, 10, 0, 100], width: 130 }],
+      1,
+      1,
+      measure,
+    );
+    // Measured 13 units over 130px: "iii" is 30px, the space 10, "WWW" 90.
+    expect(narrow!.x1).toBeCloseTo(30);
+    expect(wide!.x0).toBeCloseTo(40);
+    expect(wide!.x1).toBeCloseTo(130);
   });
 
   test("skips blank runs", () => {
@@ -53,14 +80,16 @@ describe("wordAt", () => {
 describe("rectsForRange", () => {
   const words = wordsFromTextItems(ITEMS, 600, 800);
 
-  test("one rectangle per line, covering the run, inset vertically", () => {
+  test("one rectangle per line, covering the run and the glyphs' full height", () => {
     const rects = rectsForRange(words, 0, 2);
     expect(rects).toHaveLength(2);
     const [x0, y0, x1, y1] = rects[0]!;
     expect(x0).toBeLessThan(50 / 600);
     expect(x1).toBeGreaterThan(160 / 600);
-    expect(y0).toBeCloseTo((90 + 1.5) / 800);
-    expect(y1).toBeCloseTo((90 + 8.5) / 800);
+    // Top of the ascenders to the bottom of the descenders, not a band
+    // floating above the baseline.
+    expect(y0).toBeCloseTo(92 / 800, 6);
+    expect(y1).toBeCloseTo(102 / 800, 6);
   });
 
   test("works in either drag direction", () => {

@@ -32,6 +32,7 @@ import {
   wordAt,
   wordsForQuote,
   wordsFromTextItems,
+  type MeasureText,
   type PageWord,
 } from "./pdf-geometry";
 
@@ -353,12 +354,32 @@ async function pageWords(page: PDFPageProxy): Promise<PageWord[]> {
             str: item.str,
             transform: pdfjsLib.Util.transform(base.transform, item.transform),
             width: item.width,
+            ascent: content.styles[item.fontName]?.ascent,
+            descent: content.styles[item.fontName]?.descent,
+            fontName: item.fontName,
+            fontFamily: content.styles[item.fontName]?.fontFamily,
           },
         ]
       : [],
   );
-  return wordsFromTextItems(items, base.width, base.height);
+  return wordsFromTextItems(items, base.width, base.height, measureText);
 }
+
+let measureContext: CanvasRenderingContext2D | null | undefined;
+
+/** Measures in the PDF's own font where pdf.js has loaded it into the
+ * page (it registers each under its internal name once a page using it is
+ * drawn), else in the generic family it reports -- either way far closer
+ * to the real glyph widths than an even share per character. */
+const measureText: MeasureText = (text, item) => {
+  if (measureContext === undefined) {
+    measureContext = document.createElement("canvas").getContext("2d");
+  }
+  if (!measureContext) return 0;
+  const fallback = item.fontFamily || "sans-serif";
+  measureContext.font = `100px ${item.fontName ? `"${item.fontName}", ` : ""}${fallback}`;
+  return measureContext.measureText(text).width;
+};
 
 /** Where each quoted passage falls, page by page. Searches every page --
  * the passage could be anywhere, and pages far from the reader haven't

@@ -21,13 +21,29 @@ export interface TextItemLike {
   transform: number[];
   /** Advance width, in viewport units. */
   width: number;
+  /** The font's ascent and descent as fractions of the font size (pdf.js
+   * `styles[fontName]`; descent is negative). Typical values when absent. */
+  ascent?: number;
+  descent?: number;
+  /** pdf.js's name for the run's font, and the generic family it falls
+   * back to -- what a `measure` function measures the text in. */
+  fontName?: string;
+  fontFamily?: string;
 }
+
+/** The width of `text` in the run's font, in any unit (only ratios are
+ * used). Lets word boxes follow the real glyph widths. */
+export type MeasureText = (text: string, item: TextItemLike) => number;
+
+/** Latin text fonts sit about 80% above the baseline and 20% below it. */
+const DEFAULT_ASCENT = 0.8;
+const DEFAULT_DESCENT = -0.2;
 
 /**
  * Splits pdf.js text items into word boxes. pdf.js gives runs of text, not
- * words, so each run's width is shared out across its characters --
- * proportional spacing makes this approximate, but marking snaps to whole
- * words, so a box a little wide or narrow still selects the right word.
+ * words, so each run's width is shared out between them: by the text's
+ * measured width when `measure` is given (a word ends where its letters
+ * do), otherwise evenly per character, which drifts on proportional fonts.
  *
  * `items` must already be in viewport coordinates (transform multiplied by
  * the viewport's), and `pageWidth`/`pageHeight` that viewport's size.
@@ -36,6 +52,7 @@ export function wordsFromTextItems(
   items: TextItemLike[],
   pageWidth: number,
   pageHeight: number,
+  measure?: MeasureText,
 ): PageWord[] {
   const words: PageWord[] = [];
   for (const item of items) {
@@ -43,18 +60,28 @@ export function wordsFromTextItems(
     const [, , c = 0, d = 0, e = 0, f = 0] = item.transform;
     const fontHeight = Math.hypot(c, d);
     if (fontHeight <= 0) continue;
-    const charWidth = item.width / item.str.length;
+    const total = measure?.(item.str, item) ?? 0;
+    // Where character `i` starts, as a share of the run's advance width.
+    const at = (i: number) =>
+      total > 0
+        ? (measure!(item.str.slice(0, i), item) / total) * item.width
+        : (i / item.str.length) * item.width;
     for (const match of item.str.matchAll(/\S+/g)) {
-      const x0 = e + match.index * charWidth;
-      const x1 = x0 + match[0].length * charWidth;
+      const x0 = e + at(match.index);
+      const x1 = e + at(match.index + match[0].length);
+      // `f` is the baseline. The box runs from the font's ascent above it
+      // to its descent below it, so it covers the glyphs themselves -- a box
+      // ending at the baseline left descenders and the lower half of the
+      // line outside every highlight.
+      const ascent = item.ascent || DEFAULT_ASCENT;
+      const descent = item.descent || DEFAULT_DESCENT;
       words.push({
         index: words.length,
         text: match[0],
         x0: x0 / pageWidth,
-        // `f` is the baseline; the box reaches one font-height above it.
-        y0: (f - fontHeight) / pageHeight,
+        y0: (f - fontHeight * ascent) / pageHeight,
         x1: x1 / pageWidth,
-        y1: f / pageHeight,
+        y1: (f - fontHeight * descent) / pageHeight,
       });
     }
   }
@@ -110,7 +137,7 @@ export function wordAt(words: PageWord[], x: number, y: number, reach = 0.02): P
 /**
  * Highlight rectangles for the words from `a` to `b` in reading order: one
  * per run of words on the same line (design.md §8), spanning the run plus a
- * little padding, from 15% down the word box for 70% of its height.
+ * little padding, over the full height of the glyphs.
  */
 export function rectsForRange(
   words: PageWord[],
@@ -129,12 +156,7 @@ export function rectsForRange(
     const top = Math.min(...line.map((w) => w.y0));
     const bottom = Math.max(...line.map((w) => w.y1));
     const height = bottom - top;
-    rects.push([
-      clamp(x0 - padX),
-      clamp(top + height * 0.15),
-      clamp(x1 + padX),
-      clamp(top + height * 0.85),
-    ]);
+    rects.push([clamp(x0 - padX), clamp(top), clamp(x1 + padX), clamp(top + height)]);
     line = [];
   }
 
