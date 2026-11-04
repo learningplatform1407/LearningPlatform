@@ -20,6 +20,7 @@
     "test": "jest --ci --passWithNoTests"
   },
   "dependencies": {
+    "@expo-google-fonts/figtree": "^0.4.1",
     "@expo/ui": "~58.0.23",
     "@lp/api-client": "workspace:*",
     "@lp/contracts": "workspace:*",

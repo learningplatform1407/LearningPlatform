@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
-import { colors, fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 /**
  * A disclosure row for the book -> chapter -> sub-chapter -> lesson tree.
@@ -21,6 +22,7 @@ export function ExpandableRow({
   defaultExpanded?: boolean;
   children: React.ReactNode;
 }) {
+  const styles = useStyles();
   const [expanded, setExpanded] = useState(defaultExpanded);
   return (
     <View style={styles.card}>
@@ -41,7 +43,7 @@ export function ExpandableRow({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   card: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -76,4 +78,4 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.xs,
   },
-});
+}));

@@ -1,12 +1,15 @@
 import type { QuestionReveal, QuizOptionResult } from "@lp/api-client";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { colors, fontSizes, fontWeights, radii, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, radii, spacing } from "@/lib/theme";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
+/** `tone` names a theme colour, read as `colors[mark.tone]` so the mark
+ * follows the active theme. */
 export const OUTCOME_MARKS = {
-  correct: { icon: "✓", label: "Answered correctly", color: colors.success },
-  partial: { icon: "◐", label: "Answered partially correctly", color: colors.warning },
-  incorrect: { icon: "✗", label: "Answered incorrectly", color: colors.danger },
+  correct: { icon: "✓", label: "Answered correctly", tone: "good" },
+  partial: { icon: "◐", label: "Answered partially correctly", tone: "hard" },
+  incorrect: { icon: "✗", label: "Answered incorrectly", tone: "again" },
 } as const;
 
 export type Outcome = keyof typeof OUTCOME_MARKS;
@@ -14,6 +17,8 @@ export type Outcome = keyof typeof OUTCOME_MARKS;
 /** One graded option. Exported because the quiz results screen lists options
  * without the surrounding panel. */
 export function OptionResultRow({ option }: { option: QuizOptionResult }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   // Two independent axes: whether the option belongs in the answer (in_key)
   // and whether the student earned its point (classified_correctly). Avoiding
   // a wrong option scores, so collapsing these would call a wrong option
@@ -48,6 +53,7 @@ export function OptionResultRow({ option }: { option: QuizOptionResult }) {
  * type it renders.
  */
 export function QuestionRevealPanel({ reveal }: { reveal: QuestionReveal }) {
+  const styles = useStyles();
   return (
     <View style={styles.reveal}>
       <Text style={styles.revealTitle}>
@@ -63,7 +69,7 @@ export function QuestionRevealPanel({ reveal }: { reveal: QuestionReveal }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   reveal: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -97,4 +103,4 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: colors.mutedForeground,
   },
-});
+}));

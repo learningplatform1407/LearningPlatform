@@ -1,8 +1,10 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { colors, fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 export default function RoadmapScreen() {
+  const styles = useStyles();
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Roadmap</Text>
@@ -11,7 +13,7 @@ export default function RoadmapScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     justifyContent: "center",
@@ -28,4 +30,4 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: colors.mutedForeground,
   },
-});
+}));

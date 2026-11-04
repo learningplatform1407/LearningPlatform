@@ -4,21 +4,14 @@ import { computeLessonCompletionPercent } from "@lp/api-client";
 import * as DocumentPicker from "expo-document-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { sha256Hex } from "@/lib/checksum";
 import { ProgressBar } from "@/lib/progress-bar";
 import { supabase } from "@/lib/supabase";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
@@ -29,6 +22,8 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function UncategorizedLessonsScreen() {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const queryClient = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => getApiClient().getMe() });
   const uncategorized = useQuery({
@@ -200,6 +195,8 @@ function UncategorizedLessonsScreen() {
  * reference book -- a replace always wipes every learner's ink on this
  * lesson unconditionally, hence the two-step confirmation). */
 function LessonAdminControls({ documentId, onDone }: { documentId: string; onDone: () => void }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const [textFile, setTextFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [textError, setTextError] = useState<string | null>(null);
   const [pdfFile, setPdfFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
@@ -382,6 +379,8 @@ function LessonList({
   onUploaded?: () => void;
   lessonProgress: Map<string, BankTreeLesson>;
 }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const queryClient = useQueryClient();
   const documents = useQuery({
     queryKey: ["documents", subChapterId],
@@ -552,6 +551,7 @@ function SubChapterRow({
   onToggle: () => void;
   onUploaded: () => void;
 }) {
+  const styles = useStyles();
   const lessonProgress = new Map<string, BankTreeLesson>(
     subChapterNode?.lessons.map((lesson) => [lesson.id, lesson]),
   );
@@ -603,6 +603,8 @@ function ChapterRow({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const subChapterProgress = new Map<string, BankTreeSubChapter>(
     chapterNode?.sub_chapters.map((subChapter) => [subChapter.id, subChapter]),
   );
@@ -717,6 +719,8 @@ function ChapterRow({
 }
 
 function BookChaptersScreen({ bookId }: { bookId: string }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const queryClient = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => getApiClient().getMe() });
   const chapters = useQuery({
@@ -834,7 +838,7 @@ export default function BookScreen() {
   return <BookChaptersScreen bookId={bookId} />;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -991,4 +995,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

@@ -15,11 +15,14 @@ import {
 
 import { getApiClient } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
 export default function ProfileSettingsScreen() {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const queryClient = useQueryClient();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
@@ -167,7 +170,7 @@ export default function ProfileSettingsScreen() {
 
 const AVATAR_SIZE = 64;
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -266,4 +269,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

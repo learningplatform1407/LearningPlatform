@@ -1,14 +1,17 @@
 import { Drawer, DrawerContentScrollView, DrawerItem } from "expo-router/drawer";
 import { Tabs } from "expo-router/tabs";
-import { StyleSheet, useWindowDimensions, View } from "react-native";
+import { useWindowDimensions, View } from "react-native";
 
-import { colors, fontWeights, spacing } from "@/lib/theme";
+import { fontWeights, spacing } from "@/lib/theme";
 
 import type { DrawerContentComponentProps } from "expo-router/drawer";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
 const TABLET_BREAKPOINT = 768;
 
 function AppDrawerContent({ state, navigation, descriptors }: DrawerContentComponentProps) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const activeKey = state.routes[state.index]?.key;
   // "settings" and "question-bank" are registered with
   // options={{ href: null }} for parity with the Tabs branch, but Expo
@@ -52,7 +55,7 @@ function AppDrawerContent({ state, navigation, descriptors }: DrawerContentCompo
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   drawerContent: {
     flexGrow: 1,
     paddingVertical: spacing.md,
@@ -68,9 +71,10 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     marginTop: spacing.sm,
   },
-});
+}));
 
 export default function AppLayout() {
+  const colors = useThemeColors();
   const { width } = useWindowDimensions();
   const isTablet = width >= TABLET_BREAKPOINT;
 

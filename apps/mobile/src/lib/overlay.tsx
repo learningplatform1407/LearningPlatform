@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 
-import { colors, fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 /** A full-screen sheet, the shape every overlay in this app already has.
  *
@@ -29,6 +30,7 @@ export function Overlay({
   footer?: ReactNode;
   children: ReactNode;
 }) {
+  const overlayStyles = useOverlayStyles();
   return (
     // onRequestClose is what makes the Android back button dismiss it; without
     // it the sheet is a trap on that platform.
@@ -47,7 +49,7 @@ export function Overlay({
   );
 }
 
-export const overlayStyles = StyleSheet.create({
+export const useOverlayStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -80,4 +82,4 @@ export const overlayStyles = StyleSheet.create({
     borderTopColor: colors.border,
     padding: spacing.md,
   },
-});
+}));

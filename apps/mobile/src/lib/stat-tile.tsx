@@ -1,6 +1,7 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { colors, fontSizes, fontWeights, radii, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, radii, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 /**
  * One number-and-label tile for the Profile screen's statistics section.
@@ -20,6 +21,7 @@ export function StatTile({
   sublabel?: string;
   emphasis?: boolean;
 }) {
+  const styles = useStyles();
   return (
     <View style={[styles.tile, emphasis && styles.tileEmphasis]}>
       <Text style={emphasis ? styles.valueEmphasis : styles.value}>{value}</Text>
@@ -29,7 +31,7 @@ export function StatTile({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   tile: {
     flexGrow: 1,
     flexBasis: "45%",
@@ -57,4 +59,4 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.xs,
     color: colors.mutedForeground,
   },
-});
+}));

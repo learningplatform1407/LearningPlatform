@@ -1,11 +1,12 @@
 import type { QuestionBankItem, QuestionReveal, TopicFilter } from "@lp/api-client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { OUTCOME_MARKS, QuestionRevealPanel } from "@/lib/question-reveal";
-import { colors, fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
 /**
  * Marks a question the reader has attempted before. Outcome-coloured rather
@@ -23,6 +24,8 @@ function ProgressMark({
   pointsPossible: number;
   attemptCount?: number;
 }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const mark = OUTCOME_MARKS[outcome];
   const tries = attemptCount !== undefined && attemptCount > 1 ? `, ${attemptCount} attempts` : "";
   return (
@@ -30,8 +33,8 @@ function ProgressMark({
       style={styles.progressMark}
       accessibilityLabel={`${mark.label}, ${pointsAwarded} of ${pointsPossible} points${tries}`}
     >
-      <Text style={{ color: mark.color }}>{mark.icon}</Text>
-      <Text style={[styles.progressMarkText, { color: mark.color }]}>
+      <Text style={{ color: colors[mark.tone] }}>{mark.icon}</Text>
+      <Text style={[styles.progressMarkText, { color: colors[mark.tone] }]}>
         {pointsAwarded}/{pointsPossible}
       </Text>
       {attemptCount !== undefined && attemptCount > 1 && (
@@ -48,6 +51,8 @@ function QuestionCard({
   question: QuestionBankItem;
   onAnswered: () => void;
 }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const [selected, setSelected] = useState<string[]>([]);
   const [reveal, setReveal] = useState<QuestionReveal | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -178,6 +183,7 @@ export function QuestionBankList({
   unassigned?: boolean;
   emptyMessage?: string;
 }) {
+  const styles = useStyles();
   const queryClient = useQueryClient();
   const questions = useQuery({
     queryKey: ["question-bank", filter ?? null, unassigned ?? false],
@@ -223,7 +229,7 @@ export function QuestionBankList({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   list: {
     gap: spacing.sm,
   },
@@ -350,4 +356,4 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: colors.danger,
   },
-});
+}));

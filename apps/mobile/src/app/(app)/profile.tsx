@@ -2,14 +2,16 @@ import { computeProfileBadges } from "@lp/api-client";
 import { formatMonthYear } from "@lp/ui";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { MetricBarChart } from "@/lib/metric-bar-chart";
 import { StatTile } from "@/lib/stat-tile";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 export default function ProfileScreen() {
+  const styles = useStyles();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
     queryFn: () => getApiClient().getMe(),
@@ -149,7 +151,7 @@ export default function ProfileScreen() {
 
 const AVATAR_SIZE = 64;
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -294,4 +296,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

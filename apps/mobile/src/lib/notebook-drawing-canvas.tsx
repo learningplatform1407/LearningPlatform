@@ -2,7 +2,6 @@ import type { Stroke, StrokePoint } from "@lp/contracts";
 import { useState } from "react";
 import {
   Pressable,
-  StyleSheet,
   Text,
   View,
   type GestureResponderEvent,
@@ -10,7 +9,8 @@ import {
 } from "react-native";
 import Svg, { Path, Polyline } from "react-native-svg";
 
-import { colors, spacing } from "@/lib/theme";
+import { spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 // Every stroke's points are normalized to [0, 1] relative to this fixed
 // aspect ratio so a drawing looks the same regardless of what size box it's
@@ -96,6 +96,7 @@ export function DrawingCanvas({
   height,
   pageKey,
 }: DrawingCanvasProps) {
+  const styles = useStyles();
   const explicitSize = width !== undefined && height !== undefined;
   const [autoSize, setAutoSize] = useState({ width: 0, height: 0 });
   const size = explicitSize ? { width, height } : autoSize;
@@ -311,6 +312,7 @@ export function DrawingCanvas({
 }
 
 export function DrawingThumbnail({ strokes }: { strokes: Stroke[] }) {
+  const styles = useStyles();
   return (
     <View
       style={styles.thumbnailBox}
@@ -334,7 +336,7 @@ export function DrawingThumbnail({ strokes }: { strokes: Stroke[] }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     gap: spacing.sm,
   },
@@ -414,4 +416,4 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: colors.background,
   },
-});
+}));

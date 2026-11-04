@@ -1,14 +1,16 @@
 import type { MeResponse } from "@lp/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 const THEMES = ["light", "dark", "system"] as const;
 
 export default function AppearanceSettingsScreen() {
+  const styles = useStyles();
   const queryClient = useQueryClient();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
@@ -83,7 +85,7 @@ export default function AppearanceSettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     padding: spacing.xl,
@@ -157,4 +159,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

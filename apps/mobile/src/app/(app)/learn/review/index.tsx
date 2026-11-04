@@ -7,12 +7,14 @@ import type {
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 function DueBadge({ count }: { count: number }) {
+  const styles = useStyles();
   return (
     <View style={[styles.dueBadge, count > 0 && styles.dueBadgeActive]}>
       <Text style={[styles.dueBadgeText, count > 0 && styles.dueBadgeTextActive]}>{count} due</Text>
@@ -21,6 +23,7 @@ function DueBadge({ count }: { count: number }) {
 }
 
 function LessonRow({ lesson }: { lesson: ReviewSummaryLesson }) {
+  const styles = useStyles();
   return (
     <Pressable
       style={styles.lessonRow}
@@ -47,6 +50,7 @@ function ExpandableRow({
   dueCount: number;
   children: React.ReactNode;
 }) {
+  const styles = useStyles();
   const [expanded, setExpanded] = useState(false);
   return (
     <View style={styles.expandableCard}>
@@ -68,6 +72,7 @@ function ExpandableRow({
 }
 
 function SubChapterRow({ subChapter }: { subChapter: ReviewSummarySubChapter }) {
+  const styles = useStyles();
   return (
     <ExpandableRow title={subChapter.title} dueCount={subChapter.due_count}>
       {subChapter.lessons.length === 0 ? (
@@ -84,6 +89,7 @@ function SubChapterRow({ subChapter }: { subChapter: ReviewSummarySubChapter }) 
 }
 
 function ChapterRow({ chapter }: { chapter: ReviewSummaryChapter }) {
+  const styles = useStyles();
   return (
     <ExpandableRow title={chapter.title} dueCount={chapter.due_count}>
       {chapter.sub_chapters.length === 0 ? (
@@ -100,6 +106,7 @@ function ChapterRow({ chapter }: { chapter: ReviewSummaryChapter }) {
 }
 
 function BookRow({ book }: { book: ReviewSummaryBook }) {
+  const styles = useStyles();
   return (
     <ExpandableRow title={book.title} dueCount={book.due_count}>
       {book.chapters.length === 0 ? (
@@ -116,6 +123,7 @@ function BookRow({ book }: { book: ReviewSummaryBook }) {
 }
 
 export default function ReviewSummaryScreen() {
+  const styles = useStyles();
   const { data, isPending, isError } = useQuery({
     queryKey: ["review-summary"],
     queryFn: () => getApiClient().getReviewSummary(),
@@ -172,7 +180,7 @@ export default function ReviewSummaryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -255,4 +263,4 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: fontSizes.sm,
   },
-});
+}));

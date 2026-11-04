@@ -1,20 +1,14 @@
 import type { Stroke } from "@lp/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import {
-  type LayoutChangeEvent,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native";
+import { type LayoutChangeEvent, Pressable, Text, View, useWindowDimensions } from "react-native";
 import Pdf from "react-native-pdf";
 
 import { getApiClient } from "@/lib/api-client";
 import { DrawingCanvas } from "@/lib/notebook-drawing-canvas";
 import { supabase } from "@/lib/supabase";
-import { colors, fontSizes, spacing } from "@/lib/theme";
+import { fontSizes, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 // react-native-pdf downloads the whole file before rendering, so unlike
 // pdf.js on web this URL only has to outlive the initial fetch. Kept in step
@@ -57,6 +51,7 @@ interface PdfLessonViewProps {
  * above was confirmed against the real package rather than assumed.
  */
 export function PdfLessonView({ documentId, storagePath, pageCount }: PdfLessonViewProps) {
+  const styles = useStyles();
   const queryClient = useQueryClient();
   const { height: windowHeight } = useWindowDimensions();
   const [pageNumber, setPageNumber] = useState(1);
@@ -224,7 +219,7 @@ export function PdfLessonView({ documentId, storagePath, pageCount }: PdfLessonV
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
@@ -286,4 +281,4 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: colors.danger,
   },
-});
+}));

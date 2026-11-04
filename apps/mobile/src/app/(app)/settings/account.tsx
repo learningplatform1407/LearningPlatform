@@ -1,13 +1,15 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { Overlay } from "@/lib/overlay";
 import { supabase } from "@/lib/supabase";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 export default function AccountSettingsScreen() {
+  const styles = useStyles();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
     queryFn: () => getApiClient().getMe(),
@@ -92,7 +94,7 @@ export default function AccountSettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -151,4 +153,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

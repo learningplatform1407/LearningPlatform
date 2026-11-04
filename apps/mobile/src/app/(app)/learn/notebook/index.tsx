@@ -1,12 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { NewEntryButtons, NotebookEntryList } from "@/lib/notebook-entry-editor";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 export default function NotebookScreen() {
+  const styles = useStyles();
   const entries = useQuery({
     queryKey: ["notebook-entries"],
     queryFn: () => getApiClient().listNotebookEntries(),
@@ -45,7 +47,7 @@ export default function NotebookScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -68,4 +70,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

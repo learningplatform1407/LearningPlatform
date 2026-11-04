@@ -1,6 +1,7 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { colors, fontSizes, spacing } from "@/lib/theme";
+import { fontSizes, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 // Threshold for the "done" color, matching the server's
 // LESSON_COMPLETION_THRESHOLD (services/api/app/progress/constants.py) —
@@ -16,6 +17,7 @@ const DONE_THRESHOLD = 80;
  * a zero-question node.
  */
 export function ProgressBar({ percent, label }: { percent: number | null; label?: string }) {
+  const styles = useStyles();
   if (percent === null) return null;
   const rounded = Math.round(percent);
   return (
@@ -41,7 +43,7 @@ export function ProgressBar({ percent, label }: { percent: number | null; label?
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   row: {
     marginTop: spacing.xs,
     flexDirection: "row",
@@ -70,4 +72,4 @@ const styles = StyleSheet.create({
   fillDone: {
     backgroundColor: colors.success,
   },
-});
+}));

@@ -1,18 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
 interface BookRow {
   id: string;
@@ -22,6 +15,8 @@ interface BookRow {
 }
 
 export default function LibraryScreen() {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const queryClient = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => getApiClient().getMe() });
   const books = useQuery({
@@ -130,7 +125,7 @@ export default function LibraryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -220,4 +215,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

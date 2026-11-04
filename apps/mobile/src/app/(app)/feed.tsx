@@ -13,20 +13,12 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import * as WebBrowser from "expo-web-browser";
 import { Fragment, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, FlatList, Pressable, Text, TextInput, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
-import { colors, fontSizes, fontWeights, lineHeight, radii, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, lineHeight, radii, spacing } from "@/lib/theme";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
 function imageUrl(imagePath: string): string {
   // A synchronous string concat against a public bucket -- no network call
@@ -43,6 +35,7 @@ function imageUrl(imagePath: string): string {
  * the in-app browser rather than handed to Linking.openURL, so an unexpected
  * target cannot hand off to another app. */
 function LinkifiedBody({ body }: { body: string }) {
+  const styles = useStyles();
   return (
     <Text style={styles.body}>
       {splitLinkifiedBody(body).map((segment, index) =>
@@ -103,6 +96,8 @@ async function uploadImage(asset: ImagePicker.ImagePickerAsset): Promise<string>
 }
 
 function Composer() {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -277,6 +272,7 @@ function Composer() {
 }
 
 function PostCard({ post }: { post: FeedPost }) {
+  const styles = useStyles();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(post.title);
@@ -560,6 +556,7 @@ function PostCard({ post }: { post: FeedPost }) {
 }
 
 export default function FeedScreen() {
+  const styles = useStyles();
   const me = useQuery({ queryKey: ["me"], queryFn: () => getApiClient().getMe() });
   const feed = useQuery({
     queryKey: ["feed"],
@@ -633,7 +630,7 @@ export default function FeedScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   list: { flex: 1, backgroundColor: colors.background },
   listContent: { padding: spacing.xl, gap: spacing.lg },
   centered: { flex: 1, justifyContent: "center", padding: spacing.xl },
@@ -763,4 +760,4 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
   },
   actions: { flexDirection: "row", gap: spacing.sm },
-});
+}));

@@ -1,12 +1,13 @@
 import type { DailyQuestion } from "@lp/api-client";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { DailyQuestionCard } from "@/lib/daily-question-card";
 import { DailyQuestionOverlay, useDailyQuestion } from "@/lib/daily-question-overlay";
-import { colors, fontSizes, fontWeights, lineHeight, radii, shadows, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, lineHeight, radii, shadows, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 const STATUS_LABEL: Record<string, string> = {
   processing: "Processing...",
@@ -28,6 +29,7 @@ function LearnContent({
   today: DailyQuestion | undefined;
   onOpenToday: () => void;
 }) {
+  const styles = useStyles();
   const {
     data: recentLessons,
     isPending,
@@ -172,7 +174,7 @@ export default function LearnScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -272,4 +274,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

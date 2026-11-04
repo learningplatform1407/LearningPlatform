@@ -18,7 +18,6 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -34,10 +33,13 @@ import { Overlay } from "@/lib/overlay";
 import { PdfLessonView } from "@/lib/pdf-lesson-view";
 import { QuestionBankList } from "@/lib/question-bank-list";
 import { supabase } from "@/lib/supabase";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
 import { spliceAnnotations, spliceClozeSpans } from "@/lib/text-offset";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
 function ExtractedImage({ path }: { path: string }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const {
     data: url,
     isPending,
@@ -88,6 +90,7 @@ function AnnotatedParagraph({
   onLongPress: () => void;
   onOpenNote: (note: Annotation) => void;
 }) {
+  const styles = useStyles();
   const blockAnnotations = annotations.filter((a) => a.block_index === blockIndex);
   const segments = spliceAnnotations(text, blockAnnotations);
   // RN's Text can only nest more Text as inline children — a note glyph
@@ -166,6 +169,7 @@ function AnnotationToolbar({
   activeTool: ActiveTool;
   onToolChange: (tool: ActiveTool) => void;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.annotationToolbar} accessibilityRole="toolbar">
       {HIGHLIGHT_COLORS.map((color) => {
@@ -207,6 +211,7 @@ function SelectableParagraph({
   blockIndex: number;
   onSelectionSettled: (blockIndex: number, start: number, end: number) => void;
 }) {
+  const styles = useStyles();
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -233,6 +238,7 @@ function SelectableParagraph({
 }
 
 function QuizzesTab({ documentId }: { documentId: string }) {
+  const styles = useStyles();
   // Scoped by questions.document_id — a question's provenance, and the only
   // link between a lesson and a question. Lessons carry no tags of their
   // own, so "this lesson's questions" means exactly this.
@@ -262,6 +268,7 @@ function ScopeToggle({
   scope: FlashcardScopeFilter;
   onChange: (scope: FlashcardScopeFilter) => void;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.scopeToggle} accessibilityRole="radiogroup">
       {SCOPE_FILTERS.map((filter) => (
@@ -285,6 +292,7 @@ function ScopeToggle({
 
 /** Official vs personal, always paired with a word rather than colour alone. */
 function ScopeBadge({ scope }: { scope: FlashcardScope }) {
+  const styles = useStyles();
   return (
     <View style={styles.scopeBadge}>
       <Text style={styles.scopeBadgeText}>{scope === "official" ? "Official" : "Mine"}</Text>
@@ -293,6 +301,7 @@ function ScopeBadge({ scope }: { scope: FlashcardScope }) {
 }
 
 function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: () => void }) {
+  const styles = useStyles();
   const [front, setFront] = useState("");
   const [back, setBack] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -340,6 +349,7 @@ function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: 
 }
 
 function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => void }) {
+  const styles = useStyles();
   const [editing, setEditing] = useState(false);
   const [front, setFront] = useState(card.front_text);
   const [back, setBack] = useState(card.back_text);
@@ -468,6 +478,7 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
 }
 
 function FlashcardsTab({ documentId }: { documentId: string }) {
+  const styles = useStyles();
   const queryClient = useQueryClient();
   const [scope, setScope] = useState<FlashcardScopeFilter>("all");
   const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
@@ -810,6 +821,7 @@ function ReviewArticle({
   spansByBlock: Map<number, ClozeSpanState[]>;
   currentCardId: string | undefined;
 }) {
+  const styles = useStyles();
   if (!version) return <Text style={styles.hint}>Not processed yet.</Text>;
   if (version.status === "processing") return <Text style={styles.hint}>Processing...</Text>;
   if (version.status === "failed") {
@@ -858,6 +870,7 @@ function ReviewArticle({
 }
 
 function ReviewBar({ review }: { review: ReturnType<typeof useClozeReview> }) {
+  const styles = useStyles();
   if (review.isPending) {
     return (
       <View style={styles.reviewBar}>
@@ -952,6 +965,7 @@ function TocModal({
   scopeId: string;
   currentDocumentId: string;
 }) {
+  const styles = useStyles();
   const { data, isPending } = useQuery({
     queryKey: ["documents", scopeId],
     queryFn: () => getApiClient().listDocuments(scopeId),
@@ -990,6 +1004,7 @@ function NotesModal({
   onClose: () => void;
   documentId: string;
 }) {
+  const styles = useStyles();
   const [view, setView] = useState<NotesView>({ kind: "list" });
   const entries = useQuery({
     queryKey: ["notebook-entries"],
@@ -1059,6 +1074,8 @@ function NotesModal({
 }
 
 export default function LectureScreen() {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const { id, tab: tabParam } = useLocalSearchParams<{ id: string; tab?: string }>();
   const queryClient = useQueryClient();
   // Deep link support: navigating here with ?tab=review (e.g. from the
@@ -1520,7 +1537,7 @@ export default function LectureScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screenRoot: {
     flex: 1,
   },
@@ -2035,4 +2052,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.xs,
   },
-});
+}));

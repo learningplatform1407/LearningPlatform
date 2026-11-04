@@ -1,15 +1,17 @@
 import type { BankTreeChapter, BankTreeLesson, BankTreeSubChapter } from "@lp/api-client";
 import { sumBankStatsCounts } from "@lp/api-client";
 import { useQuery } from "@tanstack/react-query";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { BankStatsLine } from "@/lib/bank-stats-line";
 import { ExpandableRow } from "@/lib/expandable-row";
 import { QuestionBankList } from "@/lib/question-bank-list";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 function ProgressBadge({ answered, total }: { answered: number; total: number }) {
+  const styles = useStyles();
   if (total === 0) {
     return <Text style={styles.badgeHint}>no questions</Text>;
   }
@@ -39,6 +41,7 @@ function LessonRow({ lesson }: { lesson: BankTreeLesson }) {
 }
 
 function LessonList({ lessons }: { lessons: BankTreeLesson[] }) {
+  const styles = useStyles();
   if (lessons.length === 0) {
     return <Text style={styles.hint}>No lessons.</Text>;
   }
@@ -66,6 +69,7 @@ function SubChapterRow({ subChapter }: { subChapter: BankTreeSubChapter }) {
 }
 
 function ChapterRow({ chapter }: { chapter: BankTreeChapter }) {
+  const styles = useStyles();
   return (
     <ExpandableRow
       title={chapter.title}
@@ -86,6 +90,7 @@ function ChapterRow({ chapter }: { chapter: BankTreeChapter }) {
 }
 
 export default function QuestionBankScreen() {
+  const styles = useStyles();
   const tree = useQuery({
     queryKey: ["question-bank-tree"],
     queryFn: () => getApiClient().getQuestionBankTree(),
@@ -210,7 +215,7 @@ export default function QuestionBankScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -255,4 +260,4 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: colors.danger,
   },
-});
+}));

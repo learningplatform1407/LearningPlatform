@@ -7,7 +7,6 @@ import {
   Alert,
   Pressable,
   ScrollView,
-  StyleSheet,
   Switch,
   Text,
   TextInput,
@@ -17,7 +16,8 @@ import {
 import { getApiClient } from "@/lib/api-client";
 import { OptionResultRow, QuestionRevealPanel } from "@/lib/question-reveal";
 import { ExpandableRow } from "@/lib/expandable-row";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
 function describeError(err: unknown): string {
   if (err instanceof ApiClientError) {
@@ -65,6 +65,7 @@ function CheckboxRow({
   checked: boolean;
   onToggle: () => void;
 }) {
+  const styles = useStyles();
   return (
     <Pressable
       style={styles.checkboxRow}
@@ -94,6 +95,7 @@ function TopicPicker({
   topics: TopicSelection;
   onChange: (next: TopicSelection) => void;
 }) {
+  const styles = useStyles();
   const tree = useQuery({
     queryKey: ["question-bank-tree"],
     queryFn: () => getApiClient().getQuestionBankTree(),
@@ -194,6 +196,8 @@ function TopicPicker({
 }
 
 function StartForm({ onStarted }: { onStarted: () => void }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const api = getApiClient();
   const tags = useQuery({ queryKey: ["tags"], queryFn: () => api.listTags() });
   const [tagIds, setTagIds] = useState<string[]>([]);
@@ -379,6 +383,7 @@ function QuestionCard({
   onAnswer: (position: number, selected: string[]) => void;
   reveal: QuizQuestionResult | undefined;
 }) {
+  const styles = useStyles();
   const [selected, setSelected] = useState<string[]>(question.selected_option_ids ?? []);
   const answered = question.answered_at !== null || reveal !== undefined;
   // Under `immediate` an answer is final server-side. `reveal` only covers
@@ -449,6 +454,8 @@ function QuestionCard({
 }
 
 function Runner({ session, onFinished }: { session: QuizSession; onFinished: () => void }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const api = getApiClient();
   const queryClient = useQueryClient();
   // Seconds burned since the server snapshot we're rendering. Held as a
@@ -611,6 +618,7 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
 // --- results ---------------------------------------------------------------
 
 function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void }) {
+  const styles = useStyles();
   const api = getApiClient();
   const results = useQuery({
     queryKey: ["quiz-results", sessionId],
@@ -660,6 +668,7 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
 // --- history -----------------------------------------------------------------
 
 function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
+  const styles = useStyles();
   const api = getApiClient();
   const history = useQuery({
     queryKey: ["quiz-session-history"],
@@ -693,6 +702,7 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
 // --- screen ----------------------------------------------------------------
 
 export default function ExamsScreen() {
+  const styles = useStyles();
   const api = getApiClient();
   const queryClient = useQueryClient();
 
@@ -743,7 +753,7 @@ export default function ExamsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -999,4 +1009,4 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: colors.danger,
   },
-});
+}));
