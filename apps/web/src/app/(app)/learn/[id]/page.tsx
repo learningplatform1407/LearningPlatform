@@ -470,7 +470,7 @@ export default function LecturePage() {
                 >
                   {subChapter.chapter.title}
                 </Link>
-                {" / "}
+                {" · "}
                 {subChapter.title}
               </>
             ) : (

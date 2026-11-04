@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 
 import type { ClozeCard, ClozeRating, ExtractedContent } from "@lp/contracts";
 
@@ -164,15 +164,22 @@ export function ReviewTab({
       const state = stateOf(card);
       const isCurrent = card.id === current?.id;
       if (segment.hidden) {
+        // A card that swallows the space around its word would glue the
+        // placeholder to its neighbours; keep that space outside the gap.
+        const lead = /^\s*/.exec(segment.text)![0];
+        const trail = segment.text.trim() ? /\s*$/.exec(segment.text)![0] : "";
         return (
-          <span
-            key={i}
-            className={`${CLOZE_BASE} border-b-2 border-cloze bg-cloze-bg text-[0.88em] font-semibold whitespace-nowrap text-cloze ${
-              isCurrent ? "outline-2 outline-offset-2 outline-cloze" : ""
-            }`}
-          >
-            {GAP_TEXT}
-          </span>
+          <Fragment key={i}>
+            {lead}
+            <span
+              className={`${CLOZE_BASE} border-b-2 border-cloze bg-cloze-bg text-[0.88em] font-semibold whitespace-nowrap text-cloze ${
+                isCurrent ? "outline-2 outline-offset-2 outline-cloze" : ""
+              }`}
+            >
+              {GAP_TEXT}
+            </span>
+            {trail}
+          </Fragment>
         );
       }
       const tone =
