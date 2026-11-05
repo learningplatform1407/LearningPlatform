@@ -7,6 +7,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/figtree";
 import { Stack } from "expo-router";
+import { NavigationBar } from "expo-navigation-bar";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -31,6 +32,9 @@ function RootNavigator() {
   return (
     <>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+      {/* Android's own back/home bar stays hidden: the app's bottom notch is
+          the only bar. A swipe up from the edge brings it back briefly. */}
+      <NavigationBar hidden />
       <Stack
         screenOptions={{
           headerShown: false,

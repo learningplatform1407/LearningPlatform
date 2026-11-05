@@ -131,19 +131,22 @@ function QuestionCard({
         </Pressable>
       </View>
 
-      <View style={styles.optionList}>
-        {question.options.map((option, index) => (
-          <OptionChoice
-            key={option.id}
-            kind={question.kind}
-            index={index}
-            text={option.text}
-            checked={selected.includes(option.id)}
-            disabled={reveal !== null}
-            onPress={() => toggle(option.id)}
-          />
-        ))}
-      </View>
+      {/* Once checked, the graded answers below take the options' place
+          rather than repeating them underneath (as on web). */}
+      {!reveal && (
+        <View style={styles.optionList}>
+          {question.options.map((option, index) => (
+            <OptionChoice
+              key={option.id}
+              kind={question.kind}
+              index={index}
+              text={option.text}
+              checked={selected.includes(option.id)}
+              onPress={() => toggle(option.id)}
+            />
+          ))}
+        </View>
+      )}
 
       <Text style={styles.meta}>
         {question.kind === "single" ? "Single answer" : "Multiple answers"} ·{" "}
@@ -285,12 +288,13 @@ const useStyles = makeStyles((colors) => ({
     color: colors.accent,
   },
   list: {
-    gap: spacing.sm,
+    gap: spacing.lg,
   },
   card: {
     borderWidth: 0,
     borderRadius: 0,
     padding: spacing.md,
+    paddingTop: spacing.lg,
     gap: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.border,

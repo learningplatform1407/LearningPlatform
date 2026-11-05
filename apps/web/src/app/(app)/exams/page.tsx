@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QuizQuestionResult, QuizSession, QuizSessionQuestion } from "@lp/api-client";
 import { ApiClientError } from "@lp/api-client";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 import { Button } from "@/components/button";
 import { ExpandableRow } from "@/components/expandable-row";
@@ -28,6 +28,13 @@ function formatSeconds(total: number): string {
 }
 
 // --- start form --------------------------------------------------------
+
+// The server's bounds (services/api/app/quizzes/constants.py), checked here
+// so an empty or out-of-range field greys the button out instead of failing.
+const MIN_QUESTIONS = 1;
+const MAX_QUESTIONS = 100;
+const MIN_MINUTES = 1;
+const MAX_MINUTES = 240;
 
 type TopicSelection = {
   chapterIds: string[];
@@ -283,6 +290,9 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
     queryFn: () => api.getQuizAvailableCount(filter),
   });
   const availableCount = available.data?.available;
+  const countInvalid = !(questionCount >= MIN_QUESTIONS && questionCount <= MAX_QUESTIONS);
+  const durationInvalid =
+    timed && !(durationMinutes >= MIN_MINUTES && durationMinutes <= MAX_MINUTES);
 
   function toggleTag(id: string) {
     setTagIds((previous) =>
@@ -301,6 +311,7 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
         duration_seconds: timed ? durationMinutes * 60 : null,
         reveal_mode: revealMode,
       }),
+    onMutate: () => setError(null),
     onSuccess: onStarted,
     onError: (err) => setError(describeError(err)),
   });
@@ -346,6 +357,11 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
           onChange={(event) => setQuestionCount(Number(event.target.value))}
           className="field w-auto"
         />
+        {countInvalid && (
+          <span className="text-xs font-normal text-danger">
+            Between {MIN_QUESTIONS} and {MAX_QUESTIONS} questions.
+          </span>
+        )}
       </label>
 
       <label className="flex items-center gap-sm py-1 text-toc font-semibold text-foreground">
@@ -367,6 +383,11 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
             onChange={(event) => setDurationMinutes(Number(event.target.value))}
             className="field w-auto"
           />
+          {durationInvalid && (
+            <span className="text-xs font-normal text-danger">
+              Between {MIN_MINUTES} and {MAX_MINUTES} minutes.
+            </span>
+          )}
         </label>
       )}
 
@@ -391,7 +412,7 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
       <Button
         type="button"
         onClick={() => start.mutate()}
-        disabled={start.isPending || availableCount === 0}
+        disabled={start.isPending || availableCount === 0 || countInvalid || durationInvalid}
       >
         {start.isPending ? "Starting..." : "Start quiz"}
       </Button>
@@ -421,6 +442,10 @@ function QuestionCard({
   // while the question is still locked — without `answered` here the Save
   // button stays live and every click is a guaranteed already_answered 409.
   const locked = revealMode === "immediate" && answered;
+  // Under on_finish a saved answer can still be changed; the label says when
+  // the ticks on screen are no longer what the server holds.
+  const saved = question.selected_option_ids ?? [];
+  const changed = saved.length !== selected.length || selected.some((id) => !saved.includes(id));
 
   function toggle(optionId: string) {
     if (question.kind === "single") {
@@ -472,7 +497,7 @@ function QuestionCard({
           disabled={disabled || selected.length === 0}
           onClick={() => onAnswer(question.position, selected)}
         >
-          {answered ? "Answer saved ✓" : "Save answer"}
+          {!answered ? "Save answer" : changed ? "Update answer" : "Answer saved ✓"}
         </Button>
       )}
     </div>
@@ -496,6 +521,10 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
   const [reveals, setReveals] = useState<Record<number, QuizQuestionResult>>({});
   const [error, setError] = useState<string | null>(null);
 
+  // Time ran out: the server has expired the attempt, so show its results
+  // rather than dropping back to an empty start form.
+  const timeUp = useEffectEvent(() => onFinished());
+
   // Only an ACTIVE session's clock is running. While paused the server has
   // banked the elapsed time, so remaining_seconds is already the frozen
   // answer — ticking on top of it counts down time the user is not being
@@ -504,24 +533,26 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
     const total = session.remaining_seconds;
     if (total === null || session.status !== "active") return;
 
-    const startedAtMs = Date.parse(session.server_time);
+    // Counted from when this snapshot arrived, not from `server_time`: the
+    // device clock can be minutes off the server's, and that difference used
+    // to come straight off (or on top of) the timer.
+    const receivedAtMs = Date.now();
     const id = setInterval(() => {
       // Wall clock, not a tick count, so a throttled background tab catches
       // up instead of drifting slow. Reading it here is fine — the purity
       // rule only forbids it during render.
-      const burned = Math.floor((Date.now() - startedAtMs) / 1000);
+      const burned = Math.floor((Date.now() - receivedAtMs) / 1000);
       setElapsed(burned);
-      if (total - burned <= 0) {
-        // Hit zero: stop ticking and re-read, which is the touch that makes
-        // the server finalise it (lazy expiry). Without this the runner sits
-        // at 0:00 and every further click just errors.
+      // One second past zero: remaining_seconds is rounded down, so at 0:00
+      // the server can still be a fraction of a second short of expiring it.
+      // Reading the results is the touch that makes it finalise (lazy expiry).
+      if (total - burned < 0) {
         clearInterval(id);
-        queryClient.invalidateQueries({ queryKey: ["quiz-session-current"] });
-        queryClient.invalidateQueries({ queryKey: ["quiz-session-history"] });
+        timeUp();
       }
     }, 1000);
     return () => clearInterval(id);
-  }, [session.remaining_seconds, session.status, session.server_time, queryClient]);
+  }, [session.remaining_seconds, session.status, session.server_time]);
 
   const remainingAtFetch = session.remaining_seconds;
   const remaining =
@@ -539,6 +570,7 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
   const answer = useMutation({
     mutationFn: ({ position, selected }: { position: number; selected: string[] }) =>
       api.answerQuizQuestion(session.id, position, selected),
+    onMutate: () => setError(null),
     onSuccess: (result, variables) => {
       if ("outcome" in result) {
         setReveals((prev) => ({ ...prev, [variables.position]: result }));
@@ -550,29 +582,45 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
 
   const pause = useMutation({
     mutationFn: () => api.pauseQuizSession(session.id),
+    onMutate: () => setError(null),
     onSuccess: refetchSession,
     onError: (err) => setError(describeError(err)),
   });
 
   const resume = useMutation({
     mutationFn: () => api.resumeQuizSession(session.id),
+    onMutate: () => setError(null),
     onSuccess: refetchSession,
     onError: (err) => setError(describeError(err)),
   });
 
   const cancel = useMutation({
     mutationFn: () => api.cancelQuizSession(session.id),
+    onMutate: () => setError(null),
     onSuccess: onFinished,
     onError: (err) => setError(describeError(err)),
   });
 
   const submit = useMutation({
     mutationFn: () => api.submitQuizSession(session.id),
+    onMutate: () => setError(null),
     onSuccess: onFinished,
     onError: (err) => setError(describeError(err)),
   });
 
   const isPaused = session.status === "paused";
+  const unanswered = session.questions.filter((question) => question.answered_at === null).length;
+
+  function confirmSubmit() {
+    if (
+      unanswered === 0 ||
+      confirm(
+        `${unanswered} question${unanswered === 1 ? " is" : "s are"} not answered and will score 0. Submit anyway?`,
+      )
+    ) {
+      submit.mutate();
+    }
+  }
 
   return (
     <div className="mt-lg flex w-full flex-col gap-md">
@@ -609,27 +657,28 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
         </p>
       )}
 
-      {isPaused ? (
+      {isPaused && (
         <p className="text-sm text-muted-foreground">Paused — resume to see the questions again.</p>
-      ) : (
-        <div className="flex flex-col gap-lg">
-          {session.questions.map((question) => (
-            <QuestionCard
-              key={question.position}
-              question={question}
-              revealMode={session.reveal_mode}
-              disabled={answer.isPending}
-              reveal={reveals[question.position]}
-              onAnswer={(position, selected) => answer.mutate({ position, selected })}
-            />
-          ))}
-        </div>
       )}
+      {/* Hidden, not unmounted, while paused: ticks not saved yet (on_finish)
+          would otherwise be lost. The server still refuses answers then. */}
+      <div className="flex flex-col gap-lg" hidden={isPaused}>
+        {session.questions.map((question) => (
+          <QuestionCard
+            key={question.position}
+            question={question}
+            revealMode={session.reveal_mode}
+            disabled={answer.isPending}
+            reveal={reveals[question.position]}
+            onAnswer={(position, selected) => answer.mutate({ position, selected })}
+          />
+        ))}
+      </div>
 
       {/* Submitting while paused is a real transition (paused --> completed),
           and forcing a resume first would restart the clock on a timed quiz
           the user has already decided they are done with. */}
-      <Button type="button" onClick={() => submit.mutate()} disabled={submit.isPending}>
+      <Button type="button" onClick={confirmSubmit} disabled={submit.isPending}>
         {submit.isPending ? "Submitting..." : "Submit quiz"}
       </Button>
     </div>
@@ -747,6 +796,7 @@ export default function QuizzesPage() {
           const session = current.data;
           return (
             <Runner
+              key={session.id}
               session={session}
               onFinished={() => {
                 setViewingResultsFor(session.id);

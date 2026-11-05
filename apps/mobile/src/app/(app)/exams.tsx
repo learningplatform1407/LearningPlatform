@@ -1,7 +1,7 @@
 import type { QuizQuestionResult, QuizSession, QuizSessionQuestion } from "@lp/api-client";
 import { ApiClientError } from "@lp/api-client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -42,6 +42,11 @@ type TopicSelection = {
   subChapterIds: string[];
   documentIds: string[];
 };
+
+const MIN_QUESTIONS = 1;
+const MAX_QUESTIONS = 100;
+const MIN_MINUTES = 1;
+const MAX_MINUTES = 240;
 
 const EMPTY_TOPICS: TopicSelection = { chapterIds: [], subChapterIds: [], documentIds: [] };
 
@@ -223,6 +228,10 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
   const availableCount = available.data?.available;
   const parsedCount = Number.parseInt(questionCount, 10) || 0;
   const parsedDuration = Number.parseInt(durationMinutes, 10) || 0;
+  // The server's bounds (services/api/app/quizzes/constants.py), checked
+  // here so an empty or 0 field greys the button out instead of failing.
+  const countInvalid = parsedCount < MIN_QUESTIONS || parsedCount > MAX_QUESTIONS;
+  const durationInvalid = timed && (parsedDuration < MIN_MINUTES || parsedDuration > MAX_MINUTES);
 
   function toggleTag(id: string) {
     setTagIds((previous) =>
@@ -241,9 +250,12 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
         duration_seconds: timed ? parsedDuration * 60 : null,
         reveal_mode: revealMode,
       }),
+    onMutate: () => setError(null),
     onSuccess: onStarted,
     onError: (err) => setError(describeError(err)),
   });
+
+  const startDisabled = start.isPending || availableCount === 0 || countInvalid || durationInvalid;
 
   return (
     <View style={styles.form}>
@@ -291,6 +303,11 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
           value={questionCount}
           onChangeText={setQuestionCount}
         />
+        {countInvalid && (
+          <Text style={styles.error}>
+            Between {MIN_QUESTIONS} and {MAX_QUESTIONS} questions.
+          </Text>
+        )}
       </View>
 
       <Pressable
@@ -311,6 +328,11 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
             value={durationMinutes}
             onChangeText={setDurationMinutes}
           />
+          {durationInvalid && (
+            <Text style={styles.error}>
+              Between {MIN_MINUTES} and {MAX_MINUTES} minutes.
+            </Text>
+          )}
         </View>
       )}
 
@@ -350,13 +372,9 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
       {error && <Text style={styles.error}>{error}</Text>}
 
       <Pressable
-        style={[
-          styles.button,
-          styles.buttonPrimary,
-          (start.isPending || availableCount === 0) && styles.buttonDisabled,
-        ]}
+        style={[styles.button, styles.buttonPrimary, startDisabled && styles.buttonDisabled]}
         onPress={() => start.mutate()}
-        disabled={start.isPending || availableCount === 0}
+        disabled={startDisabled}
         accessibilityRole="button"
       >
         {start.isPending ? (
@@ -392,6 +410,10 @@ function QuestionCard({
   // while the question is still locked -- without `answered` here the Save
   // button stays live and every press is a guaranteed already_answered 409.
   const locked = revealMode === "immediate" && answered;
+  // Under on_finish a saved answer can still be changed; the label says when
+  // the ticks on screen are no longer what the server holds.
+  const saved = question.selected_option_ids ?? [];
+  const changed = saved.length !== selected.length || selected.some((id) => !saved.includes(id));
 
   function toggle(optionId: string) {
     if (locked) return;
@@ -409,19 +431,21 @@ function QuestionCard({
       <Text style={styles.prompt}>
         {question.position + 1}. {question.prompt}
       </Text>
-      <View style={styles.optionList}>
-        {question.options.map((option, index) => (
-          <OptionChoice
-            key={option.id}
-            kind={question.kind}
-            index={index}
-            text={option.text}
-            checked={selected.includes(option.id)}
-            disabled={disabled || locked}
-            onPress={() => toggle(option.id)}
-          />
-        ))}
-      </View>
+      {!reveal && (
+        <View style={styles.optionList}>
+          {question.options.map((option, index) => (
+            <OptionChoice
+              key={option.id}
+              kind={question.kind}
+              index={index}
+              text={option.text}
+              checked={selected.includes(option.id)}
+              disabled={disabled || locked}
+              onPress={() => toggle(option.id)}
+            />
+          ))}
+        </View>
+      )}
       {reveal ? (
         <QuestionRevealPanel reveal={reveal} />
       ) : locked ? (
@@ -440,7 +464,9 @@ function QuestionCard({
           onPress={() => onAnswer(question.position, selected)}
           accessibilityRole="button"
         >
-          <Text style={styles.buttonText}>{answered ? "Answer saved ✓" : "Save answer"}</Text>
+          <Text style={styles.buttonText}>
+            {!answered ? "Save answer" : changed ? "Update answer" : "Answer saved ✓"}
+          </Text>
         </Pressable>
       )}
     </View>
@@ -465,22 +491,30 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
   const [reveals, setReveals] = useState<Record<number, QuizQuestionResult>>({});
   const [error, setError] = useState<string | null>(null);
 
+  // Time ran out: the server has expired the attempt, so show its results
+  // rather than dropping back to an empty start form.
+  const timeUp = useEffectEvent(() => onFinished());
+
   useEffect(() => {
     const total = session.remaining_seconds;
     if (total === null || session.status !== "active") return;
 
-    const startedAtMs = Date.parse(session.server_time);
+    // Counted from when this snapshot arrived on the phone, not from
+    // `server_time`: the phone's clock can be minutes off the server's, and
+    // that difference used to come straight off (or on top of) the timer.
+    const receivedAtMs = Date.now();
     const id = setInterval(() => {
-      const burned = Math.floor((Date.now() - startedAtMs) / 1000);
+      const burned = Math.floor((Date.now() - receivedAtMs) / 1000);
       setElapsed(burned);
-      if (total - burned <= 0) {
+      // One second past zero: remaining_seconds is rounded down, so at 0:00
+      // the server can still be a fraction of a second short of expiring it.
+      if (total - burned < 0) {
         clearInterval(id);
-        queryClient.invalidateQueries({ queryKey: ["quiz-session-current"] });
-        queryClient.invalidateQueries({ queryKey: ["quiz-session-history"] });
+        timeUp();
       }
     }, 1000);
     return () => clearInterval(id);
-  }, [session.remaining_seconds, session.status, session.server_time, queryClient]);
+  }, [session.remaining_seconds, session.status, session.server_time]);
 
   const remainingAtFetch = session.remaining_seconds;
   const remaining =
@@ -498,6 +532,7 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
   const answer = useMutation({
     mutationFn: ({ position, selected }: { position: number; selected: string[] }) =>
       api.answerQuizQuestion(session.id, position, selected),
+    onMutate: () => setError(null),
     onSuccess: (result, variables) => {
       if ("outcome" in result) {
         setReveals((prev) => ({ ...prev, [variables.position]: result }));
@@ -509,29 +544,50 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
 
   const pause = useMutation({
     mutationFn: () => api.pauseQuizSession(session.id),
+    onMutate: () => setError(null),
     onSuccess: refetchSession,
     onError: (err) => setError(describeError(err)),
   });
 
   const resume = useMutation({
     mutationFn: () => api.resumeQuizSession(session.id),
+    onMutate: () => setError(null),
     onSuccess: refetchSession,
     onError: (err) => setError(describeError(err)),
   });
 
   const cancel = useMutation({
     mutationFn: () => api.cancelQuizSession(session.id),
+    onMutate: () => setError(null),
     onSuccess: onFinished,
     onError: (err) => setError(describeError(err)),
   });
 
   const submit = useMutation({
     mutationFn: () => api.submitQuizSession(session.id),
+    onMutate: () => setError(null),
     onSuccess: onFinished,
     onError: (err) => setError(describeError(err)),
   });
 
   const isPaused = session.status === "paused";
+
+  const unanswered = session.questions.filter((question) => question.answered_at === null).length;
+
+  function confirmSubmit() {
+    if (unanswered === 0) {
+      submit.mutate();
+      return;
+    }
+    Alert.alert(
+      "Submit the quiz?",
+      `${unanswered} question${unanswered === 1 ? " is" : "s are"} not answered and will score 0.`,
+      [
+        { text: "Keep going", style: "cancel" },
+        { text: "Submit", onPress: () => submit.mutate() },
+      ],
+    );
+  }
 
   function confirmCancel() {
     Alert.alert("Cancel this attempt?", "It cannot be resumed.", [
@@ -573,29 +629,28 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      {isPaused ? (
-        <Text style={styles.hint}>Paused — resume to see the questions again.</Text>
-      ) : (
-        <View style={styles.list}>
-          {session.questions.map((question) => (
-            <QuestionCard
-              key={question.position}
-              question={question}
-              revealMode={session.reveal_mode}
-              disabled={answer.isPending}
-              reveal={reveals[question.position]}
-              onAnswer={(position, selected) => answer.mutate({ position, selected })}
-            />
-          ))}
-        </View>
-      )}
+      {isPaused && <Text style={styles.hint}>Paused — resume to see the questions again.</Text>}
+      {/* Hidden, not unmounted, while paused: ticks not saved yet (on_finish)
+          would otherwise be lost. The server still refuses answers then. */}
+      <View style={[styles.list, isPaused && styles.hidden]}>
+        {session.questions.map((question) => (
+          <QuestionCard
+            key={question.position}
+            question={question}
+            revealMode={session.reveal_mode}
+            disabled={answer.isPending}
+            reveal={reveals[question.position]}
+            onAnswer={(position, selected) => answer.mutate({ position, selected })}
+          />
+        ))}
+      </View>
 
       {/* Submitting while paused is a real transition (paused -> completed),
           and forcing a resume first would restart the clock on a timed quiz
           the user has already decided they're done with. */}
       <Pressable
         style={[styles.button, styles.buttonPrimary, submit.isPending && styles.buttonDisabled]}
-        onPress={() => submit.mutate()}
+        onPress={confirmSubmit}
         disabled={submit.isPending}
         accessibilityRole="button"
       >
@@ -731,6 +786,7 @@ export default function ExamsScreen() {
         <Text style={styles.hint}>Loading...</Text>
       ) : current.data ? (
         <Runner
+          key={current.data.id}
           session={current.data}
           onFinished={() => {
             setViewingResultsFor(current.data!.id);
@@ -995,6 +1051,9 @@ const useStyles = makeStyles((colors) => ({
     paddingHorizontal: 0,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+  },
+  hidden: {
+    display: "none",
   },
   hint: {
     fontSize: fontSizes.sm,

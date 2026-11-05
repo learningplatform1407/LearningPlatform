@@ -360,7 +360,7 @@ test("answering keeps the sheet open, showing the score and reasoning", async ()
   // No date is sent: the server decides which day an answer belongs to, so a
   // form left open across midnight cannot post yesterday.
   await waitFor(() => expect(mockAnswerDailyQuestion).toHaveBeenCalledWith("q1", ["o1"]));
-  expect(await screen.findByText("correct — 2/2 points")).toBeTruthy();
+  expect(await screen.findByText("Answers · correct — 2/2 points")).toBeTruthy();
   expect(screen.getByText("True. Divisible only by 1 and itself.")).toBeTruthy();
 });
 
@@ -398,7 +398,7 @@ test("a padding day from a neighbouring month is pressable like any other", asyn
   fireEvent.press(await screen.findByLabelText("Tuesday, September 29, 2026: Answered correctly"));
 
   await waitFor(() => expect(mockGetDailyQuestionForDate).toHaveBeenCalledWith("2026-09-29"));
-  expect(await screen.findByText("correct — 2/2 points")).toBeTruthy();
+  expect(await screen.findByText("Answers · correct — 2/2 points")).toBeTruthy();
 });
 
 test("closing an empty-bank day does not silence a question published later", async () => {

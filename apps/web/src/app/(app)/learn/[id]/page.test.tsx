@@ -820,7 +820,7 @@ describe("LecturePage", () => {
     await user.click(screen.getByRole("button", { name: "← Back to quizzes" }));
     expect(screen.getByRole("tab", { name: "Quizzes" })).toHaveAttribute("aria-selected", "true");
     // Back to the same question, still showing its answer.
-    expect(screen.getByText("correct — 4/4 points")).toBeVisible();
+    expect(screen.getByText("Answers · correct — 4/4 points")).toBeVisible();
     expect(screen.queryByRole("button", { name: "← Back to quizzes" })).not.toBeInTheDocument();
   });
 

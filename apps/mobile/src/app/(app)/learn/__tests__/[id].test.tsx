@@ -1416,7 +1416,7 @@ test("See in lesson paints a checked question's source and the back pill returns
 
   fireEvent.press(screen.getByText("← Back to quizzes"));
   // The same question, still showing its answer.
-  expect(await screen.findByText("correct — 4/4 points")).toBeTruthy();
+  expect(await screen.findByText("Answers · correct — 4/4 points")).toBeTruthy();
   expect(screen.queryByText("← Back to quizzes")).toBeNull();
 });
 
