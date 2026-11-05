@@ -16,7 +16,9 @@ export default function SignupPage() {
   if (state.checkEmail) {
     return (
       <AuthLayout>
-        <h1 className="text-2xl font-semibold text-foreground">Check your email</h1>
+        <h1 className="text-[26px] leading-[1.15] font-extrabold text-foreground">
+          Check your email
+        </h1>
         <p className="mt-md text-sm text-muted-foreground">
           We sent you a confirmation link. Follow it to finish creating your account.
         </p>
@@ -26,26 +28,20 @@ export default function SignupPage() {
 
   return (
     <AuthLayout>
-      <h1 className="text-2xl font-semibold text-foreground">Sign up</h1>
+      <h1 className="text-[26px] leading-[1.15] font-extrabold text-foreground">Sign up</h1>
       <form action={formAction} className="mt-lg flex flex-col gap-md">
-        <label className="flex flex-col gap-xs text-sm text-foreground">
+        <label className="flex flex-col gap-xs text-sm font-semibold text-foreground">
           Email
-          <input
-            type="email"
-            name="email"
-            required
-            autoComplete="email"
-            className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
+          <input type="email" name="email" required autoComplete="email" className="field" />
         </label>
-        <label className="flex flex-col gap-xs text-sm text-foreground">
+        <label className="flex flex-col gap-xs text-sm font-semibold text-foreground">
           Password
           <input
             type="password"
             name="password"
             required
             autoComplete="new-password"
-            className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="field"
           />
         </label>
         {state.error && (
@@ -59,7 +55,7 @@ export default function SignupPage() {
       </form>
       <p className="mt-md text-sm text-muted-foreground">
         Already have an account?{" "}
-        <Link href="/login" className="text-primary hover:underline">
+        <Link href="/login" className="text-accent underline underline-offset-2">
           Log in
         </Link>
       </p>

@@ -1,14 +1,17 @@
 import type { MeResponse } from "@lp/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 const LANGUAGES = [{ value: "en", label: "English" }] as const;
 
 export default function LanguageSettingsScreen() {
+  const styles = useStyles();
   const queryClient = useQueryClient();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
@@ -46,7 +49,7 @@ export default function LanguageSettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Languages</Text>
+      <ScreenHeader kicker="Settings" title="Languages" />
 
       <View style={styles.segmented}>
         {LANGUAGES.map((option) => (
@@ -81,7 +84,7 @@ export default function LanguageSettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     padding: spacing.xl,
@@ -91,17 +94,11 @@ const styles = StyleSheet.create({
   centered: {
     justifyContent: "center",
   },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
-  },
   segmented: {
     flexDirection: "row",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 999,
     padding: spacing.xs / 2,
     alignSelf: "flex-start",
   },
@@ -122,7 +119,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.medium,
   },
   saveButton: {
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",
@@ -146,4 +143,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

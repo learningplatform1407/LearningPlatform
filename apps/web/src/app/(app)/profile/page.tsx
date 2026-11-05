@@ -5,7 +5,6 @@ import { computeProfileBadges } from "@lp/api-client";
 import { formatMonthYear } from "@lp/ui";
 import Link from "next/link";
 
-import { Card } from "@/components/card";
 import { MetricBarChart } from "@/components/metric-bar-chart";
 import { PageMain } from "@/components/page-main";
 import { StatTile } from "@/components/stat-tile";
@@ -47,9 +46,9 @@ export default function ProfilePage() {
   const badges = statsQuery.data ? computeProfileBadges(statsQuery.data) : null;
 
   return (
-    <PageMain>
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-md">
+    <PageMain width="reading">
+      <div className="flex items-end justify-between pt-[30px]">
+        <div className="flex items-end gap-md">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-lg font-medium text-muted-foreground">
             {data.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element -- external Supabase Storage URL, not worth next/image config for a 64px thumbnail
@@ -58,11 +57,12 @@ export default function ProfilePage() {
               <span>{(data.display_name ?? data.email ?? "?").slice(0, 1).toUpperCase()}</span>
             )}
           </div>
-          <div className="flex flex-col">
-            <span className="text-xl font-semibold text-foreground">
+          <div className="flex min-w-0 flex-col">
+            <p className="label-caps m-0">Profile</p>
+            <h1 className="mt-1 text-[clamp(26px,4vw,34px)] leading-[1.15] font-extrabold break-words text-foreground">
               {data.display_name ?? data.email ?? "Unnamed"}
-            </span>
-            <span className="text-sm text-muted-foreground">
+            </h1>
+            <span className="text-toc font-semibold text-muted-foreground">
               Joined {formatMonthYear(data.created_at)}
             </span>
           </div>
@@ -71,7 +71,7 @@ export default function ProfilePage() {
           href="/settings"
           aria-label="Settings"
           title="Settings"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-dot hover:bg-muted"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -98,12 +98,12 @@ export default function ProfilePage() {
 
       <Link
         href="/settings/profile"
-        className="mt-md inline-block w-fit rounded-lg border border-border bg-background px-md py-sm text-sm font-semibold text-foreground hover:bg-muted"
+        className="mt-md inline-block w-fit rounded-md border border-border bg-background px-md py-[9px] text-ui font-bold text-foreground hover:bg-muted"
       >
         Edit Profile
       </Link>
 
-      <section className="mt-lg">
+      <section className="mt-xl">
         {statsQuery.isPending && <p className="text-sm text-muted-foreground">Loading stats...</p>}
         {statsQuery.data && (
           <div className="flex flex-col gap-lg">
@@ -130,9 +130,7 @@ export default function ProfilePage() {
             </div>
 
             <div>
-              <h2 className="mb-xs text-sm font-medium text-muted-foreground">
-                Accuracy &amp; averages
-              </h2>
+              <h2 className="label-caps mb-sm">Accuracy &amp; averages</h2>
               <MetricBarChart
                 metrics={[
                   { label: "Exam average", percent: statsQuery.data.exam_average_score_percent },
@@ -146,8 +144,8 @@ export default function ProfilePage() {
 
             {badges && (
               <div>
-                <h2 className="mb-xs text-sm font-medium text-muted-foreground">Badges</h2>
-                <Card className="flex flex-wrap gap-lg p-md">
+                <h2 className="label-caps mb-sm">Badges</h2>
+                <div className="flex flex-wrap gap-lg border-t border-border pt-md">
                   {badges.map((badge) => (
                     <div
                       key={badge.id}
@@ -157,16 +155,20 @@ export default function ProfilePage() {
                     >
                       <div
                         className={`flex h-16 w-16 items-center justify-center rounded-full border-2 text-2xl ${
-                          badge.earned ? "border-primary bg-primary/10" : "border-border opacity-40"
+                          badge.earned ? "border-accent bg-cloze-bg" : "border-border opacity-40"
                         }`}
                       >
                         <span aria-hidden="true">{badge.emoji}</span>
                       </div>
-                      <span className="text-xs font-medium text-foreground">{badge.label}</span>
-                      <span className="text-xs text-muted-foreground">{badge.description}</span>
+                      <span className="text-caption leading-tight font-bold text-foreground">
+                        {badge.label}
+                      </span>
+                      <span className="text-xs leading-snug text-muted-foreground">
+                        {badge.description}
+                      </span>
                     </div>
                   ))}
-                </Card>
+                </div>
               </div>
             )}
           </div>

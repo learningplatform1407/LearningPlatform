@@ -1,12 +1,15 @@
 import type { MeResponse } from "@lp/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, Switch, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 export default function NotificationsSettingsScreen() {
+  const styles = useStyles();
   const queryClient = useQueryClient();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
@@ -44,7 +47,7 @@ export default function NotificationsSettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Notifications</Text>
+      <ScreenHeader kicker="Settings" title="Notifications" />
 
       <View style={styles.row}>
         <Text style={styles.rowLabel}>Enable notifications</Text>
@@ -67,7 +70,7 @@ export default function NotificationsSettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     padding: spacing.xl,
@@ -76,12 +79,6 @@ const styles = StyleSheet.create({
   },
   centered: {
     justifyContent: "center",
-  },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
   },
   row: {
     flexDirection: "row",
@@ -93,7 +90,7 @@ const styles = StyleSheet.create({
     color: colors.foreground,
   },
   saveButton: {
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",
@@ -117,4 +114,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

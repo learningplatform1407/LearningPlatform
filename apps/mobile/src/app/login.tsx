@@ -1,11 +1,13 @@
 import { Link } from "expo-router";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
 
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
 import { supabase } from "@/lib/supabase";
+import { makeStyles } from "@/lib/theme-context";
 
 export default function LoginScreen() {
+  const styles = useStyles();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     justifyContent: "center",
@@ -84,14 +86,17 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 10,
     padding: spacing.sm,
-    fontSize: fontSizes.base,
+    fontSize: 15,
     color: colors.foreground,
+    backgroundColor: colors.background,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
   button: {
     backgroundColor: colors.primary,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     alignItems: "center",
@@ -113,4 +118,4 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: fontWeights.medium,
   },
-});
+}));

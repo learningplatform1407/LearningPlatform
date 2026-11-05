@@ -62,15 +62,15 @@ export function DailyQuestionRail({
 
   return (
     <div className="flex w-full flex-col">
-      <h2 className="text-sm font-semibold text-foreground">Question of the day</h2>
-      <p className="mt-xs text-xs text-muted-foreground">{summarise(today)}</p>
+      <h2 className="label-caps">Question of the day</h2>
+      <p className="mt-xs text-caption font-semibold text-muted-foreground">{summarise(today)}</p>
 
       <div className="mt-md flex items-center justify-between">
         <button
           type="button"
           aria-label="Previous month"
           onClick={() => setMonth(shiftMonth(month, -1))}
-          className="rounded-md px-sm py-xs text-sm text-muted-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="rounded-md px-sm py-xs text-sm text-muted-foreground hover:bg-muted"
         >
           <span aria-hidden="true">«</span>
         </button>
@@ -82,7 +82,7 @@ export function DailyQuestionRail({
           // for a learner, so paging forward would only show an empty grid.
           disabled={month >= currentMonth}
           onClick={() => setMonth(shiftMonth(month, 1))}
-          className="rounded-md px-sm py-xs text-sm text-muted-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-40"
+          className="rounded-md px-sm py-xs text-sm text-muted-foreground hover:bg-muted disabled:opacity-40"
         >
           <span aria-hidden="true">»</span>
         </button>
@@ -115,7 +115,7 @@ export function DailyQuestionRail({
                 key={cell.date}
                 aria-hidden="true"
                 className={`aspect-square rounded-full py-xs text-center text-xs ${
-                  cell.inMonth ? "text-muted-foreground" : "text-muted-foreground/40"
+                  cell.inMonth ? "text-muted-foreground" : "text-muted-foreground font-normal"
                 }`}
               >
                 {cell.dayOfMonth}
@@ -129,11 +129,11 @@ export function DailyQuestionRail({
               type="button"
               aria-label={dayLabel(cell.date, row, cell.isToday)}
               onClick={() => onOpenDay(cell.date)}
-              className={`aspect-square rounded-full py-xs text-center text-xs font-medium hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/30 ${
+              className={`aspect-square rounded-full py-xs text-center text-xs font-medium hover:bg-muted ${
                 cell.isToday
                   ? "bg-primary font-semibold text-primary-foreground hover:bg-primary/90"
                   : (mark?.className ?? "text-foreground")
-              } ${cell.inMonth ? "" : "opacity-50"}`}
+              }`}
             >
               {cell.dayOfMonth}
               {mark && (
@@ -168,10 +168,10 @@ export function DailyQuestionCard({ today, onOpen }: { today: DailyQuestion; onO
       type="button"
       interactive
       onClick={onOpen}
-      className="block p-lg text-left lg:hidden"
+      className="block px-md py-3.5 text-left lg:hidden"
     >
-      <p className="text-lg font-semibold text-foreground">Question of the day</p>
-      <p className="mt-xs text-sm text-muted-foreground">{summarise(today)}</p>
+      <p className="text-card leading-snug font-extrabold text-foreground">Question of the day</p>
+      <p className="mt-xs text-toc leading-snug text-muted-foreground">{summarise(today)}</p>
     </Card>
   );
 }

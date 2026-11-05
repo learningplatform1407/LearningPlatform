@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, aliased
 
 from app.common.errors import ApiError, FieldError
 from app.documents.models import Document
+from app.progress.models import QuestionFavourite
 from app.questions.constants import (
     MAX_FILTER_TAGS,
     MAX_IMPORT_QUESTIONS,
@@ -43,6 +44,7 @@ _REQUIRED_QUESTION_FIELDS = frozenset(
         "options",
         "correct_option_ids",
         "rationales",
+        "source_quotes",
         "difficulty",
         "status",
     }
@@ -119,6 +121,37 @@ def _document_error(db: Session, document_id: uuid.UUID | None) -> tuple[str, st
     if document_id is None or db.get(Document, document_id) is not None:
         return None
     return ("document_id", f"No lesson exists with id '{document_id}'")
+
+
+def _normalise(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _source_errors(
+    db: Session, document_id: uuid.UUID | None, quotes: list[str]
+) -> list[tuple[str, str]]:
+    """Each source quote must be text the lesson actually contains, or "See
+    in lesson" would point at nothing. Whitespace is compared loosely (line
+    breaks in an import file are not a mismatch). A lesson whose text isn't
+    ready yet can't be checked, so its quotes are accepted as written."""
+    if not quotes:
+        return []
+    if document_id is None:
+        return [("source_quotes", "Source quotes need the question to belong to a lesson")]
+    document = db.get(Document, document_id)
+    version = document.current_version if document is not None else None
+    if version is None or version.status != "ready":
+        return []
+    blocks = (version.extracted_content or {}).get("blocks", [])
+    texts = [_normalise(block.get("text") or "") for block in blocks]
+    errors: list[tuple[str, str]] = []
+    for quote in quotes:
+        wanted = _normalise(quote)
+        if not wanted:
+            errors.append(("source_quotes", "A source quote must not be empty"))
+        elif not any(wanted in text for text in texts):
+            errors.append(("source_quotes", f"Not found in the lesson text: {quote[:60]!r}"))
+    return errors
 
 
 def _resolve_tags(
@@ -205,6 +238,8 @@ def create_question(db: Session, created_by: uuid.UUID, data: QuestionCreateRequ
     document_error = _document_error(db, data.document_id)
     if document_error is not None:
         errors.append(document_error)
+    else:
+        errors.extend(_source_errors(db, data.document_id, data.source_quotes))
     if errors:
         raise ApiError(
             422,
@@ -267,10 +302,26 @@ def update_question(db: Session, question_id: uuid.UUID, data: QuestionUpdateReq
     if data.tags is not None:
         tags, tag_errors = _resolve_tags(db, data.tags, allow_new=False)
         errors.extend(tag_errors)
+    document_error = None
     if "document_id" in data.model_fields_set:
         document_error = _document_error(db, data.document_id)
         if document_error is not None:
             errors.append(document_error)
+    # Re-checked when either side changes: new quotes, or a move to another
+    # lesson that might not contain the old ones.
+    if document_error is None and (
+        "source_quotes" in data.model_fields_set or "document_id" in data.model_fields_set
+    ):
+        errors.extend(
+            _source_errors(
+                db,
+                data.document_id
+                if "document_id" in data.model_fields_set
+                else question.document_id,
+                (data.source_quotes if data.source_quotes is not None else question.source_quotes)
+                or [],
+            )
+        )
 
     updates = data.model_dump(exclude_unset=True, exclude={"tags"})
     errors.extend(
@@ -429,6 +480,7 @@ def list_published_questions(
     limit: int,
     offset: int,
     unassigned: bool = False,
+    favourites_of: uuid.UUID | None = None,
 ) -> tuple[list[Question], dict[uuid.UUID, list[Tag]]]:
     """Backs the student-facing bank browse. Published questions only, and
     the caller must shape these with `QuestionBankItem`, which omits the
@@ -440,6 +492,14 @@ def list_published_questions(
         # all. Those sit under no node of the bank tree, so without this they
         # are browsable only by fetching the whole unfiltered bank.
         query = query.where(Question.document_id.is_(None))
+    if favourites_of is not None:
+        query = query.where(
+            Question.id.in_(
+                select(QuestionFavourite.question_id).where(
+                    QuestionFavourite.user_id == favourites_of
+                )
+            )
+        )
     questions = list(
         db.scalars(query.order_by(Question.created_at.desc()).limit(limit).offset(offset))
     )
@@ -523,6 +583,8 @@ def import_questions(
         document_error = _document_error(db, item.document_id)
         if document_error is not None:
             item_errors.append(document_error)
+        else:
+            item_errors.extend(_source_errors(db, item.document_id, item.source_quotes))
         if item_errors:
             item_savepoint.rollback()
             errors.extend(

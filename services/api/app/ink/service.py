@@ -7,6 +7,7 @@ from app.auth.schemas import AuthenticatedUser
 from app.common.errors import ApiError
 from app.documents.models import LecturePdf
 from app.ink.models import LessonPageInk
+from app.ink.schemas import PageHighlight
 from app.notebook.schemas import Stroke
 from app.users.service import get_or_create_profile
 
@@ -20,7 +21,7 @@ def _get_lecture_pdf(db: Session, document_id: uuid.UUID) -> LecturePdf:
 
 def get_ink(
     db: Session, document_id: uuid.UUID, page_number: int, user_id: uuid.UUID
-) -> list[Stroke]:
+) -> tuple[list[Stroke], list[PageHighlight]]:
     lecture_pdf = _get_lecture_pdf(db, document_id)
     ink = db.scalar(
         select(LessonPageInk).where(
@@ -30,8 +31,11 @@ def get_ink(
         )
     )
     if ink is None:
-        return []
-    return [Stroke.model_validate(stroke) for stroke in ink.strokes]
+        return [], []
+    return (
+        [Stroke.model_validate(stroke) for stroke in ink.strokes],
+        [PageHighlight.model_validate(h) for h in ink.highlights or []],
+    )
 
 
 def upsert_ink(
@@ -40,7 +44,10 @@ def upsert_ink(
     page_number: int,
     user: AuthenticatedUser,
     strokes: list[Stroke],
-) -> list[Stroke]:
+    highlights: list[PageHighlight] | None = None,
+) -> tuple[list[Stroke], list[PageHighlight]]:
+    """Replaces the page's strokes, and its highlights when given -- `None`
+    leaves the stored highlights untouched (see LessonPageInkUpdateRequest)."""
     lecture_pdf = _get_lecture_pdf(db, document_id)
     # Bounded only on write. The router already rejects page_number < 1, so
     # this is the half that keeps a client from creating a row per integer it
@@ -74,9 +81,12 @@ def upsert_ink(
             page_number=page_number,
             user_id=profile.id,
             strokes=strokes_data,
+            highlights=[],
         )
         db.add(ink)
     else:
         ink.strokes = strokes_data
+    if highlights is not None:
+        ink.highlights = [h.model_dump(mode="json") for h in highlights]
     db.commit()
-    return strokes
+    return strokes, [PageHighlight.model_validate(h) for h in ink.highlights]

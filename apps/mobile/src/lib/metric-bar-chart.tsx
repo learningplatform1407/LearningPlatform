@@ -1,6 +1,7 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { colors, fontSizes, spacing } from "@/lib/theme";
+import { fontSizes, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 /**
  * A labeled multi-row percentage-bar comparison. Mirrors
@@ -13,6 +14,7 @@ export function MetricBarChart({
 }: {
   metrics: { label: string; percent: number | null }[];
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.container}>
       {metrics.map((metric) => {
@@ -37,7 +39,7 @@ export function MetricBarChart({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     gap: spacing.sm,
     borderWidth: 1,
@@ -75,4 +77,4 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: colors.foreground,
   },
-});
+}));

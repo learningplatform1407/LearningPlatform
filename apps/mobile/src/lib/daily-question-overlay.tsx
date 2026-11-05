@@ -2,14 +2,15 @@ import type { DailyQuestion, DailyQuestionDay } from "@lp/api-client";
 import { WEEKDAY_LABELS, buildMonthGrid, formatCalendarDate, monthOf, shiftMonth } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { DailyQuestionBody } from "@/lib/daily-question-body";
 import { Overlay } from "@/lib/overlay";
 import { readDismissedDate, writeDismissedDate } from "@/lib/qotd-dismissal";
 import { OUTCOME_MARKS } from "@/lib/question-reveal";
-import { colors, fontSizes, fontWeights, radii, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, radii, spacing } from "@/lib/theme";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
 /** Today's question, plus which day the sheet is showing.
  *
@@ -111,6 +112,8 @@ function MonthCalendar({
   selected: string | null;
   onSelectDay: (forDate: string) => void;
 }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const currentMonth = monthOf(serverToday);
   const [month, setMonth] = useState(currentMonth);
   const atCurrentMonth = month >= currentMonth;
@@ -207,7 +210,7 @@ function MonthCalendar({
               <Text
                 style={[
                   styles.dayCellText,
-                  mark && !cell.isToday ? { color: mark.color } : null,
+                  mark && !cell.isToday ? { color: colors[mark.tone] } : null,
                   cell.isToday && { color: colors.primaryForeground },
                   !cell.inMonth && styles.dayCellFaded,
                 ]}
@@ -218,7 +221,7 @@ function MonthCalendar({
                 <Text
                   style={[
                     styles.dayMark,
-                    { color: cell.isToday ? colors.primaryForeground : mark.color },
+                    { color: cell.isToday ? colors.primaryForeground : colors[mark.tone] },
                   ]}
                 >
                   {mark.icon}
@@ -249,6 +252,7 @@ export function DailyQuestionOverlay({
   onAnswered: () => void;
   onClose: () => void;
 }) {
+  const styles = useStyles();
   const isToday = forDate === today.server_today;
 
   // Only past days need a fetch; today is already in hand, and is the one day
@@ -282,7 +286,7 @@ export function DailyQuestionOverlay({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   calendar: {
     gap: spacing.sm,
   },
@@ -371,4 +375,4 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: colors.danger,
   },
-});
+}));

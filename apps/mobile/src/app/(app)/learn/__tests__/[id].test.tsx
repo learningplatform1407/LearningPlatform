@@ -1,5 +1,6 @@
+import { lightColors } from "@lp/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { router } from "expo-router";
 
 import LectureScreen from "../[id]";
@@ -9,6 +10,7 @@ const mockCreateSignedUrl = jest.fn();
 const mockListAnnotations = jest.fn();
 const mockCreateAnnotation = jest.fn();
 const mockDeleteAnnotation = jest.fn();
+const mockUpdateAnnotation = jest.fn();
 const mockListQuestionBank = jest.fn();
 const mockGetQuizAvailableCount = jest.fn();
 const mockAnswerBankQuestion = jest.fn();
@@ -33,6 +35,7 @@ jest.mock("@/lib/api-client", () => ({
     listAnnotations: mockListAnnotations,
     createAnnotation: mockCreateAnnotation,
     deleteAnnotation: mockDeleteAnnotation,
+    updateAnnotation: mockUpdateAnnotation,
     listQuestionBank: mockListQuestionBank,
     getQuizAvailableCount: mockGetQuizAvailableCount,
     answerBankQuestion: mockAnswerBankQuestion,
@@ -93,28 +96,10 @@ function renderScreen() {
   );
 }
 
-// Matches SELECTION_SETTLE_MS in [id].tsx — the debounce used to detect
-// "the user finished selecting" since RN's onSelectionChange has no
-// distinct "selection ended" event the way web's mouseup does.
-const SELECTION_SETTLE_MS = 400;
-
-// RNTL's fireEvent refuses to dispatch TextInput events (including
-// selectionChange) when editable={false} — it models RN's *documented*
-// behavior, not the undocumented leak (RN issue #35418) this feature
-// actually depends on to work at all on a real device. Calling the prop
-// directly is the only way to unit-test the debounce/mutation logic here;
-// it does not prove the real interaction works, only the code that runs
-// once a selection is reported.
-function selectText(input: ReturnType<typeof screen.getByTestId>, start: number, end: number) {
-  act(() => {
-    input.props.onSelectionChange({ nativeEvent: { selection: { start, end } } });
-  });
-}
-
-async function waitForSelectionSettle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, SELECTION_SETTLE_MS + 150));
-  });
+/** Marks a range the way a learner does: tap its first word, then its last. */
+function tapWords(first: number, last: number, block = 0) {
+  fireEvent.press(screen.getByTestId(`word-${block}-${first}`));
+  fireEvent.press(screen.getByTestId(`word-${block}-${last}`));
 }
 
 function readyDocumentWithParagraph(text: string) {
@@ -166,6 +151,9 @@ beforeEach(() => {
   mockListDocuments.mockReset().mockResolvedValue([]);
   (router.push as jest.Mock).mockReset();
 });
+
+/** A hidden cloze gap, hints on or off: "[ m___ ]" or "[ … ]". */
+const GAP = /^\[ .+ \]$/;
 
 test("renders extracted headings and paragraphs when ready", async () => {
   mockGetDocument.mockResolvedValue({
@@ -412,7 +400,37 @@ test("renders an existing margin note as a badge and reveals its text when press
 
   fireEvent.press(badge);
 
-  expect(await screen.findByText("Remember this")).toBeTruthy();
+  expect(await screen.findByDisplayValue("Remember this")).toBeTruthy();
+});
+
+test("editing an open note saves the new text in place on Close", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListAnnotations.mockResolvedValue([
+    {
+      id: "a1",
+      document_version_id: "v1",
+      type: "margin_note",
+      block_index: 0,
+      start_offset: null,
+      end_offset: null,
+      note_text: "Remember this",
+      color: null,
+      created_at: "2026-01-01",
+    },
+  ]);
+  mockUpdateAnnotation.mockResolvedValue({});
+
+  renderScreen();
+  fireEvent.press(await screen.findByText("note"));
+  fireEvent.changeText(await screen.findByLabelText("Note text"), "Remember this too");
+  fireEvent.press(screen.getByText("Close"));
+
+  await waitFor(() =>
+    expect(mockUpdateAnnotation).toHaveBeenCalledWith("d1", "a1", {
+      note_text: "Remember this too",
+    }),
+  );
+  expect(mockDeleteAnnotation).not.toHaveBeenCalled();
 });
 
 test("long-pressing a paragraph shows a Notes/Explain menu, and Notes opens the composer", async () => {
@@ -494,7 +512,7 @@ test("renders a chapter / sub-chapter breadcrumb when the lesson is organized", 
 
   renderScreen();
 
-  expect(await screen.findByText("Chapter One / Sub A")).toBeTruthy();
+  expect(await screen.findByText("Chapter One · Sub A")).toBeTruthy();
 });
 
 test("omits the breadcrumb when the lesson is uncategorized", async () => {
@@ -599,6 +617,7 @@ function officialCard(overrides: Record<string, unknown> = {}) {
     is_mine: false,
     due_at: null,
     is_new: true,
+    next_intervals: { again: 1, hard: 1, good: 1, easy: 1 },
     ...overrides,
   };
 }
@@ -624,6 +643,8 @@ test("the Flashcards tab shows the front only until the card is tapped", async (
   for (const label of ["Again", "Hard", "Good", "Easy"]) {
     expect(screen.getByText(label)).toBeTruthy();
   }
+  // Each grade shows the interval it would schedule (all 1 day for a new card).
+  expect(screen.getAllByText("1d")).toHaveLength(4);
 });
 
 test("grading a flashcard submits the rating and reports the next interval", async () => {
@@ -718,6 +739,22 @@ test("a learner can add their own card to the lesson", async () => {
   );
 });
 
+test("gaps hint the first letter and length until hints are switched off", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("The femur is long."));
+  mockListDueClozeCards.mockResolvedValue([
+    { id: "c1", document_id: "d1", block_index: 0, start_offset: 4, end_offset: 9 },
+  ]);
+
+  renderScreen();
+  await screen.findByText(/The femur is long\./);
+  fireEvent.press(screen.getByText("Review"));
+
+  expect(await screen.findByText("[ f____ ]")).toBeTruthy();
+  fireEvent.press(screen.getByLabelText("Letter hints in the gaps"));
+  expect(await screen.findByText("[ … ]")).toBeTruthy();
+  expect(screen.queryByText("[ f____ ]")).toBeNull();
+});
+
 test("the Review tab shows the whole lesson with the due word blanked, then reveals it on demand", async () => {
   mockGetDocument.mockResolvedValue({
     id: "d1",
@@ -747,14 +784,14 @@ test("the Review tab shows the whole lesson with the due word blanked, then reve
   // The whole lesson (heading included) stays visible during review, not
   // just the paragraph containing the due word.
   expect(await screen.findByText("Cell Biology")).toBeTruthy();
-  expect(await screen.findByText("[...]")).toBeTruthy();
+  expect(await screen.findByText(GAP)).toBeTruthy();
   expect(screen.queryByText("mitochondria")).toBeNull();
   expect(await screen.findByText("1 word left to review")).toBeTruthy();
 
   fireEvent.press(screen.getByText("Show"));
 
   expect(screen.getByText("mitochondria")).toBeTruthy();
-  expect(screen.queryByText("[...]")).toBeNull();
+  expect(screen.queryByText(GAP)).toBeNull();
   for (const label of ["Again", "Hard", "Good", "Easy"]) {
     expect(screen.getByText(label)).toBeTruthy();
   }
@@ -773,21 +810,21 @@ test("two due words in the same paragraph are revealed one at a time, in order",
   await screen.findByText(/The database index accelerates lookups\./);
   fireEvent.press(screen.getByText("Review"));
 
-  expect(await screen.findAllByText("[...]")).toHaveLength(2);
+  expect(await screen.findAllByText(GAP)).toHaveLength(2);
   expect(screen.getByText("2 words left to review")).toBeTruthy();
 
   fireEvent.press(screen.getByText("Show"));
   expect(screen.getByText("database")).toBeTruthy();
-  expect(screen.getAllByText("[...]")).toHaveLength(1); // "index" still queued
+  expect(screen.getAllByText(GAP)).toHaveLength(1); // "index" still queued
 
   fireEvent.press(screen.getByText("Good"));
   await waitFor(() => expect(screen.getByText("1 word left to review")).toBeTruthy());
   expect(screen.getByText(/database/)).toBeTruthy(); // stays revealed (merged into plain text)
-  expect(screen.getByText("[...]")).toBeTruthy(); // "index" still hidden, Show not pressed yet
+  expect(screen.getByText(GAP)).toBeTruthy(); // "index" still hidden, Show not pressed yet
 
   fireEvent.press(screen.getByText("Show"));
   expect(screen.getByText("index")).toBeTruthy();
-  expect(screen.queryByText("[...]")).toBeNull();
+  expect(screen.queryByText(GAP)).toBeNull();
 });
 
 test("grading a Review word submits the rating and shows the next-interval feedback", async () => {
@@ -875,7 +912,7 @@ test("the Notes overlay lists notes and lets the user open one to edit", async (
   renderScreen();
   await screen.findByText("Hello world");
 
-  fireEvent.press(screen.getByText("Notes"));
+  fireEvent.press(screen.getByLabelText("Notes"));
 
   fireEvent.press(await screen.findByText("Existing note"));
   const textarea = await screen.findByDisplayValue("Existing note");
@@ -899,7 +936,7 @@ test("the Notes overlay shows an empty state and creates a new note tagged with 
   renderScreen();
   await screen.findByText("Hello world");
 
-  fireEvent.press(screen.getByText("Notes"));
+  fireEvent.press(screen.getByLabelText("Notes"));
   expect(await screen.findByText("No notes yet.")).toBeTruthy();
 
   fireEvent.press(screen.getByText("+ Text"));
@@ -921,7 +958,7 @@ test("the Notes overlay closes via its Close button", async () => {
   renderScreen();
   await screen.findByText("Hello world");
 
-  fireEvent.press(screen.getByText("Notes"));
+  fireEvent.press(screen.getByLabelText("Notes"));
   await screen.findByText("No notes yet.");
 
   fireEvent.press(screen.getByText("Close"));
@@ -946,7 +983,7 @@ test("the Contents overlay lists the current sub-chapter's lessons and navigates
   renderScreen();
   await screen.findByText("Hello world");
 
-  fireEvent.press(screen.getByText("Contents"));
+  fireEvent.press(screen.getByLabelText("Contents"));
 
   await screen.findByText("Second lesson");
   expect(mockListDocuments).toHaveBeenCalledWith("sc1");
@@ -965,7 +1002,7 @@ test("the Contents overlay falls back to the Uncategorized bucket when the lesso
   renderScreen();
   await screen.findByText("Hello world");
 
-  fireEvent.press(screen.getByText("Contents"));
+  fireEvent.press(screen.getByLabelText("Contents"));
 
   await waitFor(() => expect(mockListDocuments).toHaveBeenCalledWith("none"));
 });
@@ -989,10 +1026,11 @@ test("a highlight renders with its stored color", async () => {
   renderScreen();
 
   const mark = await screen.findByText("Hello");
-  expect(mark.props.style).toEqual({ backgroundColor: "#BBF7D0" });
+  // Green is the design's fifth marker, from the shared tokens.
+  expect(mark.props.style).toEqual({ backgroundColor: lightColors.highlight4 });
 });
 
-test("activating the yellow highlight tool and selecting text creates a highlight, replacing the read-only paragraph with a selectable one", async () => {
+test("with the yellow highlight armed, tapping a word twice highlights exactly that word", async () => {
   mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
 
   renderScreen();
@@ -1000,12 +1038,11 @@ test("activating the yellow highlight tool and selecting text creates a highligh
 
   fireEvent.press(screen.getByLabelText("Highlight — yellow"));
 
-  // Swapped to the selectable TextInput — the long-press Pressable is gone.
+  // Swapped to tappable words — the long-press Pressable is gone.
   expect(screen.queryByTestId("paragraph-0")).toBeNull();
-  const input = screen.getByTestId("selectable-paragraph-0");
+  expect(screen.getByText("Tap the first word, then the last.")).toBeTruthy();
 
-  selectText(input, 0, 5);
-  await waitForSelectionSettle();
+  tapWords(0, 0);
 
   await waitFor(() =>
     expect(mockCreateAnnotation).toHaveBeenCalledWith("d1", {
@@ -1030,11 +1067,11 @@ test("deactivating the tool restores long-press-for-notes on the paragraph", asy
 
   fireEvent.press(yellowSwatch);
   expect(await screen.findByTestId("paragraph-0")).toBeTruthy();
-  expect(screen.queryByTestId("selectable-paragraph-0")).toBeNull();
+  expect(screen.queryByTestId("tappable-paragraph-0")).toBeNull();
 });
 
-test("the eraser splits a highlight when the erased selection is in the middle", async () => {
-  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("abcdefghij"));
+test("the eraser splits a highlight when the erased words are in the middle", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("alpha beta gamma delta"));
   mockListAnnotations.mockResolvedValue([
     {
       id: "a1",
@@ -1042,7 +1079,7 @@ test("the eraser splits a highlight when the erased selection is in the middle",
       type: "highlight",
       block_index: 0,
       start_offset: 0,
-      end_offset: 10,
+      end_offset: 22,
       note_text: null,
       color: "blue",
       created_at: "2026-01-01",
@@ -1050,26 +1087,24 @@ test("the eraser splits a highlight when the erased selection is in the middle",
   ]);
 
   renderScreen();
-  await screen.findByText("abcdefghij");
+  await screen.findByText("alpha beta gamma delta");
 
   fireEvent.press(screen.getByLabelText("Eraser"));
-  const input = screen.getByTestId("selectable-paragraph-0");
-  selectText(input, 3, 6);
-  await waitForSelectionSettle();
+  tapWords(6, 11); // "beta" .. "gamma"
 
   await waitFor(() => expect(mockDeleteAnnotation).toHaveBeenCalledWith("d1", "a1"));
   expect(mockCreateAnnotation).toHaveBeenCalledWith("d1", {
     type: "highlight",
     block_index: 0,
     start_offset: 0,
-    end_offset: 3,
+    end_offset: 6,
     color: "blue",
   });
   expect(mockCreateAnnotation).toHaveBeenCalledWith("d1", {
     type: "highlight",
     block_index: 0,
-    start_offset: 6,
-    end_offset: 10,
+    start_offset: 16,
+    end_offset: 22,
     color: "blue",
   });
 });
@@ -1094,9 +1129,7 @@ test("the eraser removes a highlight entirely with no remainder when fully erase
   await screen.findByText("Hello world");
 
   fireEvent.press(screen.getByLabelText("Eraser"));
-  const input = screen.getByTestId("selectable-paragraph-0");
-  selectText(input, 0, 5);
-  await waitForSelectionSettle();
+  tapWords(0, 0); // "Hello"
 
   await waitFor(() => expect(mockDeleteAnnotation).toHaveBeenCalledWith("d1", "a1"));
   expect(mockCreateAnnotation).not.toHaveBeenCalled();
@@ -1321,4 +1354,97 @@ test("an official card offers Retire to an admin, never Edit", async () => {
 
   expect(await screen.findByText("Retire")).toBeTruthy();
   expect(screen.queryByText("Edit")).toBeNull();
+});
+
+test("See in lesson paints a checked question's source and the back pill returns to Quizzes", async () => {
+  mockGetDocument.mockResolvedValue(
+    readyDocumentWithParagraph("Nitrates cause venodilation. This lowers preload."),
+  );
+  mockListQuestionBank.mockResolvedValue([
+    {
+      id: "q1",
+      prompt: "Which drug lowers preload?",
+      kind: "single",
+      difficulty: "medium",
+      points_possible: 4,
+      document_id: "d1",
+      options: [
+        { id: "a", text: "Nitrates" },
+        { id: "b", text: "Vasopressors" },
+      ],
+      tags: [],
+    },
+  ]);
+  mockAnswerBankQuestion.mockResolvedValue({
+    prompt: "Which drug lowers preload?",
+    kind: "single",
+    points_awarded: 4,
+    points_possible: 4,
+    outcome: "correct",
+    explanation: null,
+    source_quotes: ["This lowers preload."],
+    options: [
+      {
+        id: "a",
+        text: "Nitrates",
+        in_key: true,
+        selected: true,
+        classified_correctly: true,
+        rationale: null,
+      },
+      {
+        id: "b",
+        text: "Vasopressors",
+        in_key: false,
+        selected: false,
+        classified_correctly: true,
+        rationale: null,
+      },
+    ],
+  });
+
+  renderScreen();
+  await screen.findByText(/Nitrates cause venodilation/);
+  fireEvent.press(screen.getByText("Quizzes"));
+
+  fireEvent.press(await screen.findByText("Nitrates"));
+  expect(screen.queryByText("↗ See in lesson")).toBeNull();
+  fireEvent.press(screen.getByText("Check answer"));
+
+  fireEvent.press(await screen.findByText("↗ See in lesson"));
+  expect((await screen.findByTestId("quiz-source")).props.children).toBe("This lowers preload.");
+
+  fireEvent.press(screen.getByText("← Back to quizzes"));
+  // The same question, still showing its answer.
+  expect(await screen.findByText("correct — 4/4 points")).toBeTruthy();
+  expect(screen.queryByText("← Back to quizzes")).toBeNull();
+});
+
+test("the cards view shows only the sentence holding the gap, on a card", async () => {
+  mockGetDocument.mockResolvedValue(
+    readyDocumentWithParagraph("Bones heal slowly. The femur is the longest bone. Rest helps."),
+  );
+  mockListDueClozeCards.mockResolvedValue([
+    {
+      id: "c1",
+      document_id: "d1",
+      block_index: 0,
+      start_offset: 23,
+      end_offset: 28,
+      next_intervals: { again: 1, hard: 1, good: 1, easy: 1 },
+    },
+  ]);
+
+  renderScreen();
+  await screen.findByText(/Bones heal slowly/);
+  fireEvent.press(screen.getByText("Review"));
+  fireEvent.press(await screen.findByLabelText("Cards, one at a time"));
+
+  const card = await screen.findByLabelText("Review card");
+  expect(within(card).getByText(/is the longest bone\./)).toBeTruthy();
+  expect(within(card).queryByText(/Bones heal slowly/)).toBeNull();
+  expect(within(card).getByText("[ f____ ]")).toBeTruthy();
+
+  fireEvent.press(screen.getByText("Back to the text"));
+  expect(screen.queryByLabelText("Review card")).toBeNull();
 });

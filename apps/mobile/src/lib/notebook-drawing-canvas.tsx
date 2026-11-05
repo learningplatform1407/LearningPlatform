@@ -1,8 +1,8 @@
+import { HIGHLIGHT_COLOR_NAMES, pageColors } from "@lp/ui";
 import type { Stroke, StrokePoint } from "@lp/contracts";
 import { useState } from "react";
 import {
   Pressable,
-  StyleSheet,
   Text,
   View,
   type GestureResponderEvent,
@@ -10,7 +10,8 @@ import {
 } from "react-native";
 import Svg, { Path, Polyline } from "react-native-svg";
 
-import { colors, spacing } from "@/lib/theme";
+import { spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 // Every stroke's points are normalized to [0, 1] relative to this fixed
 // aspect ratio so a drawing looks the same regardless of what size box it's
@@ -23,13 +24,12 @@ export const NOTEBOOK_CANVAS_ASPECT_RATIO = 4 / 3;
 // read and instruments it accordingly, which both pulls in the real
 // worklets runtime (crashing under Jest, which has no native module to back
 // it) and just isn't what's happening here.
+// Graphite ink, then the design's five pen colours -- the same palette as
+// the web notebook and the lesson's pen.
 export const NOTEBOOK_PEN_COLORS = [
-  { name: "black", hex: "#1f2937" },
-  { name: "yellow", hex: "#eab308" },
-  { name: "green", hex: "#22c55e" },
-  { name: "blue", hex: "#3b82f6" },
-  { name: "pink", hex: "#ec4899" },
-] as const;
+  { name: "graphite", hex: "#1D1F23" },
+  ...HIGHLIGHT_COLOR_NAMES.map((name, index) => ({ name, hex: pageColors.pens[index]! })),
+];
 
 const STROKE_WIDTH = 0.006;
 
@@ -96,10 +96,11 @@ export function DrawingCanvas({
   height,
   pageKey,
 }: DrawingCanvasProps) {
+  const styles = useStyles();
   const explicitSize = width !== undefined && height !== undefined;
   const [autoSize, setAutoSize] = useState({ width: 0, height: 0 });
   const size = explicitSize ? { width, height } : autoSize;
-  const [color, setColor] = useState<string>(NOTEBOOK_PEN_COLORS[0].hex);
+  const [color, setColor] = useState<string>(NOTEBOOK_PEN_COLORS[0]!.hex);
   const [tool, setTool] = useState<"pen" | "eraser">("pen");
   const [drawingStroke, setDrawingStroke] = useState<StrokePoint[] | null>(null);
   const [erasingPreview, setErasingPreview] = useState<Stroke[] | null>(null);
@@ -311,6 +312,7 @@ export function DrawingCanvas({
 }
 
 export function DrawingThumbnail({ strokes }: { strokes: Stroke[] }) {
+  const styles = useStyles();
   return (
     <View
       style={styles.thumbnailBox}
@@ -334,7 +336,7 @@ export function DrawingThumbnail({ strokes }: { strokes: Stroke[] }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     gap: spacing.sm,
   },
@@ -397,7 +399,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 8,
     overflow: "hidden",
-    backgroundColor: colors.background,
+    backgroundColor: colors.paper,
   },
   // Overlay mode must stay fully transparent except for the ink itself --
   // it sits on top of whatever it's drawn over (a PDF page), unlike the
@@ -412,6 +414,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 6,
     overflow: "hidden",
-    backgroundColor: colors.background,
+    backgroundColor: colors.paper,
   },
-});
+}));

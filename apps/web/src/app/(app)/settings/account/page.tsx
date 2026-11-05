@@ -5,12 +5,17 @@ import { useState } from "react";
 
 import { Button } from "@/components/button";
 import { Modal } from "@/components/modal";
+import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 import { logout } from "../../actions";
 
 import { ChangePasswordForm } from "./change-password-form";
+
+/** The page's three actions share one width (Change password too, in its
+ * form), so they line up as a set. */
+const ACCOUNT_BUTTON = "w-44";
 
 export default function AccountSettingsPage() {
   const { data, isPending, isError, error } = useQuery({
@@ -30,7 +35,7 @@ export default function AccountSettingsPage() {
 
   if (isPending) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p className="text-sm text-muted-foreground">Loading...</p>
       </PageMain>
     );
@@ -38,7 +43,7 @@ export default function AccountSettingsPage() {
 
   if (isError) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p role="alert" className="text-sm text-danger">
           Failed to load account: {(error as Error).message}
         </p>
@@ -47,13 +52,13 @@ export default function AccountSettingsPage() {
   }
 
   return (
-    <PageMain>
-      <h1 className="text-2xl font-bold text-foreground">Account</h1>
+    <PageMain width="reading">
+      <PageHeader kicker="Settings" title="Account" />
 
       <div className="mt-lg flex max-w-[32rem] flex-col gap-md">
         <p className="text-sm text-muted-foreground">{data.email}</p>
         <form action={logout}>
-          <Button type="submit" variant="secondary">
+          <Button type="submit" variant="secondary" className={ACCOUNT_BUTTON}>
             Sign out
           </Button>
         </form>
@@ -67,7 +72,7 @@ export default function AccountSettingsPage() {
         <Button
           type="button"
           variant="danger"
-          className="self-start"
+          className={ACCOUNT_BUTTON}
           onClick={() => setDeleteOpen(true)}
         >
           Delete Account

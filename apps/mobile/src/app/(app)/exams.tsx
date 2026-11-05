@@ -7,7 +7,6 @@ import {
   Alert,
   Pressable,
   ScrollView,
-  StyleSheet,
   Switch,
   Text,
   TextInput,
@@ -15,9 +14,11 @@ import {
 } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { OptionResultRow, QuestionRevealPanel } from "@/lib/question-reveal";
+import { OptionChoice, OptionResultRow, QuestionRevealPanel } from "@/lib/question-reveal";
 import { ExpandableRow } from "@/lib/expandable-row";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 function describeError(err: unknown): string {
   if (err instanceof ApiClientError) {
@@ -65,6 +66,7 @@ function CheckboxRow({
   checked: boolean;
   onToggle: () => void;
 }) {
+  const styles = useStyles();
   return (
     <Pressable
       style={styles.checkboxRow}
@@ -94,6 +96,7 @@ function TopicPicker({
   topics: TopicSelection;
   onChange: (next: TopicSelection) => void;
 }) {
+  const styles = useStyles();
   const tree = useQuery({
     queryKey: ["question-bank-tree"],
     queryFn: () => getApiClient().getQuestionBankTree(),
@@ -194,6 +197,8 @@ function TopicPicker({
 }
 
 function StartForm({ onStarted }: { onStarted: () => void }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const api = getApiClient();
   const tags = useQuery({ queryKey: ["tags"], queryFn: () => api.listTags() });
   const [tagIds, setTagIds] = useState<string[]>([]);
@@ -379,6 +384,7 @@ function QuestionCard({
   onAnswer: (position: number, selected: string[]) => void;
   reveal: QuizQuestionResult | undefined;
 }) {
+  const styles = useStyles();
   const [selected, setSelected] = useState<string[]>(question.selected_option_ids ?? []);
   const answered = question.answered_at !== null || reveal !== undefined;
   // Under `immediate` an answer is final server-side. `reveal` only covers
@@ -404,24 +410,17 @@ function QuestionCard({
         {question.position + 1}. {question.prompt}
       </Text>
       <View style={styles.optionList}>
-        {question.options.map((option) => {
-          const checked = selected.includes(option.id);
-          return (
-            <Pressable
-              key={option.id}
-              style={styles.optionRow}
-              onPress={() => toggle(option.id)}
-              disabled={disabled || locked}
-              accessibilityRole={question.kind === "single" ? "radio" : "checkbox"}
-              accessibilityState={{ checked, disabled: disabled || locked }}
-            >
-              <Text style={styles.optionMark}>
-                {question.kind === "single" ? (checked ? "●" : "○") : checked ? "☑" : "☐"}
-              </Text>
-              <Text style={styles.optionText}>{option.text}</Text>
-            </Pressable>
-          );
-        })}
+        {question.options.map((option, index) => (
+          <OptionChoice
+            key={option.id}
+            kind={question.kind}
+            index={index}
+            text={option.text}
+            checked={selected.includes(option.id)}
+            disabled={disabled || locked}
+            onPress={() => toggle(option.id)}
+          />
+        ))}
       </View>
       {reveal ? (
         <QuestionRevealPanel reveal={reveal} />
@@ -449,6 +448,8 @@ function QuestionCard({
 }
 
 function Runner({ session, onFinished }: { session: QuizSession; onFinished: () => void }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const api = getApiClient();
   const queryClient = useQueryClient();
   // Seconds burned since the server snapshot we're rendering. Held as a
@@ -611,6 +612,7 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
 // --- results ---------------------------------------------------------------
 
 function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void }) {
+  const styles = useStyles();
   const api = getApiClient();
   const results = useQuery({
     queryKey: ["quiz-results", sessionId],
@@ -639,8 +641,8 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
             {question.points_awarded}/{question.points_possible})
           </Text>
           <View style={styles.optionResultList}>
-            {question.options.map((option) => (
-              <OptionResultRow key={option.id} option={option} />
+            {question.options.map((option, index) => (
+              <OptionResultRow key={option.id} option={option} index={index} />
             ))}
           </View>
           {question.explanation && <Text style={styles.rationale}>{question.explanation}</Text>}
@@ -660,6 +662,7 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
 // --- history -----------------------------------------------------------------
 
 function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
+  const styles = useStyles();
   const api = getApiClient();
   const history = useQuery({
     queryKey: ["quiz-session-history"],
@@ -693,6 +696,7 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
 // --- screen ----------------------------------------------------------------
 
 export default function ExamsScreen() {
+  const styles = useStyles();
   const api = getApiClient();
   const queryClient = useQueryClient();
 
@@ -710,7 +714,7 @@ export default function ExamsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Exam Hub</Text>
+      <ScreenHeader kicker="Practice" title="Exam Hub" />
       <Text style={styles.hint}>
         Build a custom quiz from any topics and tags. Scheduled mock exams will appear here too.
       </Text>
@@ -743,7 +747,7 @@ export default function ExamsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -751,12 +755,6 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.xl,
     gap: spacing.lg,
-  },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
   },
   form: {
     gap: spacing.md,
@@ -830,11 +828,12 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    fontSize: fontSizes.base,
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    fontSize: 15,
     color: colors.foreground,
+    backgroundColor: colors.background,
   },
   switchRow: {
     flexDirection: "row",
@@ -845,7 +844,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 999,
     overflow: "hidden",
   },
   segment: {
@@ -868,7 +867,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",
@@ -877,6 +876,7 @@ const styles = StyleSheet.create({
   buttonPrimary: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
+    borderRadius: 10,
   },
   buttonDisabled: {
     opacity: 0.5,
@@ -892,11 +892,13 @@ const styles = StyleSheet.create({
     color: colors.primaryForeground,
   },
   card: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderWidth: 0,
+    borderRadius: 0,
     padding: spacing.md,
     gap: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: 0,
   },
   prompt: {
     fontSize: fontSizes.sm,
@@ -959,7 +961,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 16,
     padding: spacing.sm,
   },
   timerText: {
@@ -980,16 +982,19 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   sectionHeading: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
-    color: colors.foreground,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    color: colors.mutedForeground,
   },
   historyRow: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderWidth: 0,
+    borderRadius: 0,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 0,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   hint: {
     fontSize: fontSizes.sm,
@@ -999,4 +1004,4 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: colors.danger,
   },
-});
+}));

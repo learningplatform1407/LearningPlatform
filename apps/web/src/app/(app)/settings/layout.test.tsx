@@ -41,6 +41,9 @@ test("marks the current section's link active", () => {
     </SettingsLayout>,
   );
 
-  expect(screen.getByRole("link", { name: "Notifications" })).toHaveClass("text-primary");
-  expect(screen.getByRole("link", { name: "Account" })).not.toHaveClass("text-primary");
+  expect(screen.getByRole("link", { name: "Notifications" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  expect(screen.getByRole("link", { name: "Account" })).not.toHaveAttribute("aria-current");
 });

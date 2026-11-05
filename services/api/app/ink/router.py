@@ -29,8 +29,8 @@ def read_ink(
     user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> LessonPageInkResponse:
-    strokes = get_ink(db, document_id, page_number, user.id)
-    return LessonPageInkResponse(strokes=strokes)
+    strokes, highlights = get_ink(db, document_id, page_number, user.id)
+    return LessonPageInkResponse(strokes=strokes, highlights=highlights)
 
 
 @router.put("", response_model=LessonPageInkResponse)
@@ -41,5 +41,7 @@ def update_ink(
     user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> LessonPageInkResponse:
-    strokes = upsert_ink(db, document_id, page_number, user, data.strokes)
-    return LessonPageInkResponse(strokes=strokes)
+    strokes, highlights = upsert_ink(
+        db, document_id, page_number, user, data.strokes, data.highlights
+    )
+    return LessonPageInkResponse(strokes=strokes, highlights=highlights)

@@ -20,3 +20,10 @@ apps/mobile/assets/
 # Test/build artifacts.
 apps/web/test-results/
 apps/web/playwright-report/
+
+# Design spec and demo, handed over as reference -- not reformatted by tooling.
+docs/design/
+
+# Vendored pdf.js worker -- a byte-for-byte copy of pdfjs-dist's build output
+# (docs/architecture/lecture-pdf-ink.md §6.1). Re-copied on every bump.
+apps/web/public/pdf.worker.min.mjs

@@ -3,29 +3,50 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
 
+import { Dot } from "@/components/dot";
+import {
+  BookIcon,
+  CloseIcon,
+  ExamIcon,
+  FeedIcon,
+  MapIcon,
+  MenuIcon,
+  MoonIcon,
+  SparkleIcon,
+  SunIcon,
+  UserIcon,
+  WrenchIcon,
+} from "@/components/icons";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useTheme } from "@/lib/theme";
 import { useDismissableOverlay } from "@/lib/use-dismissable-overlay";
+
+type NavItem = { href: string; label: string; Icon: ComponentType<{ size?: number }> };
 
 // Question Bank has no entry of its own here — it's reached from inside
 // Learn (its card on /learn, and the per-lesson tab), the same way Review
 // and Flashcards are. Promoting it to a top-level item would say it's a
 // peer of Learn rather than part of it.
-const NAV_ITEMS = [
-  { href: "/learn", label: "Learn", emoji: "📖" },
-  { href: "/exams", label: "Exam Hub", emoji: "📝" },
-  { href: "/assistant", label: "AI Assistant", emoji: "🤖" },
-  { href: "/roadmap", label: "Roadmap", emoji: "🗺️" },
-  { href: "/feed", label: "Feed", emoji: "📰" },
-] as const;
+const NAV_ITEMS: readonly NavItem[] = [
+  { href: "/learn", label: "Learn", Icon: BookIcon },
+  { href: "/exams", label: "Exam Hub", Icon: ExamIcon },
+  { href: "/assistant", label: "AI Assistant", Icon: SparkleIcon },
+  { href: "/roadmap", label: "Roadmap", Icon: MapIcon },
+  { href: "/feed", label: "Feed", Icon: FeedIcon },
+];
 
-const PROFILE_ITEM = { href: "/profile", label: "Profile", emoji: "👤" } as const;
+const PROFILE_ITEM: NavItem = { href: "/profile", label: "Profile", Icon: UserIcon };
 
 // A directory of the content tools: the two bulk importers,
 // question-of-the-day, and (unlike mobile, where it stays inline on the
 // Library page) library authoring itself. See docs/architecture/README.md.
-const ADMIN_ITEM = { href: "/admin", label: "Admin", emoji: "🛠️" } as const;
+const ADMIN_ITEM: NavItem = { href: "/admin", label: "Admin", Icon: WrenchIcon };
+
+// A lesson owns the whole screen in the redesign: its left edge belongs to
+// the tool notch and table of contents, and it carries its own way back.
+const LESSON_ROUTE = /^\/learn\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -34,11 +55,6 @@ export function Sidebar() {
   const me = useQuery({ queryKey: ["me"], queryFn: () => getBrowserApiClient().getMe() });
   const isAdmin = me.data?.role === "admin";
 
-  // Below `md` the sticky sidebar below is hidden entirely (it would eat
-  // most of a phone's width) in favor of this top bar + an off-canvas
-  // drawer, matching the breakpoint the mobile app itself switches on
-  // (apps/mobile/src/app/(app)/_layout.tsx's TABLET_BREAKPOINT).
-  //
   // Closing the drawer on navigation is state adjustment during render
   // (the same pattern settings/profile/page.tsx's `syncedFrom` uses), not an
   // effect -- an effect reacting to `pathname` would set state one render
@@ -52,48 +68,35 @@ export function Sidebar() {
 
   useDismissableOverlay(mobileOpen, () => setMobileOpen(false));
 
+  if (LESSON_ROUTE.test(pathname)) return null;
+
   return (
     <>
-      <div className="sticky top-0 z-10 flex h-14 shrink-0 items-center border-b border-border bg-background px-sm md:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileOpen(true)}
-          aria-label="Open menu"
-          className="flex h-9 w-9 items-center justify-center rounded-md text-foreground hover:bg-muted"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.8}
-            className="h-5 w-5"
-            aria-hidden="true"
-          >
-            <path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
+      {/* Below `md` the sidebar would eat most of a phone's width, so it
+          becomes a menu dot and an off-canvas drawer -- the breakpoint the
+          mobile app itself switches on (apps/mobile/src/app/(app)/_layout.tsx). */}
+      <div className="sticky top-[env(safe-area-inset-top,0px)] z-10 flex h-14 shrink-0 items-center bg-background px-md md:hidden">
+        <Dot size="sm" aria-label="Open menu" onClick={() => setMobileOpen(true)}>
+          <MenuIcon />
+        </Dot>
       </div>
 
       {mobileOpen && (
-        <div className="fixed inset-0 z-20 md:hidden">
-          <div className="absolute inset-0 bg-foreground/40" onClick={() => setMobileOpen(false)} />
+        <div className="fixed inset-0 z-40 md:hidden">
+          <div
+            className="absolute inset-0 bg-scrim/60"
+            onClick={() => setMobileOpen(false)}
+            aria-hidden="true"
+          />
           <nav
             aria-label="Mobile menu"
-            className="absolute top-0 left-0 flex h-full w-[16rem] flex-col overflow-y-auto bg-background py-md shadow-md"
+            className="absolute top-0 left-0 flex h-full w-[280px] max-w-[85vw] animate-[drawer-in-left_0.25s_ease] motion-reduce:animate-none flex-col overflow-y-auto border-r border-border bg-background pt-[calc(22px+env(safe-area-inset-top,0px))] pr-3 pb-[22px] pl-3.5"
           >
-            <div className="mb-md flex items-center justify-between px-md">
-              <span className="text-sm font-semibold text-foreground">Menu</span>
-              <button
-                type="button"
-                onClick={() => setMobileOpen(false)}
-                aria-label="Close menu"
-                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-              >
-                <span aria-hidden="true" className="text-lg leading-none">
-                  ×
-                </span>
-              </button>
+            <div className="mb-3 flex items-center justify-between pl-1.5">
+              <span className="label-caps">Menu</span>
+              <Dot size="xs" aria-label="Close menu" onClick={() => setMobileOpen(false)}>
+                <CloseIcon size={16} />
+              </Dot>
             </div>
 
             <NavList collapsed={false} isAdmin={isAdmin} pathname={pathname} />
@@ -103,17 +106,19 @@ export function Sidebar() {
 
       <nav
         aria-label="Main"
-        className={`sticky top-0 hidden h-screen shrink-0 flex-col overflow-y-auto border-r border-border bg-background py-md transition-[width] md:flex ${
-          collapsed ? "w-[3.5rem]" : "w-[14rem]"
+        className={`sticky top-0 hidden h-screen shrink-0 flex-col overflow-y-auto border-r border-border bg-background py-[22px] transition-[width] duration-[250ms] md:flex ${
+          collapsed ? "w-[3.75rem] px-2" : "w-[15rem] pr-3 pl-3.5"
         }`}
       >
         <button
           type="button"
           onClick={() => setCollapsed((value) => !value)}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="mx-sm mb-md flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+          className={`mb-3 flex h-[31px] w-[31px] items-center justify-center rounded-sm text-[22px] leading-none font-semibold text-muted-foreground hover:bg-muted hover:text-foreground ${
+            collapsed ? "self-center" : "ml-0.5"
+          }`}
         >
-          {collapsed ? "»" : "«"}
+          {collapsed ? "›" : "‹"}
         </button>
 
         <NavList collapsed={collapsed} isAdmin={isAdmin} pathname={pathname} />
@@ -136,7 +141,7 @@ function NavList({
 }) {
   return (
     <>
-      <ul className="flex flex-col gap-xs px-sm">
+      <ul className="flex flex-col gap-0.5">
         {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.href}
@@ -158,48 +163,71 @@ function NavList({
         )}
       </ul>
 
-      <div className="mt-auto flex flex-col gap-xs border-t border-border px-sm pt-md">
-        <NavLink
-          item={PROFILE_ITEM}
-          collapsed={collapsed}
-          active={pathname.startsWith(PROFILE_ITEM.href)}
-        />
+      <div className="mt-auto flex flex-col gap-0.5 border-t border-border pt-3">
+        <ul>
+          <NavLink
+            item={PROFILE_ITEM}
+            collapsed={collapsed}
+            active={pathname.startsWith(PROFILE_ITEM.href) || pathname.startsWith("/settings")}
+          />
+        </ul>
+        <ThemeToggle collapsed={collapsed} />
       </div>
     </>
   );
 }
+
+const ITEM_CLASSES =
+  "flex h-9 w-full items-center gap-2.5 overflow-hidden rounded-sm px-2 text-toc leading-[1.3] font-semibold whitespace-nowrap transition-colors";
 
 function NavLink({
   item,
   collapsed,
   active,
 }: {
-  item: { href: string; label: string; emoji: string };
+  item: NavItem;
   collapsed: boolean;
   active: boolean;
 }) {
+  const { Icon } = item;
   return (
     <li>
       <Link
         href={item.href}
         title={collapsed ? item.label : undefined}
         aria-label={collapsed ? item.label : undefined}
-        className={`flex h-9 items-center overflow-hidden rounded-md border-l-2 px-sm text-sm font-semibold whitespace-nowrap ${
-          collapsed ? "justify-center" : ""
-        } ${
+        aria-current={active ? "page" : undefined}
+        className={`${ITEM_CLASSES} ${collapsed ? "justify-center" : ""} ${
           active
-            ? "border-primary bg-primary/5 text-primary"
-            : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
+            ? "bg-muted font-extrabold text-foreground"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
         }`}
       >
-        {collapsed ? (
-          <span aria-hidden="true" className="text-base leading-none">
-            {item.emoji}
-          </span>
-        ) : (
-          item.label
-        )}
+        <Icon />
+        {!collapsed && item.label}
       </Link>
     </li>
+  );
+}
+
+/** The design's moon dot, as a nav row. Saves to the user's settings, so
+ * the choice follows them to other devices (and the Appearance page). */
+function ThemeToggle({ collapsed }: { collapsed: boolean }) {
+  const { resolved, setPreference } = useTheme();
+  const next = resolved === "dark" ? "light" : "dark";
+  const label = next === "dark" ? "Dark theme" : "Light theme";
+  return (
+    <button
+      type="button"
+      onClick={() => setPreference(next, { persist: true })}
+      aria-label={collapsed ? label : undefined}
+      title={collapsed ? label : undefined}
+      className={`${ITEM_CLASSES} text-muted-foreground hover:bg-muted hover:text-foreground ${
+        collapsed ? "justify-center" : ""
+      }`}
+    >
+      {next === "dark" ? <MoonIcon /> : <SunIcon />}
+      {!collapsed && label}
+    </button>
   );
 }

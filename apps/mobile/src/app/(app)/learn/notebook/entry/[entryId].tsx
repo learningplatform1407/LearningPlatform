@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { NotebookEntryEditor } from "@/lib/notebook-entry-editor";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 // entryId is either a real notebook entry id (editing) or one of these
 // sentinels (creating) — same idiom as the "uncategorized" sentinel already
@@ -14,6 +15,7 @@ const NEW_TEXT_SENTINEL = "new-text";
 const NEW_DRAWING_SENTINEL = "new-drawing";
 
 export default function NotebookEntryScreen() {
+  const styles = useStyles();
   const { entryId } = useLocalSearchParams<{ entryId: string }>();
   const isNewText = entryId === NEW_TEXT_SENTINEL;
   const isNewDrawing = entryId === NEW_DRAWING_SENTINEL;
@@ -57,7 +59,7 @@ export default function NotebookEntryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -80,4 +82,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

@@ -86,6 +86,7 @@ def build_reveal(
         points_possible=points_possible,
         outcome=outcome,
         explanation=question.explanation,
+        source_quotes=question.source_quotes or [],
         options=[
             OptionResultSchema(
                 id=option["id"],

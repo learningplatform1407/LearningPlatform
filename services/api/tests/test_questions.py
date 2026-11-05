@@ -625,3 +625,134 @@ def test_the_bank_tree_issues_a_fixed_number_of_queries_however_big_the_course(
 
     assert len(response.json()["books"]) == 4
     assert large[0] == small[0]
+
+
+# --- source quotes ("See in lesson") -------------------------------------
+
+
+@pytest.fixture
+def lesson_id(db_session: Session, admin_user: AuthenticatedUser, admin_client: TestClient) -> str:
+    from app.documents.models import DocumentVersion
+
+    document = Document(title="Preload", created_by=admin_user.id)
+    db_session.add(document)
+    db_session.flush()
+    version = DocumentVersion(
+        document_id=document.id,
+        storage_path="x.pdf",
+        mime_type="application/pdf",
+        size_bytes=10,
+        checksum="abc",
+        status="ready",
+        extracted_content={
+            "blocks": [
+                {
+                    "type": "paragraph",
+                    "text": "Nitrates cause venodilation.\nThis lowers preload.",
+                    "page": 1,
+                }
+            ]
+        },
+    )
+    db_session.add(version)
+    db_session.flush()
+    document.current_version_id = version.id
+    db_session.commit()
+    return str(document.id)
+
+
+def test_source_quotes_are_checked_against_the_lesson_text(
+    admin_client: TestClient, lesson_id: str
+) -> None:
+    # Line breaks in the lesson don't stop a quote matching.
+    ok = admin_client.post(
+        "/v1/questions",
+        json=_single_payload(
+            document_id=lesson_id, source_quotes=["Nitrates cause venodilation. This lowers"]
+        ),
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["source_quotes"] == ["Nitrates cause venodilation. This lowers"]
+
+    bad = admin_client.post(
+        "/v1/questions",
+        json=_single_payload(
+            external_id="cardio-009", document_id=lesson_id, source_quotes=["Not in the lesson"]
+        ),
+    )
+    assert bad.status_code == 422
+    assert [d["field"] for d in bad.json()["details"]] == ["source_quotes"]
+
+
+def test_source_quotes_need_a_lesson(admin_client: TestClient) -> None:
+    response = admin_client.post("/v1/questions", json=_single_payload(source_quotes=["Anything"]))
+    assert response.status_code == 422
+
+
+def test_source_quotes_come_back_only_once_answered(
+    admin_client: TestClient, lesson_id: str
+) -> None:
+    question_id = admin_client.post(
+        "/v1/questions",
+        json=_single_payload(document_id=lesson_id, source_quotes=["This lowers preload."]),
+    ).json()["id"]
+    student = _as_student(admin_client)
+
+    # Browsing the bank shows the question without its sources...
+    assert "source_quotes" not in student.get("/v1/question-bank").json()[0]
+    # ...the reveal after answering carries them.
+    reveal = student.post(
+        f"/v1/question-bank/{question_id}/answers", json={"selected_option_ids": ["a"]}
+    ).json()
+    assert reveal["source_quotes"] == ["This lowers preload."]
+
+
+def test_import_reports_a_quote_the_lesson_does_not_contain(
+    admin_client: TestClient, lesson_id: str
+) -> None:
+    body = admin_client.post(
+        "/v1/questions/import",
+        json={
+            "questions": [_single_payload(document_id=lesson_id, source_quotes=["Missing text"])]
+        },
+    ).json()
+    assert body["skipped"] == 1
+    assert [error["field"] for error in body["errors"]] == ["source_quotes"]
+
+
+# --- favourites -------------------------------------------------------------
+
+
+def test_favouriting_marks_the_question_and_filters_the_bank(admin_client: TestClient) -> None:
+    first = admin_client.post("/v1/questions", json=_single_payload()).json()["id"]
+    admin_client.post("/v1/questions", json=_multi_payload())
+    student = _as_student(admin_client)
+
+    assert student.put(f"/v1/question-bank/{first}/favourite").status_code == 204
+    # Idempotent: a second heart is not an error.
+    assert student.put(f"/v1/question-bank/{first}/favourite").status_code == 204
+
+    bank = student.get("/v1/question-bank").json()
+    assert {item["id"]: item["is_favourite"] for item in bank}[first] is True
+    assert sum(item["is_favourite"] for item in bank) == 1
+    only = student.get("/v1/question-bank", params={"favourites": True}).json()
+    assert [item["id"] for item in only] == [first]
+
+    assert student.delete(f"/v1/question-bank/{first}/favourite").status_code == 204
+    assert student.delete(f"/v1/question-bank/{first}/favourite").status_code == 204
+    assert student.get("/v1/question-bank", params={"favourites": True}).json() == []
+
+
+def test_favourites_are_per_learner(admin_client: TestClient) -> None:
+    question_id = admin_client.post("/v1/questions", json=_single_payload()).json()["id"]
+    _as_student(admin_client).put(f"/v1/question-bank/{question_id}/favourite")
+
+    app.dependency_overrides[get_current_user] = lambda: AuthenticatedUser(
+        id=uuid4(), email="someone-else@example.com"
+    )
+    assert admin_client.get("/v1/question-bank").json()[0]["is_favourite"] is False
+
+
+def test_cannot_favourite_a_draft(admin_client: TestClient) -> None:
+    draft = admin_client.post("/v1/questions", json=_single_payload(status="draft")).json()["id"]
+    assert _as_student(admin_client).put(f"/v1/question-bank/{draft}/favourite").status_code == 404

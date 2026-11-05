@@ -5,6 +5,7 @@ import type { MeResponse } from "@lp/contracts";
 import { useState } from "react";
 
 import { Button } from "@/components/button";
+import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
@@ -33,7 +34,7 @@ export default function LanguageSettingsPage() {
 
   if (isPending) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p className="text-sm text-muted-foreground">Loading...</p>
       </PageMain>
     );
@@ -41,7 +42,7 @@ export default function LanguageSettingsPage() {
 
   if (isError) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p role="alert" className="text-sm text-danger">
           Failed to load settings: {(error as Error).message}
         </p>
@@ -50,8 +51,8 @@ export default function LanguageSettingsPage() {
   }
 
   return (
-    <PageMain>
-      <h1 className="text-2xl font-bold text-foreground">Languages</h1>
+    <PageMain width="reading">
+      <PageHeader kicker="Settings" title="Languages" />
 
       <form
         className="mt-lg flex max-w-[32rem] flex-col gap-md"
@@ -60,12 +61,12 @@ export default function LanguageSettingsPage() {
           saveMutation.mutate();
         }}
       >
-        <label className="flex flex-col gap-xs text-sm text-foreground">
+        <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
           Language
           <select
             value={language}
             onChange={(event) => setLanguage(event.target.value)}
-            className="w-fit rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="field w-fit!"
           >
             {LANGUAGES.map((option) => (
               <option key={option.value} value={option.value}>

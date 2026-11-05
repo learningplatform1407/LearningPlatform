@@ -9,6 +9,8 @@ const getQuestionBankTree = vi.fn();
 const listQuestionBank = vi.fn();
 const getQuizAvailableCount = vi.fn();
 const answerBankQuestion = vi.fn();
+const favouriteQuestion = vi.fn();
+const unfavouriteQuestion = vi.fn();
 
 vi.mock("@/lib/api-client.browser", () => ({
   getBrowserApiClient: () => ({
@@ -16,6 +18,8 @@ vi.mock("@/lib/api-client.browser", () => ({
     listQuestionBank,
     getQuizAvailableCount,
     answerBankQuestion,
+    favouriteQuestion,
+    unfavouriteQuestion,
   }),
 }));
 
@@ -60,6 +64,8 @@ beforeEach(() => {
   listQuestionBank.mockReset().mockResolvedValue([]);
   getQuizAvailableCount.mockReset().mockResolvedValue({ available: 0 });
   answerBankQuestion.mockReset();
+  favouriteQuestion.mockReset().mockResolvedValue(undefined);
+  unfavouriteQuestion.mockReset().mockResolvedValue(undefined);
 });
 
 test("shows progress counts down the tree", async () => {
@@ -355,4 +361,29 @@ test("never shows an import link", async () => {
 
   expect(await screen.findByText("The question bank is empty.")).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: /Import questions/ })).not.toBeInTheDocument();
+});
+
+test("the heart favourites a question, and Favourites lists only those", async () => {
+  listQuestionBank.mockImplementation((params: { favourites?: boolean }) =>
+    Promise.resolve(params?.favourites ? [{ ...question, is_favourite: true }] : []),
+  );
+
+  renderPage();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Favourites" }));
+
+  expect(listQuestionBank).toHaveBeenCalledWith(expect.objectContaining({ favourites: true }));
+  const heart = await screen.findByRole("button", { name: "Favourite" });
+  expect(heart).toHaveAttribute("aria-pressed", "true");
+  expect(heart).toHaveTextContent("♥");
+
+  await user.click(heart);
+  expect(heart).toHaveAttribute("aria-pressed", "false");
+  expect(unfavouriteQuestion).toHaveBeenCalledWith("q1");
+});
+
+test("the Favourites view says how to add one when there are none", async () => {
+  renderPage();
+  await userEvent.setup().click(await screen.findByRole("button", { name: "Favourites" }));
+  expect(await screen.findByText(/No favourites yet/)).toBeInTheDocument();
 });

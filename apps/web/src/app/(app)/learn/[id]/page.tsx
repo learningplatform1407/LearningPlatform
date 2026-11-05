@@ -3,1252 +3,109 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import type {
-  Annotation,
-  AnnotationCreateRequest,
-  ClozeRating,
-  DocumentSummaryResponse,
-  Flashcard,
-  FlashcardCard,
-  FlashcardScope,
-  FlashcardScopeFilter,
-  ReviewRating,
-} from "@lp/contracts";
+import type { Annotation, AnnotationCreateRequest } from "@lp/contracts";
 
-import { Button } from "@/components/button";
-import { QuestionBankList } from "@/components/question-bank-list";
+import { useToast } from "@/components/toast";
+import { questionElementId } from "@/components/question-bank-list";
+import { findQuote } from "@/lib/text-offset";
+import { scrollBehavior } from "@/lib/use-media-query";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
-import { createClient } from "@/lib/supabase/client";
+
+import { FlashcardsTab } from "./flashcards-tab";
 import {
-  findBlockElement,
-  getOffsetsWithinContainer,
-  spliceAnnotations,
-  spliceClozeSpans,
-} from "@/lib/text-offset";
-import { useDismissableOverlay } from "@/lib/use-dismissable-overlay";
+  colorName,
+  nextTextScale,
+  pickSwatch,
+  TEXT_SCALES,
+  toolAvailable,
+  type BlockRange,
+  type LessonTab,
+  type LessonTool,
+  type LessonViewMode,
+  type SwatchIndex,
+  type TextScale,
+} from "./lesson-tools";
+import { LESSON_TABS, LessonMobileDots, LessonTopNotch } from "./lesson-top-notch";
+import { PdfLessonView, type PdfLessonHandle, type PdfOutlineItem } from "./pdf-lesson-view";
+import { QuizzesTab } from "./quizzes-tab";
+import { ReviewTab } from "./review-tab";
+import { SidePanel, type SidePanelTab } from "./side-panel";
+import { headingId, TextLessonView } from "./text-lesson-view";
+import { TocDrawer, type TocHeading } from "./toc-drawer";
+import { ToolNotch } from "./tool-notch";
+import { useLessonKeys } from "./use-lesson-keys";
+import { useTabSwipe } from "./use-tab-swipe";
 
-import {
-  DrawingEntryEditor,
-  NewEntryButtons,
-  NotebookEntryList,
-  TextEntryEditor,
-  useNotebookEntries,
-} from "../notebook/notebook-entries";
-import { PdfLessonView } from "./pdf-lesson-view";
+const TEXT_SCALE_KEY = "lp-text-scale";
+const UNDO_LIMIT = 80;
+const ZOOM_STEPS = [50, 75, 100, 125, 150, 200, 250, 300] as const;
 
-function ExtractedImage({ path }: { path: string }) {
-  const {
-    data: url,
-    isPending,
-    isError,
-  } = useQuery({
-    queryKey: ["document-image", path],
-    queryFn: async () => {
-      const supabase = createClient();
-      const { data, error } = await supabase.storage.from("documents").createSignedUrl(path, 3600);
-      if (error) throw error;
-      return data.signedUrl;
-    },
-  });
+/** One undoable change to this lesson's text annotations. Highlights have no
+ * update endpoint, so every change is creations and deletions, and undoing
+ * one is the reverse set. */
+type UndoOp = { created: Annotation[]; removed: Annotation[] };
 
-  if (isPending) {
-    return (
-      <div className="rounded-md border border-border p-md text-sm text-muted-foreground">
-        Loading image...
-      </div>
-    );
+function readTextScale(): TextScale {
+  try {
+    const stored = Number(window.localStorage.getItem(TEXT_SCALE_KEY));
+    return (TEXT_SCALES as readonly number[]).includes(stored) ? (stored as TextScale) : 100;
+  } catch {
+    return 100;
   }
-  if (isError || !url) {
-    return (
-      <div role="alert" className="rounded-md border border-border p-md text-sm text-danger">
-        Failed to load image.
-      </div>
-    );
-  }
-  // eslint-disable-next-line @next/next/no-img-element -- signed Supabase Storage URL, not worth next/image config for lecture figures
-  return <img src={url} alt="" className="max-w-full rounded-md border border-border" />;
 }
 
-function NoteMarker({
-  note,
-  onDeleteAnnotation,
-}: {
-  note: Annotation;
-  onDeleteAnnotation: (annotationId: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <span className="relative ml-xs inline-block align-top">
-      <button
-        type="button"
-        className="rounded-full border border-border bg-muted px-xs text-xs text-muted-foreground"
-        onClick={() => setOpen((o) => !o)}
-      >
-        note
-      </button>
-      {open && (
-        <span className="absolute left-0 top-full z-10 mt-xs w-56 rounded-md border border-border bg-background p-sm text-sm text-foreground shadow-md">
-          <span className="block whitespace-pre-wrap">{note.note_text}</span>
-          <button
-            type="button"
-            className="mt-xs text-xs text-danger"
-            onClick={() => {
-              onDeleteAnnotation(note.id);
-              setOpen(false);
-            }}
-          >
-            Delete note
-          </button>
-        </span>
-      )}
-    </span>
-  );
-}
-
-function AnnotatedParagraph({
-  text,
-  blockIndex,
-  annotations,
-  onDeleteAnnotation,
-}: {
-  text: string;
-  blockIndex: number;
-  annotations: Annotation[];
-  onDeleteAnnotation: (annotationId: string) => void;
-}) {
-  const blockAnnotations = annotations.filter((a) => a.block_index === blockIndex);
-  const segments = spliceAnnotations(text, blockAnnotations);
-  const blockNotes = blockAnnotations.filter(
-    (a) => a.type === "margin_note" && a.start_offset === null,
-  );
-
-  return (
-    <p data-block-index={blockIndex} className="text-base leading-relaxed text-foreground">
-      {segments.map((segment, index) => {
-        if (segment.annotation?.type === "highlight") {
-          return (
-            <mark key={index} className={highlightMarkClass(segment.annotation.color)}>
-              {segment.text}
-            </mark>
-          );
-        }
-        if (segment.annotation?.type === "margin_note") {
-          return (
-            <span key={index}>
-              {segment.text}
-              <NoteMarker note={segment.annotation} onDeleteAnnotation={onDeleteAnnotation} />
-            </span>
-          );
-        }
-        return <span key={index}>{segment.text}</span>;
-      })}
-      {blockNotes.map((note) => (
-        <NoteMarker key={note.id} note={note} onDeleteAnnotation={onDeleteAnnotation} />
-      ))}
-    </p>
-  );
-}
-
-interface PendingSelection {
-  blockIndex: number;
-  start: number;
-  end: number;
-  top: number;
-  left: number;
-}
-
-const TABS = [
-  { key: "lesson", label: "Lesson" },
-  { key: "review", label: "Review" },
-  { key: "quizzes", label: "Quizzes" },
-  { key: "flashcards", label: "Flashcards" },
-] as const;
-
-const NOTES_PANEL_MIN_WIDTH = 240;
-const NOTES_PANEL_MAX_WIDTH = 560;
-const NOTES_PANEL_DEFAULT_WIDTH = 320;
-const NOTES_PANEL_COLLAPSED_WIDTH = 40;
-
-type TabKey = (typeof TABS)[number]["key"];
-
-const HIGHLIGHT_COLORS = [
-  { name: "yellow", swatchClass: "bg-yellow-300", markClass: "bg-yellow-200" },
-  { name: "green", swatchClass: "bg-green-300", markClass: "bg-green-200" },
-  { name: "blue", swatchClass: "bg-blue-300", markClass: "bg-blue-200" },
-  { name: "pink", swatchClass: "bg-pink-300", markClass: "bg-pink-200" },
-] as const;
-
-function highlightMarkClass(color: string | null): string {
-  return HIGHLIGHT_COLORS.find((c) => c.name === color)?.markClass ?? "bg-yellow-200";
-}
-
-type ActiveTool = { type: "highlight"; color: string } | { type: "eraser" } | null;
-
-function AnnotationToolbar({
-  activeTool,
-  onToolChange,
-}: {
-  activeTool: ActiveTool;
-  onToolChange: (tool: ActiveTool) => void;
-}) {
-  return (
-    <div
-      role="toolbar"
-      aria-label="Annotation tools"
-      className="flex items-center gap-xs border-t border-border p-sm"
-    >
-      {HIGHLIGHT_COLORS.map((color) => {
-        const isActive = activeTool?.type === "highlight" && activeTool.color === color.name;
-        return (
-          <button
-            key={color.name}
-            type="button"
-            aria-label={`Highlight — ${color.name}`}
-            aria-pressed={isActive}
-            onClick={() => onToolChange(isActive ? null : { type: "highlight", color: color.name })}
-            className={`h-6 w-6 rounded-full border border-border ${color.swatchClass} ${
-              isActive ? "ring-2 ring-primary ring-offset-1" : ""
-            }`}
-          />
-        );
-      })}
-      <button
-        type="button"
-        aria-label="Eraser"
-        aria-pressed={activeTool?.type === "eraser"}
-        onClick={() => onToolChange(activeTool?.type === "eraser" ? null : { type: "eraser" })}
-        className={`flex h-6 w-6 items-center justify-center rounded-md border border-border text-xs ${
-          activeTool?.type === "eraser" ? "bg-muted ring-2 ring-primary ring-offset-1" : ""
-        }`}
-      >
-        🧹
-      </button>
-    </div>
-  );
-}
-
-function QuizzesTab({ documentId }: { documentId: string }) {
-  // Scoped by questions.document_id — a question's provenance, and the only
-  // link between a lesson and a question. Lessons carry no tags of their
-  // own, so "this lesson's questions" means exactly this.
-  return (
-    <div className="flex flex-col gap-md">
-      <QuestionBankList
-        filter={{ documentIds: [documentId] }}
-        emptyMessage="No questions for this lesson yet."
-      />
-      <Link href="/exams" className="text-sm text-primary hover:underline">
-        Practise in an exam →
-      </Link>
-    </div>
-  );
-}
-
-const SCOPE_FILTERS = [
-  { key: "all", label: "All" },
-  { key: "official", label: "Official" },
-  { key: "personal", label: "Mine" },
-] as const;
-
-function ScopeToggle({
-  scope,
-  onChange,
-}: {
-  scope: FlashcardScopeFilter;
-  onChange: (scope: FlashcardScopeFilter) => void;
-}) {
-  return (
-    <div role="group" aria-label="Filter flashcards" className="flex gap-xs">
-      {SCOPE_FILTERS.map((filter) => (
-        <button
-          key={filter.key}
-          type="button"
-          aria-pressed={scope === filter.key}
-          onClick={() => onChange(filter.key)}
-          className={`rounded-md border px-sm py-xs text-xs ${
-            scope === filter.key
-              ? "border-primary bg-muted text-foreground"
-              : "border-border text-muted-foreground hover:bg-muted"
-          }`}
-        >
-          {filter.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** Official vs personal, always paired with a word rather than colour alone. */
-function ScopeBadge({ scope }: { scope: FlashcardScope }) {
-  return (
-    <span className="rounded-md border border-border px-xs py-[0.0625rem] text-xs text-muted-foreground">
-      {scope === "official" ? "Official" : "Mine"}
-    </span>
-  );
-}
-
-function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: () => void }) {
-  const [front, setFront] = useState("");
-  const [back, setBack] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  const create = useMutation({
-    mutationFn: () =>
-      getBrowserApiClient().createFlashcard(documentId, { front_text: front, back_text: back }),
-    onSuccess: () => {
-      setFront("");
-      setBack("");
-      setError(null);
-      onDone();
-    },
-    onError: () => setError("Could not save that card."),
-  });
-
-  return (
-    <form
-      className="flex w-full max-w-[32rem] flex-col gap-sm rounded-md border border-border p-md"
-      onSubmit={(event) => {
-        event.preventDefault();
-        create.mutate();
-      }}
-    >
-      <label className="flex flex-col gap-xs text-sm text-foreground">
-        Front
-        <input
-          value={front}
-          onChange={(event) => setFront(event.target.value)}
-          className="w-full rounded-md border border-border bg-background px-sm py-xs text-sm"
-        />
-      </label>
-      <label className="flex flex-col gap-xs text-sm text-foreground">
-        Back
-        <textarea
-          value={back}
-          onChange={(event) => setBack(event.target.value)}
-          rows={3}
-          className="w-full rounded-md border border-border bg-background px-sm py-xs text-sm"
-        />
-      </label>
-      {error && (
-        <p role="alert" className="text-xs text-danger">
-          {error}
-        </p>
-      )}
-      <div className="flex gap-sm">
-        <Button type="submit" disabled={!front.trim() || !back.trim() || create.isPending}>
-          Save card
-        </Button>
-        <Button type="button" variant="secondary" onClick={onDone}>
-          Cancel
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => void }) {
-  const [editing, setEditing] = useState(false);
-  const [front, setFront] = useState(card.front_text);
-  const [back, setBack] = useState(card.back_text);
-  const [error, setError] = useState<string | null>(null);
-
-  // Reseeds the draft from the card every time the row opens, so Cancel
-  // genuinely discards. Without it the state survives the close (the row is
-  // keyed by card.id and never remounts) and the next Save would commit an
-  // edit the learner had explicitly cancelled.
-  function openEditor() {
-    setFront(card.front_text);
-    setBack(card.back_text);
-    setError(null);
-    setEditing(true);
-  }
-
-  const update = useMutation({
-    mutationFn: () =>
-      getBrowserApiClient().updateFlashcard(card.id, { front_text: front, back_text: back }),
-    onSuccess: () => {
-      setEditing(false);
-      setError(null);
-      onChanged();
-    },
-    onError: () => setError("Could not save that card."),
-  });
-  const remove = useMutation({
-    mutationFn: () => getBrowserApiClient().deleteFlashcard(card.id),
-    onSuccess: onChanged,
-    onError: () => setError("Could not delete that card."),
-  });
-  const suspension = useMutation({
-    mutationFn: () => getBrowserApiClient().setFlashcardSuspension(card.id, !card.suspended),
-    onSuccess: onChanged,
-    // This toggle is the only route back into the rotation, so a silent
-    // failure would leave the learner unable to tell the card is still out.
-    onError: () =>
-      setError(card.suspended ? "Could not include that card." : "Could not exclude that card."),
-  });
-
-  if (editing) {
-    return (
-      <li className="flex flex-col gap-xs rounded-md border border-border p-sm">
-        <input
-          aria-label="Front"
-          value={front}
-          onChange={(event) => setFront(event.target.value)}
-          className="w-full rounded-md border border-border bg-background px-sm py-xs text-sm"
-        />
-        <textarea
-          aria-label="Back"
-          value={back}
-          onChange={(event) => setBack(event.target.value)}
-          rows={2}
-          className="w-full rounded-md border border-border bg-background px-sm py-xs text-sm"
-        />
-        {error && (
-          <p role="alert" className="text-xs text-danger">
-            {error}
-          </p>
-        )}
-        <div className="flex gap-xs">
-          <Button
-            disabled={!front.trim() || !back.trim() || update.isPending}
-            onClick={() => update.mutate()}
-          >
-            Save
-          </Button>
-          <Button variant="secondary" onClick={() => setEditing(false)}>
-            Cancel
-          </Button>
-        </div>
-      </li>
-    );
-  }
-
-  return (
-    <li
-      className={`flex items-start justify-between gap-sm rounded-md border border-border px-md py-sm ${
-        card.suspended ? "opacity-60" : ""
-      }`}
-    >
-      <div className="min-w-0">
-        <p className="text-sm text-foreground">{card.front_text}</p>
-        <p className="text-xs text-muted-foreground">{card.back_text}</p>
-        {error && (
-          <p role="alert" className="text-xs text-danger">
-            {error}
-          </p>
-        )}
-      </div>
-      <div className="flex shrink-0 items-center gap-xs">
-        <ScopeBadge scope={card.scope} />
-        {card.suspended && (
-          <span className="rounded-md border border-border px-xs py-[0.0625rem] text-xs text-muted-foreground">
-            Not in rotation
-          </span>
-        )}
-        {/* Offered on every visible card, official included — suspension is
-            the caller's own review state, not a change to shared content.
-            This row is the only place a suspended card is still listed, so
-            it is the only way back into the rotation. */}
-        <button
-          type="button"
-          aria-pressed={!card.suspended}
-          disabled={suspension.isPending}
-          onClick={() => suspension.mutate()}
-          className="text-xs text-primary hover:underline"
-        >
-          {card.suspended ? "Include in reviews" : "Exclude from reviews"}
-        </button>
-        {card.can_edit && (
-          <button
-            type="button"
-            onClick={openEditor}
-            className="text-xs text-primary hover:underline"
-          >
-            Edit
-          </button>
-        )}
-        {card.can_delete && (
-          <button
-            type="button"
-            disabled={remove.isPending}
-            onClick={() => remove.mutate()}
-            className="text-xs text-danger hover:underline"
-          >
-            {/* Retiring an official card archives it for everyone; deleting
-                your own personal card removes it. Different verbs because
-                they are different actions. */}
-            {card.scope === "official" ? "Retire" : "Delete"}
-          </button>
-        )}
-      </div>
-    </li>
-  );
-}
-
-function FlashcardsTab({ documentId }: { documentId: string }) {
-  const queryClient = useQueryClient();
-  const [scope, setScope] = useState<FlashcardScopeFilter>("all");
-  const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
-  // Cards removed from the server-driven queue. Every graded card lands
-  // here, including "Again" ones — those are re-added to the tail via
-  // `againCards` instead.
-  const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
-  // "Again" means show me again now. The scheduler's floor is one whole day,
-  // so the server will say tomorrow; holding the card locally is what keeps
-  // the promise within this session. Kept as card objects rather than ids so
-  // a background refetch (which no longer returns them, they are not due)
-  // cannot drop them mid-session.
-  const [againCards, setAgainCards] = useState<FlashcardCard[]>([]);
-  const [feedback, setFeedback] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-
-  const deckQuery = useQuery({
-    queryKey: ["flashcards", "due", documentId, scope],
-    queryFn: () => getBrowserApiClient().listDueFlashcards(documentId, { scope }),
-  });
-  // Every visible card, not just the learner's own: this list is where a
-  // suspended card is re-included, and a suspended card is absent from the
-  // deck and from every count, so a personal-only list would leave an
-  // excluded official card with no way back in.
-  const cardsQuery = useQuery({
-    queryKey: ["flashcards", "lesson", documentId],
-    queryFn: () => getBrowserApiClient().listFlashcards(documentId),
-  });
-
-  function refresh() {
-    void queryClient.invalidateQueries({ queryKey: ["flashcards"] });
-  }
-
-  const reviewMutation = useMutation({
-    mutationFn: ({ cardId, rating }: { cardId: string; rating: ReviewRating }) =>
-      getBrowserApiClient().submitFlashcardReview(cardId, rating),
-    onSuccess: (state, variables) => {
-      const { cardId, rating } = variables;
-      setGradedIds((previous) => new Set(previous).add(cardId));
-      setRevealedCardId(null);
-      setActionError(null);
-
-      if (rating === "again") {
-        setAgainCards((previous) => {
-          const card = [...(deckQuery.data ?? []), ...previous].find((c) => c.id === cardId);
-          const withoutIt = previous.filter((c) => c.id !== cardId);
-          // Appended, so it comes back after the rest of the queue rather
-          // than immediately — re-reading the answer you just saw teaches
-          // nothing.
-          return card ? [...withoutIt, card] : withoutIt;
-        });
-        setFeedback("You'll see this one again before you finish.");
-      } else {
-        setAgainCards((previous) => previous.filter((c) => c.id !== cardId));
-        setFeedback(
-          `Next review in ${state.interval_days} ${state.interval_days === 1 ? "day" : "days"}.`,
-        );
-      }
-      refresh();
-    },
-    // Without this a failed grade silently does nothing: the card stays
-    // revealed, the buttons re-enable, and the learner has no idea the
-    // rating never landed.
-    onError: () => setActionError("Could not save that rating."),
-  });
-
-  const excludeMutation = useMutation({
-    mutationFn: (cardId: string) => getBrowserApiClient().setFlashcardSuspension(cardId, true),
-    onSuccess: (_state, cardId) => {
-      // Reuses gradedIds: from the runner's point of view an excluded card
-      // is simply done with for this session, and the server has already
-      // dropped it from the deck.
-      setGradedIds((previous) => new Set(previous).add(cardId));
-      setAgainCards((previous) => previous.filter((c) => c.id !== cardId));
-      setRevealedCardId(null);
-      setActionError(null);
-      setFeedback("Excluded from reviews. You can include it again below.");
-      refresh();
-    },
-    onError: () => setActionError("Could not exclude that card."),
-  });
-
-  // Filtered client-side rather than trusting the refetched list to shrink,
-  // so a background refetch can't move the card out from under you — same
-  // reasoning as ReviewTab above.
-  const queue = [
-    ...(deckQuery.data ?? []).filter((card) => !gradedIds.has(card.id)),
-    ...againCards,
-  ];
-  const currentCard = queue[0];
-  // Cards actually finished: graded and not waiting to come back round.
-  const completed = gradedIds.size - againCards.length;
-  const revealed = currentCard !== undefined && revealedCardId === currentCard.id;
-
-  if (deckQuery.isPending) {
-    return <p className="text-sm text-muted-foreground">Loading...</p>;
-  }
-  if (deckQuery.isError) {
-    return (
-      <p role="alert" className="text-sm text-danger">
-        Failed to load flashcards.
-      </p>
-    );
-  }
-
-  const lessonCards = cardsQuery.data ?? [];
-  const excludedCount = lessonCards.filter((card) => card.suspended).length;
-
-  return (
-    <div className="flex flex-col items-center gap-md">
-      <div className="flex w-full max-w-[32rem] items-center justify-between gap-sm">
-        <ScopeToggle
-          scope={scope}
-          onChange={(next) => {
-            // The deck is re-keyed by scope, so the session state derived
-            // from it has to go too — otherwise "Card 4 of 5" carries over
-            // from the previous scope onto a shorter deck.
-            setScope(next);
-            setGradedIds(new Set());
-            setAgainCards([]);
-            setRevealedCardId(null);
-            setFeedback(null);
-            setActionError(null);
-          }}
-        />
-        {!adding && (
-          <Button variant="secondary" onClick={() => setAdding(true)}>
-            Add a card
-          </Button>
-        )}
-      </div>
-
-      {adding && (
-        <AddFlashcardForm
-          documentId={documentId}
-          onDone={() => {
-            setAdding(false);
-            refresh();
-          }}
-        />
-      )}
-
-      {!currentCard && (
-        <p className="text-sm text-muted-foreground">
-          {/* Tests the lesson's cards, not the deck: with every card
-              excluded the deck is empty while the lesson is not, and the
-              "no flashcards yet" copy would contradict the list below. */}
-          {lessonCards.length === 0 && cardsQuery.isSuccess && gradedIds.size === 0
-            ? "No flashcards for this lesson yet. Add your own, or check back for official ones."
-            : "You're all caught up — nothing to review right now."}
-        </p>
-      )}
-
-      {currentCard && (
-        <>
-          <p className="text-xs text-muted-foreground">
-            Card {completed + 1} of {completed + queue.length}
-          </p>
-          <button
-            type="button"
-            aria-expanded={revealed}
-            onClick={() => setRevealedCardId(currentCard.id)}
-            className="flex min-h-[10rem] w-full max-w-[32rem] flex-col items-center justify-center gap-sm rounded-md border border-border p-xl text-center hover:bg-muted"
-          >
-            <ScopeBadge scope={currentCard.scope} />
-            <p className="text-lg font-medium text-foreground">{currentCard.front_text}</p>
-            {revealed ? (
-              <p className="border-t border-border pt-sm text-sm text-foreground">
-                {currentCard.back_text}
-              </p>
-            ) : (
-              <span className="text-xs text-muted-foreground">Tap to reveal</span>
-            )}
-          </button>
-
-          {revealed && (
-            <div className="flex flex-wrap items-center justify-center gap-sm">
-              <Button
-                variant="danger"
-                disabled={reviewMutation.isPending}
-                onClick={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "again" })}
-              >
-                Again
-              </Button>
-              <Button
-                variant="warning"
-                disabled={reviewMutation.isPending}
-                onClick={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "hard" })}
-              >
-                Hard
-              </Button>
-              <Button
-                disabled={reviewMutation.isPending}
-                onClick={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "good" })}
-              >
-                Good
-              </Button>
-              <Button
-                variant="success"
-                disabled={reviewMutation.isPending}
-                onClick={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "easy" })}
-              >
-                Easy
-              </Button>
-            </div>
-          )}
-
-          {revealed && (
-            // Offered at the moment you've just seen the answer and decided
-            // you're done with this card, rather than making you hunt for it
-            // in the list below.
-            <button
-              type="button"
-              disabled={excludeMutation.isPending}
-              onClick={() => excludeMutation.mutate(currentCard.id)}
-              className="text-xs text-muted-foreground hover:underline"
-            >
-              Exclude this card from reviews
-            </button>
-          )}
-        </>
-      )}
-
-      {feedback && <p className="text-xs text-muted-foreground">{feedback}</p>}
-      {actionError && (
-        <p role="alert" className="text-xs text-danger">
-          {actionError}
-        </p>
-      )}
-
-      {cardsQuery.isError && (
-        <p role="alert" className="text-sm text-danger">
-          Failed to load this lesson&apos;s cards, so excluded ones can&apos;t be managed right now.
-        </p>
-      )}
-
-      {lessonCards.length > 0 && (
-        <section className="w-full max-w-[32rem]">
-          <h2 className="mb-xs text-sm font-medium text-foreground">
-            All cards in this lesson
-            {excludedCount > 0 && (
-              <span className="ml-xs font-normal text-muted-foreground">
-                · {excludedCount} excluded
-              </span>
-            )}
-          </h2>
-          <ul className="flex flex-col gap-xs">
-            {lessonCards.map((card) => (
-              <LessonCardRow key={card.id} card={card} onChanged={refresh} />
-            ))}
-          </ul>
-        </section>
-      )}
-    </div>
-  );
-}
-
-function ReviewTab({ documentId }: { documentId: string }) {
-  const queryClient = useQueryClient();
-  const documentQuery = useQuery({
-    queryKey: ["documents", documentId],
-    queryFn: () => getBrowserApiClient().getDocument(documentId),
-  });
-  const dueQuery = useQuery({
-    queryKey: ["cloze-cards", "due", documentId],
-    queryFn: () => getBrowserApiClient().listDueClozeCards(documentId),
-  });
-
-  // Cards graded this session are tracked locally rather than relying on
-  // the due-list query's own (invalidated, refetched) data to shrink —
-  // that keeps the reading position stable even if a background refetch
-  // reshapes dueQuery.data mid-session. At most one card is "revealed but
-  // not yet graded" at a time; everything queued behind it stays hidden.
-  const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
-  const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<string | null>(null);
-
-  const reviewMutation = useMutation({
-    mutationFn: ({ cardId, rating }: { cardId: string; rating: ClozeRating }) =>
-      getBrowserApiClient().submitClozeReview(documentId, cardId, rating),
-    onSuccess: (state, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["cloze-cards", "due", documentId] });
-      setGradedIds((prev) => new Set(prev).add(variables.cardId));
-      setRevealedCardId(null);
-      setFeedback(
-        `Next review in ${state.interval_days} ${state.interval_days === 1 ? "day" : "days"}.`,
-      );
-    },
-  });
-
-  if (dueQuery.isPending || documentQuery.isPending) {
-    return <p className="text-sm text-muted-foreground">Loading...</p>;
-  }
-  if (dueQuery.isError || documentQuery.isError) {
-    return (
-      <p role="alert" className="text-sm text-danger">
-        Failed to load review cards.
-      </p>
-    );
-  }
-
-  const version = documentQuery.data?.current_version;
-  const blocks = version?.extracted_content?.blocks ?? [];
-  const dueCards = dueQuery.data ?? [];
-  const queue = dueCards.filter((card) => !gradedIds.has(card.id));
-  const currentCard = queue[0];
-
-  // Every due card not yet graded renders hidden, except the one queue head
-  // currently revealed (awaiting a grade) — grouped by block so a paragraph
-  // with more than one due word renders each independently.
-  const spansByBlock = new Map<
-    number,
-    { id: string; start_offset: number; end_offset: number; hidden: boolean }[]
-  >();
-  for (const card of dueCards) {
-    if (gradedIds.has(card.id)) continue;
-    const existing = spansByBlock.get(card.block_index) ?? [];
-    existing.push({
-      id: card.id,
-      start_offset: card.start_offset,
-      end_offset: card.end_offset,
-      hidden: card.id !== revealedCardId,
-    });
-    spansByBlock.set(card.block_index, existing);
-  }
-
-  return (
-    <div className="flex min-h-screen flex-col gap-md">
-      {/* flex-1 so the bar below always ends up pinned at the bottom of the
-          screen (via the sticky rule) even for a short lesson, instead of
-          floating right after a couple of lines of text. */}
-      <div className="flex-1">
-        {version?.status === "processing" && (
-          <p className="text-sm text-muted-foreground">Processing...</p>
-        )}
-        {version?.status === "failed" && (
-          <p role="alert" className="text-sm text-danger">
-            Processing failed: {version.error_message ?? "Unknown error"}
-          </p>
-        )}
-        {version?.status === "ready" && (
-          <article className="flex flex-col gap-md">
-            {blocks.map((block, index) => {
-              if (block.type === "heading") {
-                return (
-                  <h2 key={index} className="text-xl font-semibold text-foreground">
-                    {block.text}
-                  </h2>
-                );
-              }
-              if (block.type === "image") {
-                return block.image_path ? (
-                  <ExtractedImage key={index} path={block.image_path} />
-                ) : null;
-              }
-              const segments = spliceClozeSpans(block.text ?? "", spansByBlock.get(index) ?? []);
-              return (
-                <p key={index} className="text-base leading-relaxed text-foreground">
-                  {segments.map((segment, i) =>
-                    segment.hidden ? (
-                      <span key={i} className="font-semibold text-muted-foreground">
-                        [...]
-                      </span>
-                    ) : segment.id === currentCard?.id ? (
-                      <span key={i} className="font-semibold text-primary">
-                        {segment.text}
-                      </span>
-                    ) : (
-                      <span key={i}>{segment.text}</span>
-                    ),
-                  )}
-                </p>
-              );
-            })}
-          </article>
-        )}
-      </div>
-
-      {/* sticky (not fixed) so this only ever spans the lesson column's own
-          width, same as the rest of this tab's content — a fixed bar would
-          stretch across the Contents and Notes side panels too. */}
-      <div className="sticky bottom-0 z-10 -mx-xl border-t border-border bg-background px-xl py-md">
-        <div className="flex items-center justify-center gap-sm">
-          {!currentCard && (
-            <p className="text-sm text-muted-foreground">
-              You&apos;re all caught up — nothing to review right now.
-            </p>
-          )}
-          {currentCard && revealedCardId !== currentCard.id && (
-            <>
-              <p className="text-xs text-muted-foreground">
-                {queue.length} {queue.length === 1 ? "word" : "words"} left to review
-              </p>
-              <Button onClick={() => setRevealedCardId(currentCard.id)}>Show</Button>
-            </>
-          )}
-          {currentCard && revealedCardId === currentCard.id && (
-            <>
-              <Button
-                variant="danger"
-                disabled={reviewMutation.isPending}
-                onClick={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "again" })}
-              >
-                Again
-              </Button>
-              <Button
-                variant="warning"
-                disabled={reviewMutation.isPending}
-                onClick={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "hard" })}
-              >
-                Hard
-              </Button>
-              <Button
-                disabled={reviewMutation.isPending}
-                onClick={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "good" })}
-              >
-                Good
-              </Button>
-              <Button
-                variant="success"
-                disabled={reviewMutation.isPending}
-                onClick={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "easy" })}
-              >
-                Easy
-              </Button>
-            </>
-          )}
-          {feedback && <p className="text-xs text-muted-foreground">{feedback}</p>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TocPanelBody({
-  data,
-  isPending,
-  currentDocumentId,
-}: {
-  data: DocumentSummaryResponse[] | undefined;
-  isPending: boolean;
-  currentDocumentId: string;
-}) {
-  return (
-    <>
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Contents
-      </h2>
-      {isPending && <p className="text-sm text-muted-foreground">Loading...</p>}
-      {!isPending && (!data || data.length === 0) && (
-        <p className="text-sm text-muted-foreground">No lessons.</p>
-      )}
-      {data && data.length > 0 && (
-        <ul className="flex flex-col gap-xs">
-          {data.map((doc) => (
-            <li key={doc.id}>
-              <Link
-                href={`/learn/${doc.id}`}
-                className={`block rounded-md px-sm py-xs text-sm ${
-                  doc.id === currentDocumentId
-                    ? "bg-muted font-semibold text-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                {doc.title}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </>
-  );
-}
-
-function TocPanel({
-  scopeId,
-  currentDocumentId,
-  activeTool,
-  onToolChange,
-  mobileOpen,
-  onMobileClose,
-}: {
-  scopeId: string;
-  currentDocumentId: string;
-  activeTool: ActiveTool;
-  onToolChange: (tool: ActiveTool) => void;
-  mobileOpen: boolean;
-  onMobileClose: () => void;
-}) {
-  const { data, isPending } = useQuery({
-    queryKey: ["documents", scopeId],
-    queryFn: () => getBrowserApiClient().listDocuments(scopeId),
-  });
-
-  useDismissableOverlay(mobileOpen, onMobileClose);
-
-  return (
-    <>
-      {mobileOpen && (
-        <div className="fixed inset-0 z-20 md:hidden">
-          <div className="absolute inset-0 bg-foreground/40" onClick={onMobileClose} />
-          <nav
-            aria-label="Table of contents (mobile)"
-            className="absolute top-0 left-0 flex h-full w-[16rem] flex-col bg-background shadow-md"
-          >
-            <button
-              type="button"
-              onClick={onMobileClose}
-              aria-label="Close contents"
-              className="absolute top-md right-md flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-            >
-              <span aria-hidden="true" className="text-lg leading-none">
-                ×
-              </span>
-            </button>
-            <div className="flex flex-1 flex-col gap-xs overflow-y-auto p-md pr-2xl">
-              <TocPanelBody
-                data={data}
-                isPending={isPending}
-                currentDocumentId={currentDocumentId}
-              />
-            </div>
-            <AnnotationToolbar activeTool={activeTool} onToolChange={onToolChange} />
-          </nav>
-        </div>
-      )}
-
-      <nav
-        aria-label="Table of contents"
-        className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-border md:flex"
-      >
-        <div className="flex flex-1 flex-col gap-xs overflow-y-auto p-md">
-          <TocPanelBody data={data} isPending={isPending} currentDocumentId={currentDocumentId} />
-        </div>
-        <AnnotationToolbar activeTool={activeTool} onToolChange={onToolChange} />
-      </nav>
-    </>
-  );
-}
-
-type NotesView =
-  | { kind: "list" }
-  | { kind: "entry"; entryId: string }
-  | { kind: "new-text" }
-  | { kind: "new-drawing" };
-
-function NotesPanel({
-  documentId,
-  mobileOpen,
-  onMobileClose,
-}: {
-  documentId: string;
-  mobileOpen: boolean;
-  onMobileClose: () => void;
-}) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [width, setWidth] = useState(NOTES_PANEL_DEFAULT_WIDTH);
-  const [view, setView] = useState<NotesView>({ kind: "list" });
-  const draggingRef = useRef(false);
-  const entries = useNotebookEntries();
-  const selectedEntry =
-    view.kind === "entry" ? entries.data?.find((e) => e.id === view.entryId) : undefined;
-
-  useDismissableOverlay(mobileOpen, onMobileClose);
-
-  // A 4:3 drawing canvas needs real width to be usable — temporarily widen
-  // the panel to its max while a drawing is open. Derived during render
-  // (not synced via an effect) so the user's actual preferred `width` is
-  // untouched and simply resumes once they leave the drawing.
-  const isDrawingView = view.kind === "new-drawing" || selectedEntry?.type === "drawing";
-  const effectiveWidth = isDrawingView ? NOTES_PANEL_MAX_WIDTH : width;
-
-  function handleDragStart(event: ReactMouseEvent) {
-    event.preventDefault();
-    draggingRef.current = true;
-    const startX = event.clientX;
-    const startWidth = width;
-
-    function handleMouseMove(moveEvent: MouseEvent) {
-      if (!draggingRef.current) return;
-      const next = startWidth + (startX - moveEvent.clientX);
-      setWidth(Math.min(NOTES_PANEL_MAX_WIDTH, Math.max(NOTES_PANEL_MIN_WIDTH, next)));
-    }
-
-    function handleMouseUp() {
-      draggingRef.current = false;
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    }
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-  }
-
-  // Shared by the desktop expanded panel and the mobile drawer -- the list/
-  // editor views and the entries query are identical either way, only the
-  // surrounding chrome (sticky resizable column vs. off-canvas drawer)
-  // differs.
-  const notesBody = (
-    <>
-      {entries.isPending && <p className="text-sm text-muted-foreground">Loading...</p>}
-      {entries.isError && (
-        <p role="alert" className="text-sm text-danger">
-          Failed to load notes.
-        </p>
-      )}
-      {entries.data && (
-        <>
-          {view.kind !== "list" && (
-            <button
-              type="button"
-              onClick={() => setView({ kind: "list" })}
-              className="self-start text-sm text-muted-foreground hover:underline"
-            >
-              ← Notes
-            </button>
-          )}
-          {view.kind === "list" && (
-            <NotebookEntryList
-              entries={entries.data}
-              onSelect={(entryId) => setView({ kind: "entry", entryId })}
-            />
-          )}
-          {view.kind === "new-text" && (
-            <TextEntryEditor
-              sourceDocumentId={documentId}
-              onCreated={(id) => setView({ kind: "entry", entryId: id })}
-            />
-          )}
-          {view.kind === "new-drawing" && (
-            <DrawingEntryEditor
-              sourceDocumentId={documentId}
-              onCreated={(id) => setView({ kind: "entry", entryId: id })}
-            />
-          )}
-          {view.kind === "entry" && selectedEntry && selectedEntry.type === "text" && (
-            <TextEntryEditor
-              key={selectedEntry.id}
-              entry={selectedEntry}
-              onDeleted={() => setView({ kind: "list" })}
-            />
-          )}
-          {view.kind === "entry" && selectedEntry && selectedEntry.type === "drawing" && (
-            <DrawingEntryEditor
-              key={selectedEntry.id}
-              entry={selectedEntry}
-              onDeleted={() => setView({ kind: "list" })}
-            />
-          )}
-        </>
-      )}
-    </>
-  );
-  const newEntryButtons = view.kind === "list" && (
-    <NewEntryButtons
-      onNewText={() => setView({ kind: "new-text" })}
-      onNewDrawing={() => setView({ kind: "new-drawing" })}
-    />
-  );
-
-  return (
-    <>
-      {mobileOpen && (
-        <div className="fixed inset-0 z-20 md:hidden">
-          <div className="absolute inset-0 bg-foreground/40" onClick={onMobileClose} />
-          <div className="absolute top-0 right-0 flex h-full w-[18rem] flex-col bg-background shadow-md">
-            <div className="flex flex-1 flex-col gap-sm overflow-y-auto p-md">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Notes
-                </h2>
-                <button
-                  type="button"
-                  onClick={onMobileClose}
-                  aria-label="Close notes"
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-                >
-                  <span aria-hidden="true" className="text-lg leading-none">
-                    ×
-                  </span>
-                </button>
-              </div>
-              {notesBody}
-            </div>
-            {newEntryButtons}
-          </div>
-        </div>
-      )}
-
-      {collapsed ? (
-        <div
-          style={{ width: NOTES_PANEL_COLLAPSED_WIDTH }}
-          className="sticky top-0 hidden h-screen shrink-0 flex-col items-center border-l border-border p-xs md:flex"
-        >
-          <button
-            type="button"
-            onClick={() => setCollapsed(false)}
-            aria-label="Expand notes"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-          >
-            «
-          </button>
-        </div>
-      ) : (
-        <div
-          style={{ width: effectiveWidth }}
-          className="sticky top-0 relative hidden h-screen shrink-0 flex-col border-l border-border md:flex"
-        >
-          <div
-            onMouseDown={handleDragStart}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize notes panel"
-            className="absolute top-0 left-0 h-full w-2 -translate-x-1/2 cursor-col-resize"
-          />
-          <div className="flex flex-1 flex-col gap-sm overflow-y-auto p-md">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Notes
-              </h2>
-              <button
-                type="button"
-                onClick={() => setCollapsed(true)}
-                aria-label="Collapse notes"
-                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-              >
-                »
-              </button>
-            </div>
-            {notesBody}
-          </div>
-          {newEntryButtons}
-        </div>
-      )}
-    </>
-  );
+function recreateRequest(annotation: Annotation): AnnotationCreateRequest {
+  return {
+    type: annotation.type,
+    block_index: annotation.block_index,
+    start_offset: annotation.start_offset,
+    end_offset: annotation.end_offset,
+    note_text: annotation.note_text,
+    color: annotation.color,
+  };
 }
 
 export default function LecturePage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const articleRef = useRef<HTMLElement>(null);
-  const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
-  const [noteDraft, setNoteDraft] = useState<string | null>(null);
-  const [showExplainComingSoon, setShowExplainComingSoon] = useState(false);
+  const toast = useToast();
+  const titleRef = useRef<HTMLHeadingElement>(null);
+
   // Lazy-initialized so a deep link like /learn/{id}?tab=review (e.g. from
   // the review dashboard) opens straight to that tab instead of always
   // starting on Lesson.
-  const [activeTab, setActiveTab] = useState<TabKey>(() => {
+  // A visit from a checked question to the passages behind it.
+  const [seeInLesson, setSeeInLesson] = useState<{
+    questionId: string;
+    quotes: string[];
+  } | null>(null);
+  const [activeTab, setActiveTab] = useState<LessonTab>(() => {
     const tabParam = searchParams.get("tab");
-    return TABS.some((tab) => tab.key === tabParam) ? (tabParam as TabKey) : "lesson";
+    return LESSON_TABS.some((tab) => tab.key === tabParam) ? (tabParam as LessonTab) : "lesson";
   });
-  // Defaults to "text" -- the PDF/Text toggle itself only renders when the
-  // lesson has a *ready* lecture_pdf attached (see `readyLecturePdf` below).
-  const [lessonViewMode, setLessonViewMode] = useState<"text" | "pdf">("text");
-  const [activeTool, setActiveTool] = useState<ActiveTool>(null);
-  const [mobileTocOpen, setMobileTocOpen] = useState(false);
-  const [mobileNotesOpen, setMobileNotesOpen] = useState(false);
+  // Defaults to "text" -- the PDF/Text switch only renders when the lesson
+  // has a *ready* lecture_pdf attached (see `readyLecturePdf` below).
+  const [viewMode, setViewMode] = useState<LessonViewMode>("text");
+  const [tool, setTool] = useState<LessonTool>(null);
+  const [tocOpen, setTocOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelTab, setPanelTab] = useState<SidePanelTab>("notebook");
+  const [focusNoteId, setFocusNoteId] = useState<string | null>(null);
+  const [textScale, setTextScale] = useState<TextScale>(() =>
+    typeof window === "undefined" ? 100 : readTextScale(),
+  );
+  const [titleScrolledAway, setTitleScrolledAway] = useState(false);
+  const [activeHeadingId, setActiveHeadingId] = useState<string | null>(null);
+  const undoStack = useRef<UndoOp[]>([]);
+  const [undoDepth, setUndoDepth] = useState(0);
+  const pdfRef = useRef<PdfLessonHandle>(null);
+  const [pdfCanUndo, setPdfCanUndo] = useState(false);
+  const [pdfOutline, setPdfOutline] = useState<PdfOutlineItem[]>([]);
+  const [zoom, setZoom] = useState(100);
+  const handleOutline = useCallback((items: PdfOutlineItem[]) => setPdfOutline(items), []);
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["documents", params.id],
@@ -1256,12 +113,21 @@ export default function LecturePage() {
   });
 
   const version = data?.current_version;
+  const blocks = version?.status === "ready" ? (version.extracted_content?.blocks ?? []) : [];
+  const sourcesByBlock = new Map<number, { start: number; end: number }[]>();
+  for (const quote of seeInLesson?.quotes ?? []) {
+    blocks.forEach((block, index) => {
+      const found = block.type === "paragraph" ? findQuote(block.text ?? "", quote) : null;
+      if (found) sourcesByBlock.set(index, [...(sourcesByBlock.get(index) ?? []), found]);
+    });
+  }
   // Only a PDF that actually processed is offered. `status` and
   // `error_message` used to be plumbed through the whole stack and read by
   // nobody, so a failed upload still rendered the toggle and dead-ended in
   // "Failed to load the lecture PDF." The admin who uploaded it sees the
   // real reason on the library page instead, where the upload happens.
   const readyLecturePdf = data?.lecture_pdf?.status === "ready" ? data.lecture_pdf : null;
+  const mode: LessonViewMode = readyLecturePdf ? viewMode : "text";
 
   const { data: annotations = [] } = useQuery({
     queryKey: ["annotations", params.id],
@@ -1269,127 +135,315 @@ export default function LecturePage() {
     enabled: version?.status === "ready",
   });
 
-  const createAnnotationMutation = useMutation({
+  const createAnnotation = useMutation({
     mutationFn: (body: AnnotationCreateRequest) =>
       getBrowserApiClient().createAnnotation(params.id, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["annotations", params.id] }),
   });
-
-  const deleteAnnotationMutation = useMutation({
+  const updateAnnotation = useMutation({
+    mutationFn: ({ id, note_text }: { id: string; note_text: string }) =>
+      getBrowserApiClient().updateAnnotation(params.id, id, { note_text }),
+  });
+  const deleteAnnotation = useMutation({
     mutationFn: (annotationId: string) =>
       getBrowserApiClient().deleteAnnotation(params.id, annotationId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["annotations", params.id] }),
   });
 
-  function clearSelectionState() {
-    window.getSelection()?.removeAllRanges();
-    setPendingSelection(null);
-    setNoteDraft(null);
-    setShowExplainComingSoon(false);
+  /** Applies a set of deletions and creations, and returns what was created. */
+  async function apply(remove: Annotation[], create: AnnotationCreateRequest[]) {
+    try {
+      await Promise.all(remove.map((a) => deleteAnnotation.mutateAsync(a.id)));
+      return await Promise.all(create.map((body) => createAnnotation.mutateAsync(body)));
+    } catch {
+      toast("That change couldn't be saved.");
+      return [];
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: ["annotations", params.id] });
+    }
   }
 
-  function handleMouseUp() {
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
-      setPendingSelection(null);
+  function pushUndo(op: UndoOp) {
+    if (op.created.length === 0 && op.removed.length === 0) return;
+    undoStack.current = [...undoStack.current.slice(-(UNDO_LIMIT - 1)), op];
+    setUndoDepth(undoStack.current.length);
+  }
+
+  async function undo() {
+    // PDF pages keep their own history (ink and highlights live per page).
+    if (mode === "pdf") {
+      if (!pdfRef.current?.undo()) toast("Nothing to undo.");
       return;
     }
-
-    const range = selection.getRangeAt(0);
-    const blockEl = findBlockElement(range.startContainer);
-    if (!blockEl || !articleRef.current?.contains(blockEl)) {
-      setPendingSelection(null);
+    const op = undoStack.current.pop();
+    setUndoDepth(undoStack.current.length);
+    if (!op) {
+      toast("Nothing to undo.");
       return;
     }
+    await apply(op.created, op.removed.map(recreateRequest));
+  }
 
-    const offsets = getOffsetsWithinContainer(blockEl, range);
-    if (!offsets || offsets.start === offsets.end) {
-      setPendingSelection(null);
-      return;
-    }
+  // -- Marking ---------------------------------------------------------
 
-    const blockIndex = Number(blockEl.getAttribute("data-block-index"));
+  async function handleMark(ranges: BlockRange[]) {
+    if (ranges.length === 0 || !tool) return;
 
-    if (activeTool?.type === "highlight") {
-      createAnnotationMutation.mutate({
-        type: "highlight",
-        block_index: blockIndex,
-        start_offset: offsets.start,
-        end_offset: offsets.end,
-        color: activeTool.color,
-      });
-      clearSelectionState();
-      return;
-    }
-
-    if (activeTool?.type === "eraser") {
-      const overlapping = annotations.filter(
-        (a) =>
-          a.type === "highlight" &&
-          a.block_index === blockIndex &&
-          a.start_offset !== null &&
-          a.end_offset !== null &&
-          a.start_offset < offsets.end &&
-          a.end_offset > offsets.start,
+    if (tool.kind === "highlight") {
+      const created = await apply(
+        [],
+        ranges.map((range) => ({
+          type: "highlight" as const,
+          block_index: range.blockIndex,
+          start_offset: range.start,
+          end_offset: range.end,
+          color: colorName(tool.color),
+        })),
       );
-      // Erasing only removes the selected portion of a highlight, not the whole
-      // thing — the original annotation is deleted and replaced with new ones
-      // for whatever's left before/after the erased range (there's no update
-      // endpoint, so this is delete + recreate rather than a resize).
-      for (const a of overlapping) {
-        const before =
-          a.start_offset! < offsets.start ? { start: a.start_offset!, end: offsets.start } : null;
-        const after =
-          a.end_offset! > offsets.end ? { start: offsets.end, end: a.end_offset! } : null;
+      pushUndo({ created, removed: [] });
+      return;
+    }
 
-        deleteAnnotationMutation.mutate(a.id);
-        if (before) {
-          createAnnotationMutation.mutate({
-            type: "highlight",
-            block_index: blockIndex,
-            start_offset: before.start,
-            end_offset: before.end,
-            color: a.color,
-          });
-        }
-        if (after) {
-          createAnnotationMutation.mutate({
-            type: "highlight",
-            block_index: blockIndex,
-            start_offset: after.start,
-            end_offset: after.end,
-            color: a.color,
-          });
+    if (tool.kind === "eraser") {
+      // Erasing removes only the covered part of a highlight: the original
+      // is deleted and whatever is left either side is recreated (there's
+      // no update endpoint, so this is delete + recreate, not a resize).
+      const removed: Annotation[] = [];
+      const recreate: AnnotationCreateRequest[] = [];
+      for (const range of ranges) {
+        for (const a of annotations) {
+          if (
+            a.type !== "highlight" ||
+            a.block_index !== range.blockIndex ||
+            a.start_offset === null ||
+            a.end_offset === null ||
+            a.start_offset >= range.end ||
+            a.end_offset <= range.start
+          ) {
+            continue;
+          }
+          removed.push(a);
+          if (a.start_offset < range.start) {
+            recreate.push({ ...recreateRequest(a), end_offset: range.start });
+          }
+          if (a.end_offset > range.end) {
+            recreate.push({ ...recreateRequest(a), start_offset: range.end });
+          }
         }
       }
-      clearSelectionState();
+      if (removed.length === 0) return;
+      const created = await apply(removed, recreate);
+      pushUndo({ created, removed });
       return;
     }
 
-    // jsdom's Range doesn't implement getBoundingClientRect (no layout engine) — guard so
-    // selection-driven tests can run without a real browser.
-    const rect = range.getBoundingClientRect?.() ?? { top: 0, left: 0 };
-    setPendingSelection({
-      blockIndex,
-      start: offsets.start,
-      end: offsets.end,
-      top: rect.top,
-      left: rect.left,
-    });
-    setNoteDraft(null);
-    setShowExplainComingSoon(false);
+    if (tool.kind === "note") {
+      // A note quotes one passage, so a drag across paragraphs anchors to
+      // the first of them.
+      const range = ranges[0]!;
+      const [created] = await apply(
+        [],
+        [
+          {
+            type: "margin_note",
+            block_index: range.blockIndex,
+            start_offset: range.start,
+            end_offset: range.end,
+            note_text: null,
+          },
+        ],
+      );
+      setTool(null);
+      if (created) {
+        pushUndo({ created: [created], removed: [] });
+        openNote(created.id);
+      }
+    }
   }
 
-  function handleSaveNote() {
-    if (!pendingSelection || !noteDraft?.trim()) return;
-    createAnnotationMutation.mutate({
-      type: "margin_note",
-      block_index: pendingSelection.blockIndex,
-      start_offset: pendingSelection.start,
-      end_offset: pendingSelection.end,
-      note_text: noteDraft.trim(),
+  // Annotations have no update endpoint, so editing a note's text replaces
+  // the note, keeping its anchor.
+  // Edited in place: the note keeps its id, so the panel stays on it.
+  async function saveNoteText(note: Annotation, text: string) {
+    try {
+      await updateAnnotation.mutateAsync({ id: note.id, note_text: text });
+    } catch {
+      toast("That change couldn't be saved.");
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: ["annotations", params.id] });
+    }
+  }
+
+  async function deleteNote(note: Annotation) {
+    await apply([note], []);
+    pushUndo({ created: [], removed: [note] });
+  }
+
+  function openNote(annotationId: string) {
+    setFocusNoteId(annotationId);
+    setPanelTab("notebook");
+    setPanelOpen(true);
+  }
+
+  // -- "See in lesson" (design.md §12) ------------------------------------
+
+  /** Moving between tabs by hand ends a "See in lesson" visit. */
+  function changeTab(next: LessonTab) {
+    setActiveTab(next);
+    setSeeInLesson(null);
+  }
+
+  function showSources(questionId: string, quotes: string[]) {
+    // Text mode first when the passage is in the text; otherwise the PDF,
+    // which searches its own pages and reports back.
+    const inText = blocks.some(
+      (block) => block.type === "paragraph" && quotes.some((q) => findQuote(block.text ?? "", q)),
+    );
+    if (!inText && !readyLecturePdf) {
+      toast("That passage isn't in this lesson any more.");
+      return;
+    }
+    setSeeInLesson({ questionId, quotes });
+    setTool(null);
+    setActiveTab("lesson");
+    setViewMode(inText ? "text" : "pdf");
+    if (inText) {
+      requestAnimationFrame(() => {
+        const first = document.querySelector("[data-source]");
+        if (!first) return;
+        const y = first.getBoundingClientRect().top + window.scrollY;
+        window.scrollTo({ top: y - window.innerHeight / 3, behavior: scrollBehavior() });
+      });
+    }
+  }
+
+  function backToQuizzes() {
+    const questionId = seeInLesson?.questionId;
+    setSeeInLesson(null);
+    setActiveTab("quizzes");
+    requestAnimationFrame(() =>
+      document
+        .getElementById(questionElementId(questionId ?? ""))
+        ?.scrollIntoView({ behavior: scrollBehavior(), block: "start" }),
+    );
+  }
+
+  function jumpToNote(note: Annotation) {
+    setActiveTab("lesson");
+    setViewMode("text");
+    requestAnimationFrame(() =>
+      document
+        .querySelector(`[data-annotation-id="${note.id}"]`)
+        ?.scrollIntoView({ behavior: scrollBehavior(), block: "center" }),
+    );
+  }
+
+  // -- Tools -----------------------------------------------------------
+
+  function chooseTool(kind: "pen" | "eraser" | "note") {
+    if (!toolAvailable(kind, mode)) {
+      toast(kind === "pen" ? "The pen draws on PDF pages." : "Notes work in Text mode.");
+      return;
+    }
+    setTool((current) => {
+      if (current?.kind === kind) return null;
+      if (kind === "pen") {
+        return { kind: "pen", color: current?.kind === "highlight" ? current.color : 1 };
+      }
+      return { kind };
     });
-    clearSelectionState();
+  }
+
+  function chooseSwatch(color: SwatchIndex) {
+    setTool((current) => pickSwatch(current, color));
+  }
+
+  function changeViewMode(next: LessonViewMode) {
+    setViewMode(next);
+    // A tool that doesn't exist in the other view is put down.
+    setTool((current) => (current && !toolAvailable(current.kind, next) ? null : current));
+  }
+
+  function cycleTextScale() {
+    const next = nextTextScale(textScale);
+    setTextScale(next);
+    toast(`Text size ${next}%`);
+    try {
+      window.localStorage.setItem(TEXT_SCALE_KEY, String(next));
+    } catch {
+      // Storage blocked: the size just won't be remembered.
+    }
+  }
+
+  // Swiping stays off while a tool is armed: on the Lesson tab a sideways
+  // drag is marking, not navigating (design.md §13).
+  useTabSwipe(!(activeTab === "lesson" && tool !== null), (direction) => {
+    const index = LESSON_TABS.findIndex((tab) => tab.key === activeTab) + direction;
+    const next = LESSON_TABS[index];
+    if (next) changeTab(next.key);
+  });
+
+  useLessonKeys(activeTab === "lesson", {
+    swatch: chooseSwatch,
+    toggleMarker: () =>
+      setTool((current) =>
+        current?.kind === "highlight" ? null : { kind: "highlight", color: 0 },
+      ),
+    eraser: () => chooseTool("eraser"),
+    pen: () => chooseTool("pen"),
+    note: () => chooseTool("note"),
+    explain: () => toast("AI explanations are coming soon."),
+    undo: () => void undo(),
+    clear: () => setTool(null),
+  });
+
+  // -- Scroll-linked state ----------------------------------------------
+
+  // In PDF mode the book's own outline (if it has one) is the contents.
+  const headings: TocHeading[] =
+    mode === "text"
+      ? blocks.flatMap((block, index) =>
+          block.type === "heading" && block.text
+            ? [{ id: headingId(index), label: block.text }]
+            : [],
+        )
+      : pdfOutline.map((item) => ({ id: item.id, label: item.label }));
+  const headingKey = headings.map((h) => h.id).join(",");
+
+  // The title line appears in the top notch once the page's own h1 has
+  // scrolled up and away.
+  useEffect(() => {
+    const title = titleRef.current;
+    if (!title || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry) setTitleScrolledAway(!entry.isIntersecting && entry.boundingClientRect.top < 0);
+    });
+    observer.observe(title);
+    return () => observer.disconnect();
+  }, [isPending]);
+
+  // Scroll-spy: the current heading is the last one above the top third.
+  useEffect(() => {
+    if (activeTab !== "lesson" || !headingKey) return;
+    function spy() {
+      let current: string | null = null;
+      for (const id of headingKey.split(",")) {
+        const element = document.getElementById(id);
+        if (element && element.getBoundingClientRect().top <= window.innerHeight * 0.3) {
+          current = id;
+        }
+      }
+      setActiveHeadingId(current);
+    }
+    spy();
+    window.addEventListener("scroll", spy, { passive: true });
+    return () => window.removeEventListener("scroll", spy);
+  }, [activeTab, headingKey]);
+
+  function jumpToHeading(id: string) {
+    setActiveTab("lesson");
+    if (mode === "pdf") pdfRef.current?.jumpTo(id);
+    else
+      document.getElementById(id)?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+    if (!window.matchMedia("(min-width: 721px)").matches) setTocOpen(false);
   }
 
   if (isPending) {
@@ -1410,123 +464,145 @@ export default function LecturePage() {
     );
   }
 
-  const tocScopeId = data.sub_chapter?.id ?? "none";
+  const subChapter = data.sub_chapter;
+  const backHref = subChapter ? `/learn/library/${subChapter.chapter.book_id}` : "/learn/library";
+  const tabLabel = LESSON_TABS.find((t) => t.key === activeTab)!.label;
+  const dotsProps = {
+    backHref,
+    viewMode: mode,
+    onViewMode: changeViewMode,
+    showViewMode: activeTab === "lesson" && readyLecturePdf !== null,
+    zoom:
+      activeTab === "lesson" && mode === "pdf"
+        ? {
+            percent: zoom,
+            onOut: () => setZoom((z) => ZOOM_STEPS.findLast((step) => step < z) ?? z),
+            onIn: () => setZoom((z) => ZOOM_STEPS.find((step) => step > z) ?? z),
+          }
+        : undefined,
+  };
 
   return (
-    <main className="flex w-full">
-      <TocPanel
-        scopeId={tocScopeId}
-        currentDocumentId={params.id}
-        activeTool={activeTool}
-        onToolChange={setActiveTool}
-        mobileOpen={mobileTocOpen}
-        onMobileClose={() => setMobileTocOpen(false)}
+    // Narrow screens get 50px gutters so the edge notches never cover text.
+    <div className="min-h-screen px-[max(16px,env(safe-area-inset-left,0px))] pb-[140px] max-[720px]:px-[50px]">
+      <LessonTopNotch
+        tab={activeTab}
+        onTabChange={changeTab}
+        title={data.title}
+        context={subChapter?.title ?? null}
+        showTitle={titleScrolledAway}
+        {...dotsProps}
       />
 
-      {/* pb-0 for the Review tab: its sticky bottom bar supplies its own
-          padding and must sit flush with the true end of the page — a
-          trailing p-xl bottom padding here would let the page scroll a
-          bit past the bar's stuck position, dragging it up off the edge. */}
-      <div className={`min-w-0 flex-1 p-xl ${activeTab === "review" ? "pb-0" : ""}`}>
-        {/* Contents and the Notes panel live as sticky side columns at
-            md: and up (see TocPanel/NotesPanel); below that they're
-            off-canvas drawers, opened from here since that's the only place
-            both of them and the main reading column are all in scope
-            together. Labeled "Notebook" rather than "Notes" specifically to
-            stay distinct from the per-selection "Notes" action in the
-            floating annotation toolbar below -- same panel, two different
-            accessible names so neither button is ambiguous to find. */}
-        <div className="mt-sm flex gap-sm md:hidden">
-          <button
-            type="button"
-            onClick={() => setMobileTocOpen(true)}
-            className="rounded-md border border-border px-sm py-xs text-xs font-medium text-foreground hover:bg-muted"
-          >
-            Contents
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileNotesOpen(true)}
-            className="rounded-md border border-border px-sm py-xs text-xs font-medium text-foreground hover:bg-muted"
-          >
-            Notebook
-          </button>
-        </div>
-        {data.sub_chapter && (
-          <p className="mt-xs text-xs text-muted-foreground">
-            <Link
-              href={`/learn/library/${data.sub_chapter.chapter.book_id}/${data.sub_chapter.chapter.id}`}
-              className="hover:underline"
-            >
-              {data.sub_chapter.chapter.title}
-            </Link>
-            {" / "}
-            {data.sub_chapter.title}
-          </p>
-        )}
-        <h1 className="mt-xs text-2xl font-bold text-foreground">{data.title}</h1>
+      {seeInLesson && activeTab === "lesson" && (
+        <button
+          type="button"
+          onClick={backToQuizzes}
+          className="fixed top-[72px] left-1/2 z-[52] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm font-bold text-background shadow-notch"
+        >
+          ← Back to quizzes
+        </button>
+      )}
 
-        <div className="mt-lg flex w-full items-center justify-between gap-xs border-b border-border">
-          <div className="flex gap-xs">
-            {TABS.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key)}
-                className={`px-md py-sm text-sm font-medium ${
-                  activeTab === tab.key
-                    ? "border-b-2 border-primary text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          {activeTab === "lesson" && readyLecturePdf && (
-            <div role="group" aria-label="Lesson view mode" className="mb-sm flex gap-xs">
-              <button
-                type="button"
-                aria-pressed={lessonViewMode === "pdf"}
-                onClick={() => setLessonViewMode("pdf")}
-                className={`rounded-md border border-border px-sm py-xs text-xs font-medium ${
-                  lessonViewMode === "pdf"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                PDF
-              </button>
-              <button
-                type="button"
-                aria-pressed={lessonViewMode === "text"}
-                onClick={() => setLessonViewMode("text")}
-                className={`rounded-md border border-border px-sm py-xs text-xs font-medium ${
-                  lessonViewMode === "text"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Text
-              </button>
+      <ToolNotch
+        tool={tool}
+        viewMode={mode}
+        onLessonTab={activeTab === "lesson"}
+        canUndo={mode === "pdf" ? pdfCanUndo : undoDepth > 0}
+        tocOpen={tocOpen}
+        onToggleToc={() => setTocOpen((open) => !open)}
+        onSwatch={chooseSwatch}
+        onTool={chooseTool}
+        onUndo={() => void undo()}
+        textScale={textScale}
+        onTextScale={cycleTextScale}
+      />
+
+      <TocDrawer
+        open={tocOpen}
+        title={data.title}
+        headings={headings}
+        activeHeadingId={activeHeadingId}
+        onJump={jumpToHeading}
+        scopeId={subChapter?.id ?? "none"}
+        currentDocumentId={params.id}
+      />
+
+      <SidePanel
+        open={panelOpen}
+        onOpenChange={setPanelOpen}
+        tab={panelTab}
+        onTabChange={setPanelTab}
+        documentId={params.id}
+        lessonTitle={data.title}
+        blocks={blocks}
+        annotations={annotations}
+        focusNoteId={focusNoteId}
+        onJumpToNote={jumpToNote}
+        onDeleteNote={(note) => void deleteNote(note)}
+        onSaveNoteText={(note, text) => void saveNoteText(note, text)}
+      />
+
+      <main
+        className={`mx-auto w-full ${
+          activeTab === "lesson" && mode === "pdf" ? "max-w-[57.5rem]" : "max-w-[47.5rem]"
+        }`}
+      >
+        <header className="pt-[30px] pb-1.5">
+          <p className="m-0 text-xs font-bold tracking-[0.14em] text-muted-foreground uppercase">
+            {subChapter ? (
+              <>
+                <Link
+                  href={`/learn/library/${subChapter.chapter.book_id}/${subChapter.chapter.id}`}
+                  className="hover:text-foreground hover:underline"
+                >
+                  {subChapter.chapter.title}
+                </Link>
+                {" · "}
+                {subChapter.title}
+              </>
+            ) : (
+              tabLabel
+            )}
+          </p>
+          <h1
+            ref={titleRef}
+            className="mt-1.5 mb-1 text-[clamp(26px,4vw,34px)] leading-[1.15] font-extrabold"
+          >
+            {data.title}
+          </h1>
+          <LessonMobileDots {...dotsProps} />
+        </header>
+
+        <div className="mt-md">
+          {activeTab === "review" && <ReviewTab documentId={params.id} textScale={textScale} />}
+          {/* Kept mounted (hidden) during a "See in lesson" visit, so the
+              back bar returns to the question with its answer still shown. */}
+          {(activeTab === "quizzes" || seeInLesson) && (
+            <div hidden={activeTab !== "quizzes"}>
+              <QuizzesTab documentId={params.id} onSeeInLesson={showSources} />
             </div>
           )}
-        </div>
-
-        <div className="mt-lg">
-          {activeTab === "review" && <ReviewTab documentId={params.id} />}
-          {activeTab === "quizzes" && <QuizzesTab documentId={params.id} />}
           {activeTab === "flashcards" && <FlashcardsTab documentId={params.id} />}
 
-          {activeTab === "lesson" && lessonViewMode === "pdf" && readyLecturePdf && (
+          {activeTab === "lesson" && mode === "pdf" && readyLecturePdf && (
             <PdfLessonView
+              ref={pdfRef}
               documentId={params.id}
               storagePath={readyLecturePdf.storage_path}
               pageCount={readyLecturePdf.page_count}
+              tool={tool}
+              zoom={zoom}
+              onUndoChange={setPdfCanUndo}
+              onOutline={handleOutline}
+              sourceQuotes={seeInLesson?.quotes ?? null}
+              onSourcesShown={(found) => {
+                if (!found) toast("That passage isn't in this lesson any more.");
+              }}
             />
           )}
 
-          {activeTab === "lesson" && lessonViewMode === "text" && (
+          {activeTab === "lesson" && mode === "text" && (
             <>
               {!version && <p className="text-sm text-muted-foreground">Not processed yet.</p>}
               {version?.status === "processing" && (
@@ -1537,114 +613,21 @@ export default function LecturePage() {
                   Processing failed: {version.error_message ?? "Unknown error"}
                 </p>
               )}
-              {version?.status === "ready" && version.extracted_content && (
-                <article
-                  ref={articleRef}
-                  onMouseUp={handleMouseUp}
-                  className="flex flex-col gap-md"
-                >
-                  {version.extracted_content.blocks.map((block, index) => {
-                    if (block.type === "heading") {
-                      return (
-                        <h2 key={index} className="text-xl font-semibold text-foreground">
-                          {block.text}
-                        </h2>
-                      );
-                    }
-                    if (block.type === "image") {
-                      return block.image_path ? (
-                        <ExtractedImage key={index} path={block.image_path} />
-                      ) : null;
-                    }
-                    return (
-                      <AnnotatedParagraph
-                        key={index}
-                        text={block.text ?? ""}
-                        blockIndex={index}
-                        annotations={annotations}
-                        onDeleteAnnotation={(annotationId) =>
-                          deleteAnnotationMutation.mutate(annotationId)
-                        }
-                      />
-                    );
-                  })}
-                </article>
+              {version?.status === "ready" && (
+                <TextLessonView
+                  blocks={blocks}
+                  annotations={annotations}
+                  tool={tool}
+                  textScale={textScale}
+                  onMark={(ranges) => void handleMark(ranges)}
+                  onOpenNote={openNote}
+                  sources={sourcesByBlock}
+                />
               )}
             </>
           )}
         </div>
-
-        {activeTab === "lesson" && pendingSelection && (
-          <div
-            role="toolbar"
-            aria-label="Annotation actions"
-            className="fixed z-20 flex items-center gap-xs rounded-md border border-border bg-background p-xs shadow-md"
-            style={{ top: pendingSelection.top - 44, left: pendingSelection.left }}
-          >
-            {noteDraft === null && !showExplainComingSoon && (
-              <>
-                <button
-                  type="button"
-                  className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
-                  onClick={() => setNoteDraft("")}
-                >
-                  Notes
-                </button>
-                <button
-                  type="button"
-                  className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
-                  onClick={() => setShowExplainComingSoon(true)}
-                >
-                  Explain
-                </button>
-              </>
-            )}
-            {noteDraft !== null && (
-              <form
-                className="flex items-center gap-xs"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  handleSaveNote();
-                }}
-              >
-                <input
-                  autoFocus
-                  value={noteDraft}
-                  onChange={(event) => setNoteDraft(event.target.value)}
-                  placeholder="Note..."
-                  className="rounded-sm border border-border px-sm py-xs text-sm"
-                />
-                <button
-                  type="submit"
-                  className="rounded-sm px-sm py-xs text-sm text-foreground hover:bg-muted"
-                >
-                  Save
-                </button>
-              </form>
-            )}
-            {showExplainComingSoon && (
-              <div className="flex items-center gap-sm px-sm py-xs">
-                <span className="text-sm text-muted-foreground">
-                  AI explanations are coming soon.
-                </span>
-                <button
-                  type="button"
-                  className="text-xs font-medium text-primary hover:underline"
-                  onClick={() => setShowExplainComingSoon(false)}
-                >
-                  Got it
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <NotesPanel
-        documentId={params.id}
-        mobileOpen={mobileNotesOpen}
-        onMobileClose={() => setMobileNotesOpen(false)}
-      />
-    </main>
+      </main>
+    </div>
   );
 }

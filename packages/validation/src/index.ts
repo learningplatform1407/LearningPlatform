@@ -233,6 +233,14 @@ export const flashcardResponseSchema = z.object({
 /** A card as the deck runner receives it. Carries `back_text` up front:
  * unlike a question, a flashcard's back is not an answer key, so the reveal
  * needs no second request and the client simply holds it until tapped. */
+/** Days each grade would schedule a card for, if chosen now. */
+export const nextIntervalsSchema = z.object({
+  again: z.number(),
+  hard: z.number(),
+  good: z.number(),
+  easy: z.number(),
+});
+
 export const flashcardCardSchema = z.object({
   id: z.string(),
   document_id: z.string(),
@@ -242,6 +250,7 @@ export const flashcardCardSchema = z.object({
   is_mine: z.boolean(),
   due_at: z.string().nullable(),
   is_new: z.boolean(),
+  next_intervals: nextIntervalsSchema,
 });
 
 export const flashcardCreateRequestSchema = z.object({
@@ -347,6 +356,10 @@ export const clozeCardResponseSchema = z.object({
   created_at: z.string(),
 });
 
+export const clozeDueCardResponseSchema = clozeCardResponseSchema.extend({
+  next_intervals: nextIntervalsSchema,
+});
+
 export const clozeRatingRequestSchema = z.object({
   rating: clozeRatingSchema,
 });
@@ -416,6 +429,12 @@ export const annotationCreateRequestSchema = z.object({
   color: z.string().nullable().optional(),
 });
 
+/** PATCH body: only the fields sent change. */
+export const annotationUpdateRequestSchema = z.object({
+  note_text: z.string().nullable().optional(),
+  color: z.string().nullable().optional(),
+});
+
 export const strokePointSchema = z.object({
   x: z.number(),
   y: z.number(),
@@ -430,12 +449,24 @@ export const strokeSchema = z.object({
 
 /** One user's freehand ink on one page of a lesson's lecture PDF. A PUT
  * replaces the whole array, same convention as notebook drawings. */
+const pageUnitSchema = z.number().min(0).max(1);
+
+/** A word highlight on a PDF page: one rectangle per run of words on a
+ * line, each [x0, y0, x1, y1] as fractions of the page's size. */
+export const pageHighlightSchema = z.object({
+  color: z.string(),
+  rects: z.array(z.tuple([pageUnitSchema, pageUnitSchema, pageUnitSchema, pageUnitSchema])).min(1),
+});
+
 export const lessonPageInkResponseSchema = z.object({
   strokes: z.array(strokeSchema),
+  highlights: z.array(pageHighlightSchema),
 });
 
 export const lessonPageInkUpdateRequestSchema = z.object({
   strokes: z.array(strokeSchema),
+  /** Omit to leave the page's highlights as they are (a strokes-only save). */
+  highlights: z.array(pageHighlightSchema).optional(),
 });
 
 export const notebookEntryTypeSchema = z.enum(["text", "drawing"]);
@@ -482,6 +513,7 @@ export const questionResponseSchema = z.object({
   correct_option_ids: z.array(z.string()),
   rationales: z.record(z.string(), z.string()),
   explanation: z.string().nullable(),
+  source_quotes: z.array(z.string()),
   difficulty: questionDifficultySchema,
   status: questionStatusSchema,
   created_by: z.string(),
@@ -499,6 +531,8 @@ export const questionCreateRequestSchema = z.object({
   correct_option_ids: z.array(z.string()),
   rationales: z.record(z.string(), z.string()).optional(),
   explanation: z.string().nullable().optional(),
+  /** Lesson sentences behind the options, quoted verbatim (See in lesson). */
+  source_quotes: z.array(z.string()).max(10).optional(),
   difficulty: questionDifficultySchema.optional(),
   status: questionStatusSchema.optional(),
   tags: z.array(z.string()).optional(),
@@ -513,6 +547,8 @@ export const questionUpdateRequestSchema = z.object({
   correct_option_ids: z.array(z.string()).optional(),
   rationales: z.record(z.string(), z.string()).optional(),
   explanation: z.string().nullable().optional(),
+  /** Lesson sentences behind the options, quoted verbatim (See in lesson). */
+  source_quotes: z.array(z.string()).max(10).optional(),
   difficulty: questionDifficultySchema.optional(),
   status: questionStatusSchema.optional(),
   tags: z.array(z.string()).optional(),

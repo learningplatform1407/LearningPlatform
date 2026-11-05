@@ -1,13 +1,16 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { Overlay } from "@/lib/overlay";
 import { supabase } from "@/lib/supabase";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 export default function AccountSettingsScreen() {
+  const styles = useStyles();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
     queryFn: () => getApiClient().getMe(),
@@ -43,7 +46,7 @@ export default function AccountSettingsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Account</Text>
+      <ScreenHeader kicker="Settings" title="Account" />
 
       <Text style={styles.rowValue}>{data.email}</Text>
       <Pressable
@@ -92,7 +95,7 @@ export default function AccountSettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -105,42 +108,42 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: spacing.xl,
   },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
-  },
   rowValue: {
     fontSize: fontSizes.sm,
     color: colors.mutedForeground,
   },
   button: {
+    // Same width and height for every action on this screen, text centred.
+    width: 176,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
+    borderRadius: 10,
+    paddingVertical: 9,
     alignItems: "center",
+    justifyContent: "center",
     alignSelf: "flex-start",
   },
   buttonText: {
     color: colors.foreground,
-    fontWeight: fontWeights.medium,
+    fontWeight: fontWeights.bold,
+    textAlign: "center",
     fontSize: fontSizes.sm,
   },
   dangerButton: {
+    // Same width and height for every action on this screen, text centred.
+    width: 176,
     borderWidth: 1,
     borderColor: colors.danger,
-    borderRadius: 8,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
+    borderRadius: 10,
+    paddingVertical: 9,
     alignItems: "center",
+    justifyContent: "center",
     alignSelf: "flex-start",
   },
   dangerButtonText: {
     color: colors.danger,
-    fontWeight: fontWeights.medium,
+    fontWeight: fontWeights.bold,
+    textAlign: "center",
     fontSize: fontSizes.sm,
   },
   error: {
@@ -151,4 +154,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

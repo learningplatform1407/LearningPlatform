@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.annotations.constants import DEFAULT_HIGHLIGHT_COLOR, AnnotationType
 from app.annotations.models import DocumentAnnotation
-from app.annotations.schemas import AnnotationCreateRequest
+from app.annotations.schemas import AnnotationCreateRequest, AnnotationUpdateRequest
 from app.auth.schemas import AuthenticatedUser
 from app.common.errors import ApiError
 from app.documents.models import Document
@@ -60,6 +60,38 @@ def create_annotation(
         color=color,
     )
     db.add(annotation)
+    db.commit()
+    db.refresh(annotation)
+    return annotation
+
+
+def update_annotation(
+    db: Session,
+    document_id: uuid.UUID,
+    annotation_id: uuid.UUID,
+    user_id: uuid.UUID,
+    data: AnnotationUpdateRequest,
+) -> DocumentAnnotation:
+    version_id = _get_current_version_id(db, document_id)
+    annotation = db.get(DocumentAnnotation, annotation_id)
+    # Someone else's annotation, or one on an older version of the lesson,
+    # is "not found" from here -- the same answer list_annotations gives.
+    if (
+        annotation is None
+        or annotation.user_id != user_id
+        or annotation.document_version_id != version_id
+    ):
+        raise ApiError(404, "not_found", "Annotation not found")
+
+    fields = data.model_fields_set
+    if "note_text" in fields:
+        if annotation.type != AnnotationType.MARGIN_NOTE.value:
+            raise ApiError(422, "invalid_field", "Only a margin note has text")
+        annotation.note_text = data.note_text
+    if "color" in fields:
+        if annotation.type != AnnotationType.HIGHLIGHT.value:
+            raise ApiError(422, "invalid_field", "Only a highlight has a colour")
+        annotation.color = data.color or DEFAULT_HIGHLIGHT_COLOR
     db.commit()
     db.refresh(annotation)
     return annotation

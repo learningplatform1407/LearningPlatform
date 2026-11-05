@@ -1,15 +1,19 @@
 import type { BankTreeChapter, BankTreeLesson, BankTreeSubChapter } from "@lp/api-client";
 import { sumBankStatsCounts } from "@lp/api-client";
 import { useQuery } from "@tanstack/react-query";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { BankStatsLine } from "@/lib/bank-stats-line";
 import { ExpandableRow } from "@/lib/expandable-row";
 import { QuestionBankList } from "@/lib/question-bank-list";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
+import { ScreenHeader, SegmentedSwitch } from "@/lib/ui/primitives";
 
 function ProgressBadge({ answered, total }: { answered: number; total: number }) {
+  const styles = useStyles();
   if (total === 0) {
     return <Text style={styles.badgeHint}>no questions</Text>;
   }
@@ -39,6 +43,7 @@ function LessonRow({ lesson }: { lesson: BankTreeLesson }) {
 }
 
 function LessonList({ lessons }: { lessons: BankTreeLesson[] }) {
+  const styles = useStyles();
   if (lessons.length === 0) {
     return <Text style={styles.hint}>No lessons.</Text>;
   }
@@ -66,6 +71,7 @@ function SubChapterRow({ subChapter }: { subChapter: BankTreeSubChapter }) {
 }
 
 function ChapterRow({ chapter }: { chapter: BankTreeChapter }) {
+  const styles = useStyles();
   return (
     <ExpandableRow
       title={chapter.title}
@@ -85,7 +91,14 @@ function ChapterRow({ chapter }: { chapter: BankTreeChapter }) {
   );
 }
 
+const VIEWS = [
+  { value: "all", label: "All questions" },
+  { value: "favourites", label: "Favourites" },
+] as const;
+
 export default function QuestionBankScreen() {
+  const [view, setView] = useState<(typeof VIEWS)[number]["value"]>("all");
+  const styles = useStyles();
   const tree = useQuery({
     queryKey: ["question-bank-tree"],
     queryFn: () => getApiClient().getQuestionBankTree(),
@@ -138,79 +151,94 @@ export default function QuestionBankScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Question Bank</Text>
+      <ScreenHeader kicker="Learn" title="Question Bank" />
       <Text style={styles.hint}>
         The same structure as your lessons, one level deeper. Answer anything to check yourself —
         attempts are recorded, and you can retry.
       </Text>
 
-      {!isEmpty && (
-        <View style={styles.overviewCard}>
-          <Text style={styles.overviewTitle}>Overall</Text>
-          <Text style={styles.hint}>
-            {overall.answered_count}/{overall.question_count} answered
-          </Text>
-          <BankStatsLine counts={overall} />
-        </View>
-      )}
+      <SegmentedSwitch label="Which questions" options={VIEWS} value={view} onChange={setView} />
 
-      {isEmpty ? (
-        <Text style={styles.hint}>The question bank is empty.</Text>
+      {view === "favourites" ? (
+        <QuestionBankList
+          favourites
+          emptyMessage="No favourites yet. Tap ♡ on any question to keep it here."
+        />
       ) : (
-        <View style={styles.list}>
-          {data.books.map((book) => (
-            <ExpandableRow
-              key={book.id}
-              title={book.title}
-              badge={<ProgressBadge answered={book.answered_count} total={book.question_count} />}
-            >
-              <BankStatsLine counts={book} />
-              {book.chapters.length === 0 ? (
-                <Text style={styles.hint}>No chapters.</Text>
-              ) : (
-                <View style={styles.list}>
-                  {book.chapters.map((chapter) => (
-                    <ChapterRow key={chapter.id} chapter={chapter} />
-                  ))}
-                </View>
-              )}
-            </ExpandableRow>
-          ))}
-
-          {data.uncategorized_lessons.length > 0 && (
-            <ExpandableRow
-              title="Uncategorized lessons"
-              badge={<ProgressBadge answered={uncategorizedAnswered} total={uncategorizedTotal} />}
-            >
-              <BankStatsLine counts={sumBankStatsCounts(data.uncategorized_lessons)} />
-              <LessonList lessons={data.uncategorized_lessons} />
-            </ExpandableRow>
+        <>
+          {!isEmpty && (
+            <View style={styles.overviewCard}>
+              <Text style={styles.overviewTitle}>Overall</Text>
+              <Text style={styles.hint}>
+                {overall.answered_count}/{overall.question_count} answered
+              </Text>
+              <BankStatsLine counts={overall} />
+            </View>
           )}
 
-          {/* Questions whose document_id is null belong to no lesson, so they
+          {isEmpty ? (
+            <Text style={styles.hint}>The question bank is empty.</Text>
+          ) : (
+            <View style={styles.list}>
+              {data.books.map((book) => (
+                <ExpandableRow
+                  key={book.id}
+                  title={book.title}
+                  badge={
+                    <ProgressBadge answered={book.answered_count} total={book.question_count} />
+                  }
+                >
+                  <BankStatsLine counts={book} />
+                  {book.chapters.length === 0 ? (
+                    <Text style={styles.hint}>No chapters.</Text>
+                  ) : (
+                    <View style={styles.list}>
+                      {book.chapters.map((chapter) => (
+                        <ChapterRow key={chapter.id} chapter={chapter} />
+                      ))}
+                    </View>
+                  )}
+                </ExpandableRow>
+              ))}
+
+              {data.uncategorized_lessons.length > 0 && (
+                <ExpandableRow
+                  title="Uncategorized lessons"
+                  badge={
+                    <ProgressBadge answered={uncategorizedAnswered} total={uncategorizedTotal} />
+                  }
+                >
+                  <BankStatsLine counts={sumBankStatsCounts(data.uncategorized_lessons)} />
+                  <LessonList lessons={data.uncategorized_lessons} />
+                </ExpandableRow>
+              )}
+
+              {/* Questions whose document_id is null belong to no lesson, so they
               hang under no node above — without this row they'd be
               unreachable from the bank entirely. */}
-          {data.unassigned_question_count > 0 && (
-            <ExpandableRow
-              title="Questions not linked to a lesson"
-              badge={
-                <ProgressBadge
-                  answered={data.unassigned_answered_count}
-                  total={data.unassigned_question_count}
-                />
-              }
-            >
-              <BankStatsLine counts={unassignedCounts} />
-              <QuestionBankList unassigned emptyMessage="Nothing here." />
-            </ExpandableRow>
+              {data.unassigned_question_count > 0 && (
+                <ExpandableRow
+                  title="Questions not linked to a lesson"
+                  badge={
+                    <ProgressBadge
+                      answered={data.unassigned_answered_count}
+                      total={data.unassigned_question_count}
+                    />
+                  }
+                >
+                  <BankStatsLine counts={unassignedCounts} />
+                  <QuestionBankList unassigned emptyMessage="Nothing here." />
+                </ExpandableRow>
+              )}
+            </View>
           )}
-        </View>
+        </>
       )}
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -219,26 +247,24 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     gap: spacing.lg,
   },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
-  },
   list: {
     gap: spacing.xs,
   },
   overviewCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderWidth: 0,
+    borderRadius: 0,
     padding: spacing.md,
     gap: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: 0,
   },
   overviewTitle: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    color: colors.mutedForeground,
   },
   badgeHint: {
     fontSize: fontSizes.xs,
@@ -255,4 +281,4 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: colors.danger,
   },
-});
+}));

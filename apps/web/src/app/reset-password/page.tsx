@@ -20,30 +20,32 @@ export default function ResetPasswordPage() {
 
   return (
     <AuthLayout>
-      <h1 className="text-2xl font-semibold text-foreground">Set a new password</h1>
+      <h1 className="text-[26px] leading-[1.15] font-extrabold text-foreground">
+        Set a new password
+      </h1>
       <p className="mt-md text-sm text-muted-foreground">
         You&apos;ll be signed out on every device, including this one, and can log in again with the
         new password.
       </p>
       <form action={formAction} className="mt-lg flex flex-col gap-md">
-        <label className="flex flex-col gap-xs text-sm text-foreground">
+        <label className="flex flex-col gap-xs text-sm font-semibold text-foreground">
           New password
           <input
             type="password"
             name="password"
             required
             autoComplete="new-password"
-            className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="field"
           />
         </label>
-        <label className="flex flex-col gap-xs text-sm text-foreground">
+        <label className="flex flex-col gap-xs text-sm font-semibold text-foreground">
           Confirm new password
           <input
             type="password"
             name="confirm_password"
             required
             autoComplete="new-password"
-            className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="field"
           />
         </label>
         {state.error && (

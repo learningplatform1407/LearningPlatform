@@ -1,7 +1,8 @@
 import { Slot, router, usePathname } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 
-import { colors, fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 const SECTIONS = [
   { href: "/settings/account", label: "Account" },
@@ -20,6 +21,7 @@ const SECTIONS = [
  * entry at the (app) level, the same job the old plain `<Stack />` here did
  * (see learn/_layout.tsx for why that matters). */
 export default function SettingsLayout() {
+  const styles = useStyles();
   const pathname = usePathname();
 
   return (
@@ -48,7 +50,7 @@ export default function SettingsLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     flexDirection: "row",
@@ -83,4 +85,4 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-});
+}));

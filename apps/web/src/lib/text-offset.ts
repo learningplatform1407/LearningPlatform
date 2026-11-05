@@ -146,3 +146,6 @@ export function spliceClozeSpans(
   }
   return segments;
 }
+
+// Shared with mobile and with the API's own check on save.
+export { findQuote } from "@lp/ui";

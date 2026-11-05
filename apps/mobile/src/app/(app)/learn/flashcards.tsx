@@ -1,11 +1,13 @@
 import type { FlashcardSummaryResponse } from "@lp/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { ExpandableRow } from "@/lib/expandable-row";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
+import { ScreenHeader, Tag } from "@/lib/ui/primitives";
 
 // Derived from the response type rather than exporting four more schemas
 // from @lp/validation — the tree only ever arrives as part of the whole.
@@ -19,21 +21,17 @@ type SummaryLesson = SummarySubChapter["lessons"][number];
  * opened yet is not overdue, and conflating them would make a freshly
  * imported deck look like a backlog. */
 function CountBadges({ dueCount, newCount }: { dueCount: number; newCount: number }) {
+  const styles = useStyles();
   return (
     <View style={styles.badges}>
-      <View style={[styles.badge, dueCount > 0 && styles.badgeActive]}>
-        <Text style={[styles.badgeText, dueCount > 0 && styles.badgeTextActive]}>
-          {dueCount} due
-        </Text>
-      </View>
-      <View style={styles.badge}>
-        <Text style={styles.badgeText}>{newCount} new</Text>
-      </View>
+      <Tag active={dueCount > 0}>{dueCount} due</Tag>
+      <Tag>{newCount} new</Tag>
     </View>
   );
 }
 
 function LessonRow({ lesson }: { lesson: SummaryLesson }) {
+  const styles = useStyles();
   return (
     <Pressable
       style={styles.lessonRow}
@@ -47,6 +45,7 @@ function LessonRow({ lesson }: { lesson: SummaryLesson }) {
 }
 
 function SubChapterRow({ subChapter }: { subChapter: SummarySubChapter }) {
+  const styles = useStyles();
   return (
     <ExpandableRow
       title={subChapter.title}
@@ -66,6 +65,7 @@ function SubChapterRow({ subChapter }: { subChapter: SummarySubChapter }) {
 }
 
 function ChapterRow({ chapter }: { chapter: SummaryChapter }) {
+  const styles = useStyles();
   return (
     <ExpandableRow
       title={chapter.title}
@@ -85,6 +85,7 @@ function ChapterRow({ chapter }: { chapter: SummaryChapter }) {
 }
 
 function BookRow({ book }: { book: SummaryBook }) {
+  const styles = useStyles();
   return (
     <ExpandableRow
       title={book.title}
@@ -104,6 +105,7 @@ function BookRow({ book }: { book: SummaryBook }) {
 }
 
 export default function FlashcardsScreen() {
+  const styles = useStyles();
   const { data, isPending, isError } = useQuery({
     // Under the "flashcards" namespace on purpose: the lesson runner
     // invalidates that whole prefix after a grade or an exclusion, and these
@@ -144,7 +146,7 @@ export default function FlashcardsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Flashcards</Text>
+      <ScreenHeader kicker="Learn" title="Flashcards" />
       <Text style={styles.hint}>
         {totalDue} {totalDue === 1 ? "card" : "cards"} due today · {totalNew} not studied yet.
       </Text>
@@ -174,7 +176,7 @@ export default function FlashcardsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -182,12 +184,6 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.xl,
     gap: spacing.lg,
-  },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
   },
   list: {
     gap: spacing.xs,
@@ -210,23 +206,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.xs,
   },
-  badge: {
-    borderRadius: 999,
-    paddingVertical: 2,
-    paddingHorizontal: spacing.sm,
-    backgroundColor: colors.muted,
-  },
-  badgeActive: {
-    backgroundColor: colors.primary,
-  },
-  badgeText: {
-    fontSize: fontSizes.xs,
-    fontWeight: fontWeights.medium,
-    color: colors.mutedForeground,
-  },
-  badgeTextActive: {
-    color: colors.primaryForeground,
-  },
   hint: {
     fontSize: fontSizes.sm,
     color: colors.mutedForeground,
@@ -235,4 +214,4 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: fontSizes.sm,
   },
-});
+}));

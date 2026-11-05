@@ -22,14 +22,16 @@ export function ProgressBar({ percent, label }: { percent: number | null; label?
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label={label ?? "Progress"}
-        className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
+        className="h-1 flex-1 overflow-hidden rounded-full bg-muted"
       >
         <div
-          className={`h-full rounded-full ${rounded >= DONE_THRESHOLD ? "bg-success" : "bg-primary"}`}
+          className={`h-full rounded-full ${rounded >= DONE_THRESHOLD ? "bg-good" : "bg-accent"}`}
           style={{ width: `${rounded}%` }}
         />
       </div>
-      <span className="shrink-0 text-xs text-muted-foreground">{rounded}%</span>
+      <span className="shrink-0 text-xs font-semibold text-muted-foreground tabular-nums">
+        {rounded}%
+      </span>
     </div>
   );
 }

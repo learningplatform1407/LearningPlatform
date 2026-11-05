@@ -3,7 +3,7 @@ import { Card } from "@/components/card";
 /**
  * One number-and-label tile for the Profile page's statistics section.
  * `emphasis` switches on the hero-trio treatment (larger number, primary
- * border) used for the three stats the user asked for by name — streak,
+ * outline) used for the three stats the user asked for by name — streak,
  * lessons completed, exam average; every other stat renders as a plain
  * secondary tile.
  */
@@ -19,9 +19,17 @@ export function StatTile({
   emphasis?: boolean;
 }) {
   return (
-    <Card className={`flex flex-col gap-xs p-md ${emphasis ? "border-primary" : ""}`}>
-      <span className={emphasis ? "text-2xl font-semibold" : "text-lg font-semibold"}>{value}</span>
-      <span className="text-xs text-muted-foreground">{label}</span>
+    <Card
+      className={`flex flex-col gap-0.5 p-md ${emphasis ? "border-foreground/40 shadow-dot" : ""}`}
+    >
+      <span
+        className={`leading-tight font-extrabold text-foreground tabular-nums ${emphasis ? "text-2xl" : "text-xl"}`}
+      >
+        {value}
+      </span>
+      <span className="text-xs font-bold tracking-[0.06em] text-muted-foreground uppercase">
+        {label}
+      </span>
       {sublabel && <span className="text-xs text-muted-foreground">{sublabel}</span>}
     </Card>
   );

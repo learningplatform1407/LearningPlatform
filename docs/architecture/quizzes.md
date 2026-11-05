@@ -88,6 +88,7 @@ classDiagram
         +json correct_option_ids
         +json rationales
         +string explanation
+        +json source_quotes
         +string difficulty
         +string status
         +UUID created_by
@@ -137,6 +138,11 @@ classDiagram
         +int attempt_count
         +datetime last_answered_at
     }
+    class QuestionFavourite {
+        +UUID user_id
+        +UUID question_id
+        +datetime created_at
+    }
 
     Document "1" -- "*" Quiz : dropped in QUIZ-11
     Document "0..1" -- "*" Question : provenance, SET NULL
@@ -148,6 +154,8 @@ classDiagram
     Question "1" -- "*" QuizSessionQuestion : RESTRICT
     Profile "1" -- "*" QuestionProgress : latest attempt
     Question "1" -- "*" QuestionProgress : one row per user
+    Profile "1" -- "*" QuestionFavourite : hearts
+    Question "1" -- "*" QuestionFavourite : one row per user
 ```
 
 The two edges carrying the design are `Profile → QuizSession` (many over time, exactly one in an open state) and `QuizSession → QuizSessionQuestion` (the frozen, ordered draw).
@@ -156,22 +164,23 @@ The two edges carrying the design are `Profile → QuizSession` (many over time,
 
 ### 5.1 `questions` — the bank
 
-| Column                      | Type                     | Notes                                                                                   |
-| --------------------------- | ------------------------ | --------------------------------------------------------------------------------------- |
-| `id`                        | Uuid                     | PK                                                                                      |
-| `external_id`               | String, unique, nullable | Stable key for idempotent re-import                                                     |
-| `document_id`               | Uuid, nullable           | FK → `documents.id` `ON DELETE SET NULL`; lesson provenance                             |
-| `prompt`                    | String                   | The question stem                                                                       |
-| `kind`                      | String                   | `single` \| `multi`                                                                     |
-| `scoring_scheme`            | String                   | Registry key — `single_4` \| `multi_5_per_option` (§6.3)                                |
-| `options`                   | JSON                     | `[{"id": "a", "text": "..."}]` — safe to return verbatim                                |
-| `correct_option_ids`        | JSON                     | `["a", "c"]`                                                                            |
-| `rationales`                | JSON                     | `{"a": "right because...", "b": "wrong because..."}`                                    |
-| `explanation`               | String, nullable         | Overall rationale                                                                       |
-| `difficulty`                | String                   | `easy` \| `medium` \| `hard`, default `medium`. **Write-only in v1** — no filter, no UI |
-| `status`                    | String                   | `draft` \| `published` \| `archived`, default `draft`                                   |
-| `created_by`                | Uuid                     | FK → `profiles.id`                                                                      |
-| `created_at` / `updated_at` | DateTime(tz)             |                                                                                         |
+| Column                      | Type                     | Notes                                                                                                                                                                                     |
+| --------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                        | Uuid                     | PK                                                                                                                                                                                        |
+| `external_id`               | String, unique, nullable | Stable key for idempotent re-import                                                                                                                                                       |
+| `document_id`               | Uuid, nullable           | FK → `documents.id` `ON DELETE SET NULL`; lesson provenance                                                                                                                               |
+| `prompt`                    | String                   | The question stem                                                                                                                                                                         |
+| `kind`                      | String                   | `single` \| `multi`                                                                                                                                                                       |
+| `scoring_scheme`            | String                   | Registry key — `single_4` \| `multi_5_per_option` (§6.3)                                                                                                                                  |
+| `options`                   | JSON                     | `[{"id": "a", "text": "..."}]` — safe to return verbatim                                                                                                                                  |
+| `correct_option_ids`        | JSON                     | `["a", "c"]`                                                                                                                                                                              |
+| `rationales`                | JSON                     | `{"a": "right because...", "b": "wrong because..."}`                                                                                                                                      |
+| `explanation`               | String, nullable         | Overall rationale                                                                                                                                                                         |
+| `source_quotes`             | JSON, default `[]`       | Lesson sentences behind the options, quoted verbatim, for "See in lesson". Checked against the lesson text on write (whitespace-loose); returned only in a reveal, never before answering |
+| `difficulty`                | String                   | `easy` \| `medium` \| `hard`, default `medium`. **Write-only in v1** — no filter, no UI                                                                                                   |
+| `status`                    | String                   | `draft` \| `published` \| `archived`, default `draft`                                                                                                                                     |
+| `created_by`                | Uuid                     | FK → `profiles.id`                                                                                                                                                                        |
+| `created_at` / `updated_at` | DateTime(tz)             |                                                                                                                                                                                           |
 
 **The split-column shape is the security property.** Returning `options` cannot leak the answer key, so the naive read path is already correct — there is no `QuestionPublic` / `QuestionReveal` pair that has to be kept in sync, and no way for a forgotten response model to ship answers to the browser mid-quiz.
 
@@ -286,6 +295,10 @@ Three things make this safe and honest:
 - **One query per page, not per question.** `get_progress_for_questions` takes the whole page of ids at once, so marking a 50-item browse costs a single extra round trip.
 
 The marker is outcome-coloured rather than a bare tick, reusing the three-state palette from §9: a question seen and failed is the most useful thing on a revision screen, and a plain tick would hide it.
+
+### 5.6 `question_favourites` — the heart
+
+One row per `(user_id, question_id)` a learner has hearted; composite PK, both FKs `ON DELETE CASCADE`, plus `created_at`. Presence is the whole state — removing the heart deletes the row. `PUT` and `DELETE /v1/question-bank/{id}/favourite` are idempotent (204 either way), and only a published question can be hearted. Browse items carry `is_favourite`, computed in one query per page like `progress`; `GET /v1/question-bank?favourites=true` lists only the caller's. Lives in `app/progress/` beside `question_progress`, for the same reason: it is one user's relation to a question, written from the bank.
 
 ---
 

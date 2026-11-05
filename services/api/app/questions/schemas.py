@@ -6,6 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.progress.schemas import QuestionProgressSummary
 
+# One per option is plenty; a cap keeps an import from shipping a whole lesson.
+MAX_SOURCE_QUOTES = 10
+
 
 class OptionSchema(BaseModel):
     id: str
@@ -25,6 +28,7 @@ class QuestionResponse(BaseModel):
     correct_option_ids: list[str]
     rationales: dict[str, str]
     explanation: str | None
+    source_quotes: list[str]
     difficulty: Literal["easy", "medium", "hard"]
     status: Literal["draft", "published", "archived"]
     created_by: UUID
@@ -42,6 +46,7 @@ class QuestionCreateRequest(BaseModel):
     correct_option_ids: list[str]
     rationales: dict[str, str] = Field(default_factory=dict)
     explanation: str | None = None
+    source_quotes: list[str] = Field(default_factory=list, max_length=MAX_SOURCE_QUOTES)
     difficulty: Literal["easy", "medium", "hard"] = "medium"
     status: Literal["draft", "published", "archived"] = "draft"
     tags: list[str] = Field(default_factory=list)
@@ -66,6 +71,7 @@ class QuestionUpdateRequest(BaseModel):
     correct_option_ids: list[str] | None = None
     rationales: dict[str, str] | None = None
     explanation: str | None = None
+    source_quotes: list[str] | None = Field(default=None, max_length=MAX_SOURCE_QUOTES)
     difficulty: Literal["easy", "medium", "hard"] | None = None
     status: Literal["draft", "published", "archived"] | None = None
     tags: list[str] | None = None
@@ -95,6 +101,9 @@ class QuestionRevealResponse(BaseModel):
     outcome: Literal["correct", "partial", "incorrect"]
     explanation: str | None
     options: list[OptionResultSchema]
+    # The lesson sentences behind the options, for "See in lesson". Safe
+    # here: a reveal only exists once the question has been answered.
+    source_quotes: list[str] = Field(default_factory=list)
 
 
 class BankAnswerRequest(BaseModel):
@@ -131,6 +140,8 @@ class QuestionBankItem(BaseModel):
     # classified correctly, not which ones — the caller already knows what it
     # picked, and it only ever describes that caller's own past attempt.
     progress: QuestionProgressSummary | None = None
+    # The caller's own heart on it (design.md §12).
+    is_favourite: bool = False
 
 
 class TagResponse(BaseModel):

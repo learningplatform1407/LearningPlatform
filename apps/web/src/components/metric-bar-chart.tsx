@@ -15,25 +15,27 @@ export function MetricBarChart({
   metrics: { label: string; percent: number | null }[];
 }) {
   return (
-    <div className="flex flex-col gap-sm rounded-md border border-border p-md">
+    <div className="flex flex-col gap-sm border-t border-border pt-md">
       {metrics.map((metric) => {
         const rounded = metric.percent === null ? null : Math.round(metric.percent);
         return (
           <div key={metric.label} className="flex items-center gap-sm">
-            <span className="w-32 shrink-0 text-sm text-muted-foreground">{metric.label}</span>
+            <span className="w-32 shrink-0 text-sm font-semibold text-muted-foreground">
+              {metric.label}
+            </span>
             <div
               role="progressbar"
               aria-valuenow={rounded ?? undefined}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-label={metric.label}
-              className="h-2 flex-1 overflow-hidden rounded-full bg-muted"
+              className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
             >
               {rounded !== null && (
-                <div className="h-full rounded-full bg-primary" style={{ width: `${rounded}%` }} />
+                <div className="h-full rounded-full bg-accent" style={{ width: `${rounded}%` }} />
               )}
             </div>
-            <span className="w-20 shrink-0 text-right text-sm text-foreground">
+            <span className="w-20 shrink-0 text-right text-sm font-bold text-foreground tabular-nums">
               {rounded === null ? "No data yet" : `${rounded}%`}
             </span>
           </div>

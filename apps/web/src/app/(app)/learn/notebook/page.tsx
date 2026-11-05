@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { PageHeader } from "@/components/page-header";
+
 import {
   DrawingEntryEditor,
   NewEntryButtons,
@@ -45,9 +47,17 @@ export default function NotebookPage() {
     <main className="flex w-full">
       <nav
         aria-label="Notebook contents"
-        className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-border"
+        className={`sticky top-0 h-screen w-full shrink-0 flex-col border-border md:flex md:w-64 md:border-r ${
+          selection ? "hidden" : "flex"
+        }`}
       >
-        <div className="flex flex-1 flex-col gap-md overflow-y-auto p-md">
+        <div className="flex flex-1 flex-col gap-md overflow-y-auto px-sm pt-[42px] pb-md">
+          {/* The title lives with the editor on wide screens; on a phone the
+              list is the whole page, so it carries the title instead. */}
+          <div className="-mt-[42px] px-1.5 md:hidden">
+            <PageHeader kicker="Learn" title="Notebook" />
+          </div>
+          <h2 className="label-caps ml-1.5">Notes</h2>
           <NotebookEntryList
             entries={notebookEntries}
             selectedEntryId={selection?.kind === "entry" ? selection.entryId : undefined}
@@ -61,12 +71,26 @@ export default function NotebookPage() {
         />
       </nav>
 
-      <div className="flex h-screen min-w-0 flex-1 flex-col p-xl">
-        <h1 className="shrink-0 text-2xl font-bold text-foreground">Notebook</h1>
+      <div
+        className={`mx-auto h-screen w-full max-w-[47.5rem] min-w-0 flex-1 flex-col px-md pb-lg md:flex md:px-xl ${
+          selection ? "flex" : "hidden"
+        }`}
+      >
+        <div className="shrink-0">
+          {/* Below md the list and the editor take turns on screen. */}
+          <button
+            type="button"
+            onClick={() => setSelection(null)}
+            className="mt-md text-toc font-bold text-accent md:hidden"
+          >
+            ‹ All notes
+          </button>
+          <PageHeader kicker="Learn" title="Notebook" />
+        </div>
 
         <div className="mt-lg flex min-h-0 flex-1 flex-col">
           {!selection && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-toc text-muted-foreground">
               Select a note on the left, or create a new one.
             </p>
           )}

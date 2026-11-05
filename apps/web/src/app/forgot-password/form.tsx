@@ -18,13 +18,15 @@ export function ForgotPasswordForm({ expired }: { expired: boolean }) {
   if (state.sent) {
     return (
       <>
-        <h1 className="text-2xl font-semibold text-foreground">Check your email</h1>
+        <h1 className="text-[26px] leading-[1.15] font-extrabold text-foreground">
+          Check your email
+        </h1>
         <p className="mt-md text-sm text-muted-foreground">
           If that address has an account, we&apos;ve sent it a link to set a new password. The link
           can only be used once.
         </p>
         <p className="mt-lg text-sm text-muted-foreground">
-          <Link href="/login" className="text-primary hover:underline">
+          <Link href="/login" className="text-accent underline underline-offset-2">
             Back to log in
           </Link>
         </p>
@@ -34,7 +36,9 @@ export function ForgotPasswordForm({ expired }: { expired: boolean }) {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold text-foreground">Reset your password</h1>
+      <h1 className="text-[26px] leading-[1.15] font-extrabold text-foreground">
+        Reset your password
+      </h1>
       {expired ? (
         <p role="alert" className="mt-md text-sm text-danger">
           That link has expired or was already used. Enter your email address and we&apos;ll send a
@@ -46,15 +50,9 @@ export function ForgotPasswordForm({ expired }: { expired: boolean }) {
         </p>
       )}
       <form action={formAction} className="mt-lg flex flex-col gap-md">
-        <label className="flex flex-col gap-xs text-sm text-foreground">
+        <label className="flex flex-col gap-xs text-sm font-semibold text-foreground">
           Email
-          <input
-            type="email"
-            name="email"
-            required
-            autoComplete="email"
-            className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
+          <input type="email" name="email" required autoComplete="email" className="field" />
         </label>
         {state.error && (
           <p role="alert" className="text-sm text-danger">
@@ -67,7 +65,7 @@ export function ForgotPasswordForm({ expired }: { expired: boolean }) {
       </form>
       <p className="mt-md text-sm text-muted-foreground">
         Remembered it?{" "}
-        <Link href="/login" className="text-primary hover:underline">
+        <Link href="/login" className="text-accent underline underline-offset-2">
           Log in
         </Link>
       </p>

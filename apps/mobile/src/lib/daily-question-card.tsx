@@ -1,8 +1,9 @@
 import type { DailyQuestion } from "@lp/api-client";
-import { Pressable, StyleSheet, Text } from "react-native";
+import { Pressable, Text } from "react-native";
 
 import { OUTCOME_MARKS } from "@/lib/question-reveal";
-import { colors, fontSizes, fontWeights, radii, shadows, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, shadows, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 /** One line describing today. The same wording as the web rail and card. */
 export function summariseDay(today: DailyQuestion): string {
@@ -24,6 +25,7 @@ export function summariseDay(today: DailyQuestion): string {
  * what everything else on this screen already is.
  */
 export function DailyQuestionCard({ today, onOpen }: { today: DailyQuestion; onOpen: () => void }) {
+  const styles = useStyles();
   return (
     <Pressable
       style={({ pressed }) => [styles.navCard, pressed && styles.cardPressed]}
@@ -39,13 +41,13 @@ export function DailyQuestionCard({ today, onOpen }: { today: DailyQuestion; onO
 // Matching learn/index.tsx's navCard rather than importing it: those styles are
 // private to that screen, and copying five lines beats exporting a style sheet
 // so that a card can sit beside its peers.
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   navCard: {
     flexGrow: 1,
     flexBasis: "45%",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.md,
+    borderRadius: 16,
     backgroundColor: colors.background,
     padding: spacing.lg,
     ...shadows.sm,
@@ -63,4 +65,4 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: colors.mutedForeground,
   },
-});
+}));

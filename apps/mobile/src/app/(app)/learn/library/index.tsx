@@ -1,18 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 interface BookRow {
   id: string;
@@ -22,6 +16,8 @@ interface BookRow {
 }
 
 export default function LibraryScreen() {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const queryClient = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => getApiClient().getMe() });
   const books = useQuery({
@@ -88,7 +84,7 @@ export default function LibraryScreen() {
       contentContainerStyle={styles.listContent}
       data={rows}
       keyExtractor={(book) => book.id}
-      ListHeaderComponent={<Text style={styles.title}>Library</Text>}
+      ListHeaderComponent={<ScreenHeader kicker="Learn" title="Library" />}
       ListEmptyComponent={<Text style={styles.empty}>No books yet.</Text>}
       renderItem={({ item }) => (
         <Pressable
@@ -130,7 +126,7 @@ export default function LibraryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -138,13 +134,6 @@ const styles = StyleSheet.create({
   listContent: {
     padding: spacing.xl,
     gap: spacing.xs,
-  },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
-    marginBottom: spacing.md,
   },
   empty: {
     fontSize: fontSizes.sm,
@@ -154,11 +143,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderWidth: 0,
+    borderRadius: 0,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 0,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   rowTitle: {
     fontSize: fontSizes.sm,
@@ -188,16 +178,17 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    fontSize: fontSizes.base,
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    fontSize: 15,
     color: colors.foreground,
+    backgroundColor: colors.background,
   },
   button: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",
@@ -206,6 +197,7 @@ const styles = StyleSheet.create({
   uploadButton: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
+    borderRadius: 10,
   },
   uploadButtonText: {
     color: colors.primaryForeground,
@@ -220,4 +212,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

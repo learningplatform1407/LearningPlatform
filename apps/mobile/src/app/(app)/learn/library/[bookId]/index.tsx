@@ -4,21 +4,15 @@ import { computeLessonCompletionPercent } from "@lp/api-client";
 import * as DocumentPicker from "expo-document-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { sha256Hex } from "@/lib/checksum";
 import { ProgressBar } from "@/lib/progress-bar";
 import { supabase } from "@/lib/supabase";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
@@ -29,6 +23,8 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function UncategorizedLessonsScreen() {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const queryClient = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => getApiClient().getMe() });
   const uncategorized = useQuery({
@@ -117,7 +113,7 @@ function UncategorizedLessonsScreen() {
       contentContainerStyle={styles.listContent}
       data={lessons}
       keyExtractor={(doc) => doc.id}
-      ListHeaderComponent={<Text style={styles.title}>Uncategorized</Text>}
+      ListHeaderComponent={<ScreenHeader kicker="Library" title="Uncategorized" />}
       ListEmptyComponent={<Text style={styles.empty}>No lessons yet.</Text>}
       renderItem={({ item }) => (
         <View>
@@ -200,6 +196,8 @@ function UncategorizedLessonsScreen() {
  * reference book -- a replace always wipes every learner's ink on this
  * lesson unconditionally, hence the two-step confirmation). */
 function LessonAdminControls({ documentId, onDone }: { documentId: string; onDone: () => void }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const [textFile, setTextFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [textError, setTextError] = useState<string | null>(null);
   const [pdfFile, setPdfFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
@@ -382,6 +380,8 @@ function LessonList({
   onUploaded?: () => void;
   lessonProgress: Map<string, BankTreeLesson>;
 }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const queryClient = useQueryClient();
   const documents = useQuery({
     queryKey: ["documents", subChapterId],
@@ -552,6 +552,7 @@ function SubChapterRow({
   onToggle: () => void;
   onUploaded: () => void;
 }) {
+  const styles = useStyles();
   const lessonProgress = new Map<string, BankTreeLesson>(
     subChapterNode?.lessons.map((lesson) => [lesson.id, lesson]),
   );
@@ -603,6 +604,8 @@ function ChapterRow({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const subChapterProgress = new Map<string, BankTreeSubChapter>(
     chapterNode?.sub_chapters.map((subChapter) => [subChapter.id, subChapter]),
   );
@@ -717,6 +720,8 @@ function ChapterRow({
 }
 
 function BookChaptersScreen({ bookId }: { bookId: string }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const queryClient = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => getApiClient().getMe() });
   const chapters = useQuery({
@@ -776,7 +781,7 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
       keyExtractor={(chapter) => chapter.id}
       ListHeaderComponent={
         <>
-          <Text style={styles.title}>Chapters</Text>
+          <ScreenHeader kicker="Library" title="Chapters" />
           {bookNode && (
             <View style={styles.overallProgress}>
               <ProgressBar
@@ -834,7 +839,7 @@ export default function BookScreen() {
   return <BookChaptersScreen bookId={bookId} />;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -854,21 +859,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     maxWidth: 384,
   },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
-    marginBottom: spacing.md,
-  },
   empty: {
     fontSize: fontSizes.sm,
     color: colors.mutedForeground,
   },
   chapterCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderWidth: 0,
+    borderRadius: 0,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: 0,
   },
   chapterHeader: {
     flexDirection: "row",
@@ -886,9 +886,11 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   subChapterCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderWidth: 0,
+    borderRadius: 0,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: 0,
   },
   subChapterHeader: {
     flexDirection: "row",
@@ -906,11 +908,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderWidth: 0,
+    borderRadius: 0,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 0,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   rowTitle: {
     fontSize: fontSizes.sm,
@@ -954,16 +957,17 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    fontSize: fontSizes.base,
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    fontSize: 15,
     color: colors.foreground,
+    backgroundColor: colors.background,
   },
   button: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",
@@ -977,6 +981,7 @@ const styles = StyleSheet.create({
   uploadButton: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
+    borderRadius: 10,
   },
   uploadButtonText: {
     color: colors.primaryForeground,
@@ -991,4 +996,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

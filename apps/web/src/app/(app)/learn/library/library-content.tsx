@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/button";
 import { Card } from "@/components/card";
+import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
@@ -92,12 +93,12 @@ export function LibraryPageContent({
 
   return (
     <PageMain>
-      <h1 className="text-2xl font-bold text-foreground">Library</h1>
+      <PageHeader kicker="Learn" title="Library" />
 
       {books.data.length === 0 && !hasUncategorized ? (
         <p className="mt-md text-sm text-muted-foreground">No books yet.</p>
       ) : (
-        <ul className="mt-lg grid grid-cols-2 gap-lg sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        <ul className="mt-lg grid grid-cols-2 gap-md sm:grid-cols-3 md:grid-cols-4">
           {books.data.map((book) => {
             const coverColor = coverColorForTitle(book.title);
             return (
@@ -106,7 +107,7 @@ export function LibraryPageContent({
                   as={Link}
                   href={`${basePath}/${book.id}`}
                   interactive
-                  className="block overflow-hidden p-0"
+                  className="block overflow-hidden rounded-lg border-0 p-0 shadow-page"
                 >
                   <div
                     className="relative flex aspect-[2/3] flex-col justify-between p-md text-white"
@@ -117,10 +118,10 @@ export function LibraryPageContent({
                       className="absolute inset-y-0 left-0 w-2"
                       style={{ backgroundColor: coverColor, filter: "brightness(0.65)" }}
                     />
-                    <span className="relative self-start rounded-full bg-black/25 px-sm py-0.5 text-xs font-medium">
+                    <span className="relative self-start rounded-full bg-black/25 px-2.5 py-0.5 text-xs font-bold">
                       {book.chapter_count} {book.chapter_count === 1 ? "chapter" : "chapters"}
                     </span>
-                    <p className="relative text-lg font-semibold leading-snug drop-shadow-sm">
+                    <p className="relative text-card leading-snug font-extrabold drop-shadow-sm">
                       {book.title}
                     </p>
                   </div>
@@ -134,15 +135,15 @@ export function LibraryPageContent({
                 as={Link}
                 href={`${basePath}/uncategorized`}
                 interactive
-                className="block overflow-hidden p-0"
+                className="block overflow-hidden rounded-lg border-0 p-0 shadow-page"
               >
                 <div className="relative flex aspect-[2/3] flex-col justify-between bg-muted p-md">
                   <div aria-hidden="true" className="absolute inset-y-0 left-0 w-2 bg-border" />
-                  <span className="relative self-start rounded-full bg-background/70 px-sm py-0.5 text-xs font-medium text-muted-foreground">
+                  <span className="relative self-start rounded-full bg-background/70 px-2.5 py-0.5 text-xs font-bold text-muted-foreground">
                     {uncategorizedLessons.length}{" "}
                     {uncategorizedLessons.length === 1 ? "lesson" : "lessons"}
                   </span>
-                  <p className="relative text-lg font-semibold leading-snug text-muted-foreground">
+                  <p className="relative text-card leading-snug font-extrabold text-muted-foreground">
                     Uncategorized
                   </p>
                 </div>
@@ -161,15 +162,15 @@ export function LibraryPageContent({
             createBookMutation.mutate();
           }}
         >
-          <h2 className="text-sm font-semibold text-foreground">New book</h2>
-          <label className="flex flex-col gap-xs text-sm text-foreground">
+          <h2 className="label-caps">New book</h2>
+          <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
             Title
             <input
               type="text"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               required
-              className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="field"
             />
           </label>
           {createError && (

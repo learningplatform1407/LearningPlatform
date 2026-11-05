@@ -9,19 +9,31 @@ import type {
   FlashcardScopeFilter,
   ReviewRating,
 } from "@lp/contracts";
+import {
+  HIGHLIGHT_COLOR_NAMES,
+  clozeGap,
+  describeInterval,
+  findQuote,
+  sentenceAround,
+  formatInterval,
+  highlightIndex,
+  pageColors,
+} from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { useRef, useState } from "react";
+import { createContext, useContext, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Modal,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
+  type ScrollViewInstance,
 } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
@@ -32,12 +44,26 @@ import {
 } from "@/lib/notebook-entry-editor";
 import { Overlay } from "@/lib/overlay";
 import { PdfLessonView } from "@/lib/pdf-lesson-view";
-import { QuestionBankList } from "@/lib/question-bank-list";
+import { QuestionBankList, type SeeInLesson } from "@/lib/question-bank-list";
 import { supabase } from "@/lib/supabase";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { useTabSwipe } from "@/lib/use-tab-swipe";
+import { fontSizes, fontWeights, lineHeight, shadows, spacing } from "@/lib/theme";
 import { spliceAnnotations, spliceClozeSpans } from "@/lib/text-offset";
+import { makeStyles, useThemeColors, type ThemeColors } from "@/lib/theme-context";
+import {
+  ArrowLeftIcon,
+  BulbIcon,
+  BulbOffIcon,
+  CardsIcon,
+  EraserIcon,
+  SparkleIcon,
+} from "@/lib/ui/icons";
+import { NotchTabs } from "@/lib/ui/notch-tabs";
+import { Dot, SegmentedSwitch } from "@/lib/ui/primitives";
 
 function ExtractedImage({ path }: { path: string }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const {
     data: url,
     isPending,
@@ -75,21 +101,61 @@ function ExtractedImage({ path }: { path: string }) {
   );
 }
 
+/** Cuts text segments further wherever a source passage starts or ends,
+ * marking the pieces inside one -- quiz sources paint over highlights. */
+function splitBySources<T extends { text: string }>(
+  segments: T[],
+  sources: { start: number; end: number }[],
+): (T & { source: boolean })[] {
+  const out: (T & { source: boolean })[] = [];
+  let at = 0;
+  for (const segment of segments) {
+    const start = at;
+    const end = at + segment.text.length;
+    at = end;
+    const cuts = new Set([start, end]);
+    for (const source of sources) {
+      if (source.start > start && source.start < end) cuts.add(source.start);
+      if (source.end > start && source.end < end) cuts.add(source.end);
+    }
+    const points = [...cuts].sort((a, b) => a - b);
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const from = points[i]!;
+      const to = points[i + 1]!;
+      out.push({
+        ...segment,
+        text: segment.text.slice(from - start, to - start),
+        source: sources.some((source) => from >= source.start && to <= source.end),
+      });
+    }
+  }
+  return out;
+}
+
 function AnnotatedParagraph({
   text,
   blockIndex,
   annotations,
+  sources = [],
   onLongPress,
   onOpenNote,
+  onLayoutY,
 }: {
   text: string;
   blockIndex: number;
   annotations: Annotation[];
+  /** Quiz-source passages in this paragraph ("See in lesson"). */
+  sources?: { start: number; end: number }[];
   onLongPress: () => void;
   onOpenNote: (note: Annotation) => void;
+  /** Where the paragraph sits in the scroll content, for jumping to it. */
+  onLayoutY?: (y: number) => void;
 }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
+  const body = useScaledBody();
   const blockAnnotations = annotations.filter((a) => a.block_index === blockIndex);
-  const segments = spliceAnnotations(text, blockAnnotations);
+  const segments = splitBySources(spliceAnnotations(text, blockAnnotations), sources);
   // RN's Text can only nest more Text as inline children — a note glyph
   // can't be placed inline mid-paragraph the way web does with a <span>, so
   // every margin note (block-level or range-anchored) surfaces as a badge
@@ -97,14 +163,18 @@ function AnnotatedParagraph({
   const notes = blockAnnotations.filter((a) => a.type === "margin_note");
 
   return (
-    <View>
+    <View onLayout={(event) => onLayoutY?.(event.nativeEvent.layout.y)}>
       <Pressable testID={`paragraph-${blockIndex}`} onLongPress={onLongPress}>
-        <Text style={styles.paragraph}>
+        <Text style={[styles.paragraph, body]}>
           {segments.map((segment, index) =>
-            segment.annotation?.type === "highlight" ? (
+            segment.source ? (
+              <Text key={index} testID="quiz-source" style={styles.quizSource}>
+                {segment.text}
+              </Text>
+            ) : segment.annotation?.type === "highlight" ? (
               <Text
                 key={index}
-                style={{ backgroundColor: highlightMarkColor(segment.annotation.color) }}
+                style={{ backgroundColor: highlightMarkColor(colors, segment.annotation.color) }}
               >
                 {segment.text}
               </Text>
@@ -132,6 +202,11 @@ function AnnotatedParagraph({
   );
 }
 
+const VIEW_MODES = [
+  { value: "text", label: "Text" },
+  { value: "pdf", label: "PDF" },
+] as const;
+
 const TABS = [
   { key: "lesson", label: "Lesson" },
   { key: "review", label: "Review" },
@@ -141,98 +216,185 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]["key"];
 
-const HIGHLIGHT_COLORS = [
-  { name: "yellow", swatch: "#FDE047", mark: "#FEF08A" },
-  { name: "green", swatch: "#4ADE80", mark: "#BBF7D0" },
-  { name: "blue", swatch: "#60A5FA", mark: "#BFDBFE" },
-  { name: "pink", swatch: "#F472B6", mark: "#FBCFE8" },
-] as const;
+// The design's five marker colours (design.md §1); stored by name, like the
+// web. Legacy "pink" highlights render red (highlightIndex).
+const HIGHLIGHT_COLORS = HIGHLIGHT_COLOR_NAMES.map((name, index) => ({
+  name,
+  swatch: pageColors.swatches[index]!,
+}));
 
-function highlightMarkColor(color: string | null): string {
-  return HIGHLIGHT_COLORS.find((c) => c.name === color)?.mark ?? HIGHLIGHT_COLORS[0].mark;
+function highlightMarkColor(colors: ThemeColors, color: string | null): string {
+  return colors[`highlight${highlightIndex(color)}`];
+}
+
+/** Text size from the Aa dot, as a percentage (the web's TEXT_SCALES). */
+const TEXT_SCALES = [100, 110, 120, 130, 140, 150] as const;
+const TextScaleContext = createContext(100);
+
+/** Body text at the reader's chosen size: 17px at 100%, line height 1.6. */
+function useScaledBody() {
+  const scale = useContext(TextScaleContext);
+  const size = (17 * scale) / 100;
+  return { fontSize: size, lineHeight: Math.round(size * 1.6) };
 }
 
 type ActiveTool = { type: "highlight"; color: string } | { type: "eraser" } | null;
 
-// Debounce for detecting "the user finished selecting" — RN's TextInput
-// onSelectionChange fires continuously while dragging, with no distinct
-// "selection ended" event the way web's mouseup gives us.
-const SELECTION_SETTLE_MS = 400;
-
-function AnnotationToolbar({
+/**
+ * The tool notch glued to the left edge (design.md §5): contents toggle,
+ * the five swatches, then Explain and the eraser. Tapping the active swatch
+ * again puts the tool down. Marking tools only exist on the Lesson tab's
+ * text view (`toolsEnabled`); the contents toggle is always there.
+ */
+function ToolNotch({
   activeTool,
   onToolChange,
+  toolsEnabled,
+  onContents,
+  onExplain,
+  onTextScale,
 }: {
   activeTool: ActiveTool;
   onToolChange: (tool: ActiveTool) => void;
+  toolsEnabled: boolean;
+  onContents: () => void;
+  onExplain: () => void;
+  /** Text size, on every tab: it sizes the Review text too. */
+  onTextScale: () => void;
 }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   return (
-    <View style={styles.annotationToolbar} accessibilityRole="toolbar">
-      {HIGHLIGHT_COLORS.map((color) => {
-        const isActive = activeTool?.type === "highlight" && activeTool.color === color.name;
-        return (
-          <Pressable
-            key={color.name}
-            onPress={() => onToolChange(isActive ? null : { type: "highlight", color: color.name })}
-            accessibilityRole="button"
-            accessibilityLabel={`Highlight — ${color.name}`}
-            accessibilityState={{ selected: isActive }}
-            style={[
-              styles.colorSwatch,
-              { backgroundColor: color.swatch },
-              isActive && styles.colorSwatchActive,
-            ]}
-          />
-        );
-      })}
+    <View style={styles.toolNotch} accessibilityRole="toolbar" accessibilityLabel="Lesson tools">
       <Pressable
-        onPress={() => onToolChange(activeTool?.type === "eraser" ? null : { type: "eraser" })}
+        onPress={onContents}
+        style={styles.tool}
         accessibilityRole="button"
-        accessibilityLabel="Eraser"
-        accessibilityState={{ selected: activeTool?.type === "eraser" }}
-        style={[styles.eraserButton, activeTool?.type === "eraser" && styles.eraserButtonActive]}
+        accessibilityLabel="Contents"
+        hitSlop={4}
       >
-        <Text style={styles.eraserButtonText}>🧹</Text>
+        <Text style={styles.toolChevron}>›</Text>
+      </Pressable>
+      {toolsEnabled && (
+        <>
+          {HIGHLIGHT_COLORS.map((color) => {
+            const isActive = activeTool?.type === "highlight" && activeTool.color === color.name;
+            return (
+              <Pressable
+                key={color.name}
+                onPress={() =>
+                  onToolChange(isActive ? null : { type: "highlight", color: color.name })
+                }
+                accessibilityRole="button"
+                accessibilityLabel={`Highlight — ${color.name}`}
+                accessibilityState={{ selected: isActive }}
+                style={styles.tool}
+                hitSlop={2}
+              >
+                <View
+                  style={[
+                    styles.swatch,
+                    { backgroundColor: color.swatch },
+                    isActive && styles.swatchActive,
+                  ]}
+                />
+              </Pressable>
+            );
+          })}
+          <View style={styles.toolSeparator} />
+          <Pressable
+            onPress={onExplain}
+            style={styles.tool}
+            accessibilityRole="button"
+            accessibilityLabel="Explain"
+          >
+            <BulbIcon color={colors.mutedForeground} />
+          </Pressable>
+          <Pressable
+            onPress={() => onToolChange(activeTool?.type === "eraser" ? null : { type: "eraser" })}
+            accessibilityRole="button"
+            accessibilityLabel="Eraser"
+            accessibilityState={{ selected: activeTool?.type === "eraser" }}
+            style={[styles.tool, activeTool?.type === "eraser" && styles.toolActive]}
+          >
+            <EraserIcon
+              color={activeTool?.type === "eraser" ? colors.background : colors.foreground}
+            />
+          </Pressable>
+        </>
+      )}
+      <View style={styles.toolSeparator} />
+      <Pressable
+        onPress={onTextScale}
+        style={styles.tool}
+        accessibilityRole="button"
+        accessibilityLabel="Text size"
+      >
+        <Text style={styles.toolAa}>Aa</Text>
       </Pressable>
     </View>
   );
 }
 
-function SelectableParagraph({
+/** A word's place in its block's text. */
+type WordSpan = { start: number; end: number };
+
+/**
+ * A paragraph whose words can be tapped while a marking tool is armed
+ * (design.md §9, word-level marking). Touch has no "drag over words" here,
+ * so a range is two taps: the first word, then the last -- tapping the
+ * first word again marks just that word. Either way the range snaps to
+ * whole words, like the web's drag.
+ */
+function TappableParagraph({
   text,
   blockIndex,
-  onSelectionSettled,
+  anchor,
+  onTapWord,
 }: {
   text: string;
   blockIndex: number;
-  onSelectionSettled: (blockIndex: number, start: number, end: number) => void;
+  /** The first word of a range in progress, when it's in this block. */
+  anchor: WordSpan | null;
+  onTapWord: (blockIndex: number, word: WordSpan) => void;
 }) {
-  const [selection, setSelection] = useState({ start: 0, end: 0 });
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const styles = useStyles();
+  const body = useScaledBody();
+  const pieces: React.ReactNode[] = [];
+  let at = 0;
+  for (const match of text.matchAll(/\S+/g)) {
+    const word = { start: match.index, end: match.index + match[0].length };
+    if (word.start > at) pieces.push(text.slice(at, word.start));
+    const isAnchor = anchor?.start === word.start;
+    pieces.push(
+      <Text
+        key={word.start}
+        testID={`word-${blockIndex}-${word.start}`}
+        onPress={() => onTapWord(blockIndex, word)}
+        style={isAnchor ? styles.wordAnchor : undefined}
+        accessibilityRole="button"
+      >
+        {match[0]}
+      </Text>,
+    );
+    at = word.end;
+  }
+  if (at < text.length) pieces.push(text.slice(at));
   return (
-    <TextInput
-      testID={`selectable-paragraph-${blockIndex}`}
-      style={styles.paragraph}
-      value={text}
-      editable={false}
-      multiline
-      selection={selection}
-      onSelectionChange={(event) => {
-        const next = event.nativeEvent.selection;
-        setSelection(next);
-        if (timerRef.current) clearTimeout(timerRef.current);
-        if (next.start === next.end) return;
-        timerRef.current = setTimeout(() => {
-          onSelectionSettled(blockIndex, next.start, next.end);
-          setSelection({ start: 0, end: 0 });
-        }, SELECTION_SETTLE_MS);
-      }}
-    />
+    <Text testID={`tappable-paragraph-${blockIndex}`} style={[styles.paragraph, body]}>
+      {pieces}
+    </Text>
   );
 }
 
-function QuizzesTab({ documentId }: { documentId: string }) {
+function QuizzesTab({
+  documentId,
+  onSeeInLesson,
+}: {
+  documentId: string;
+  onSeeInLesson: SeeInLesson;
+}) {
+  const styles = useStyles();
   // Scoped by questions.document_id — a question's provenance, and the only
   // link between a lesson and a question. Lessons carry no tags of their
   // own, so "this lesson's questions" means exactly this.
@@ -241,6 +403,7 @@ function QuizzesTab({ documentId }: { documentId: string }) {
       <QuestionBankList
         filter={{ documentIds: [documentId] }}
         emptyMessage="No questions for this lesson yet."
+        onSeeInLesson={onSeeInLesson}
       />
       <Pressable onPress={() => router.push("/exams")}>
         <Text style={styles.tabLink}>Practise in an exam →</Text>
@@ -262,6 +425,7 @@ function ScopeToggle({
   scope: FlashcardScopeFilter;
   onChange: (scope: FlashcardScopeFilter) => void;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.scopeToggle} accessibilityRole="radiogroup">
       {SCOPE_FILTERS.map((filter) => (
@@ -285,6 +449,7 @@ function ScopeToggle({
 
 /** Official vs personal, always paired with a word rather than colour alone. */
 function ScopeBadge({ scope }: { scope: FlashcardScope }) {
+  const styles = useStyles();
   return (
     <View style={styles.scopeBadge}>
       <Text style={styles.scopeBadgeText}>{scope === "official" ? "Official" : "Mine"}</Text>
@@ -293,6 +458,7 @@ function ScopeBadge({ scope }: { scope: FlashcardScope }) {
 }
 
 function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: () => void }) {
+  const styles = useStyles();
   const [front, setFront] = useState("");
   const [back, setBack] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -340,6 +506,7 @@ function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: 
 }
 
 function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => void }) {
+  const styles = useStyles();
   const [editing, setEditing] = useState(false);
   const [front, setFront] = useState(card.front_text);
   const [back, setBack] = useState(card.back_text);
@@ -468,6 +635,8 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
 }
 
 function FlashcardsTab({ documentId }: { documentId: string }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const queryClient = useQueryClient();
   const [scope, setScope] = useState<FlashcardScopeFilter>("all");
   const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
@@ -638,7 +807,7 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
             {revealed ? (
               <Text style={styles.flashcardBack}>{currentCard.back_text}</Text>
             ) : (
-              <Text style={styles.hint}>Tap to reveal</Text>
+              <Text style={styles.flashcardHint}>Tap to reveal</Text>
             )}
           </Pressable>
 
@@ -650,7 +819,10 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
                 accessibilityRole="button"
                 style={styles.gradeButton}
               >
-                <Text style={styles.deleteText}>Again</Text>
+                <Text style={[styles.gradeButtonText, { color: colors.again }]}>Again</Text>
+                <Text style={styles.gradeInterval}>
+                  {formatInterval(currentCard.next_intervals.again)}
+                </Text>
               </Pressable>
               <Pressable
                 disabled={reviewMutation.isPending}
@@ -658,7 +830,10 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
                 accessibilityRole="button"
                 style={styles.gradeButton}
               >
-                <Text style={styles.reviewWarningText}>Hard</Text>
+                <Text style={[styles.gradeButtonText, { color: colors.hard }]}>Hard</Text>
+                <Text style={styles.gradeInterval}>
+                  {formatInterval(currentCard.next_intervals.hard)}
+                </Text>
               </Pressable>
               <Pressable
                 disabled={reviewMutation.isPending}
@@ -666,7 +841,10 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
                 accessibilityRole="button"
                 style={styles.gradeButton}
               >
-                <Text style={styles.rowTitle}>Good</Text>
+                <Text style={[styles.gradeButtonText, { color: colors.good }]}>Good</Text>
+                <Text style={styles.gradeInterval}>
+                  {formatInterval(currentCard.next_intervals.good)}
+                </Text>
               </Pressable>
               <Pressable
                 disabled={reviewMutation.isPending}
@@ -674,7 +852,10 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
                 accessibilityRole="button"
                 style={styles.gradeButton}
               >
-                <Text style={styles.reviewSuccessText}>Easy</Text>
+                <Text style={[styles.gradeButtonText, { color: colors.easy }]}>Easy</Text>
+                <Text style={styles.gradeInterval}>
+                  {formatInterval(currentCard.next_intervals.easy)}
+                </Text>
               </Pressable>
             </View>
           )}
@@ -746,6 +927,8 @@ function useClozeReview(documentId: string, enabled: boolean) {
   const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
   const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [hints, setHints] = useState(true);
+  const [cardsView, setCardsView] = useState(false);
 
   const reviewMutation = useMutation({
     mutationFn: ({ cardId, rating }: { cardId: string; rating: ClozeRating }) =>
@@ -785,6 +968,12 @@ function useClozeReview(documentId: string, enabled: boolean) {
     isError: dueQuery.isError,
     spansByBlock,
     currentCardId: currentCard?.id,
+    nextIntervals: currentCard?.next_intervals,
+    hints,
+    toggleHints: () => setHints((on) => !on),
+    currentCard,
+    cardsView,
+    setCardsView,
     isRevealed: currentCard !== undefined && revealedCardId === currentCard.id,
     queueLength: queue.length,
     feedback,
@@ -801,15 +990,49 @@ function useClozeReview(documentId: string, enabled: boolean) {
   };
 }
 
+/** The text a hidden card covers, read from the block -- only its shape
+ * reaches the screen, through clozeGap (spliceClozeSpans gives a hidden
+ * segment no text, so the answer can't leak through a rendering slip). */
+function hiddenText(text: string, spans: ClozeSpanState[] | undefined, id: string | null): string {
+  const span = spans?.find((s) => s.id === id);
+  return span ? text.slice(span.start_offset, span.end_offset) : "";
+}
+
+/** A hidden gap: "[ … ]", or each word's first letter and length with
+ * hints on (design.md §11), with swallowed spaces kept outside it. */
+function ClozeGapText({
+  hidden,
+  hints,
+  current,
+}: {
+  hidden: string;
+  hints: boolean;
+  current: boolean;
+}) {
+  const styles = useStyles();
+  const gap = clozeGap(hidden, hints);
+  return (
+    <Text style={[styles.clozeHidden, current && styles.clozeCurrent]}>
+      {gap.lead}
+      <Text style={styles.clozeGap}>{gap.label}</Text>
+      {gap.trail}
+    </Text>
+  );
+}
+
 function ReviewArticle({
   version,
   spansByBlock,
   currentCardId,
+  hints,
 }: {
   version: DocumentResponse["current_version"] | undefined;
   spansByBlock: Map<number, ClozeSpanState[]>;
+  hints: boolean;
   currentCardId: string | undefined;
 }) {
+  const styles = useStyles();
+  const body = useScaledBody();
   if (!version) return <Text style={styles.hint}>Not processed yet.</Text>;
   if (version.status === "processing") return <Text style={styles.hint}>Processing...</Text>;
   if (version.status === "failed") {
@@ -836,12 +1059,15 @@ function ReviewArticle({
         }
         const segments = spliceClozeSpans(block.text ?? "", spansByBlock.get(index) ?? []);
         return (
-          <Text key={index} style={styles.paragraph}>
+          <Text key={index} style={[styles.paragraph, body]}>
             {segments.map((segment, i) =>
               segment.hidden ? (
-                <Text key={i} style={styles.clozeHidden}>
-                  [...]
-                </Text>
+                <ClozeGapText
+                  key={i}
+                  hidden={hiddenText(block.text ?? "", spansByBlock.get(index), segment.id)}
+                  hints={hints}
+                  current={segment.id === currentCardId}
+                />
               ) : segment.id === currentCardId ? (
                 <Text key={i} style={styles.clozeRevealed}>
                   {segment.text}
@@ -857,24 +1083,43 @@ function ReviewArticle({
   );
 }
 
-function ReviewBar({ review }: { review: ReturnType<typeof useClozeReview> }) {
+const GRADES: { rating: ClozeRating; label: string; tone: "again" | "hard" | "good" | "easy" }[] = [
+  { rating: "again", label: "Again", tone: "again" },
+  { rating: "hard", label: "Hard", tone: "hard" },
+  { rating: "good", label: "Good", tone: "good" },
+  { rating: "easy", label: "Easy", tone: "easy" },
+];
+
+/** The review bar: a bottom notch with Show, then the four grades on light
+ * paper buttons that stay light in dark mode (design.md §11). */
+function ReviewBar({
+  review,
+  inline = false,
+}: {
+  review: ReturnType<typeof useClozeReview>;
+  /** Inside the cards view, where it sits under the card, not on the edge. */
+  inline?: boolean;
+}) {
+  const styles = useStyles();
+  const colors = useThemeColors();
+  const barStyle = inline ? styles.reviewBarInline : styles.reviewBar;
   if (review.isPending) {
     return (
-      <View style={styles.reviewBar}>
+      <View style={barStyle}>
         <Text style={styles.hint}>Loading...</Text>
       </View>
     );
   }
   if (review.isError) {
     return (
-      <View style={styles.reviewBar}>
+      <View style={barStyle}>
         <Text style={styles.error}>Failed to load review cards.</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.reviewBar}>
+    <View style={barStyle}>
       {!review.currentCardId && (
         <>
           <Text style={styles.hint}>You&apos;re all caught up — nothing to review right now.</Text>
@@ -882,56 +1127,123 @@ function ReviewBar({ review }: { review: ReturnType<typeof useClozeReview> }) {
         </>
       )}
       {review.currentCardId && !review.isRevealed && (
-        <View style={styles.reviewBarRow}>
-          <Text style={styles.hint}>
-            {review.queueLength} {review.queueLength === 1 ? "word" : "words"} left to review
-          </Text>
-          <Pressable
-            style={[styles.modalButton, styles.modalButtonPrimary]}
-            onPress={review.reveal}
-            accessibilityRole="button"
-          >
-            <Text style={styles.modalButtonPrimaryText}>Show</Text>
+        <>
+          <View style={styles.reviewCountRow}>
+            <Text style={styles.reviewCount}>
+              {review.queueLength} {review.queueLength === 1 ? "word" : "words"} left to review
+            </Text>
+            {!inline && (
+              <Dot label="Cards, one at a time" onPress={() => review.setCardsView(true)}>
+                <CardsIcon color={colors.foreground} />
+              </Dot>
+            )}
+            <Dot
+              label="Letter hints in the gaps"
+              pressed={review.hints}
+              onPress={review.toggleHints}
+            >
+              {review.hints ? (
+                <BulbIcon color={colors.background} />
+              ) : (
+                <BulbOffIcon color={colors.foreground} />
+              )}
+            </Dot>
+          </View>
+          <Pressable style={styles.showButton} onPress={review.reveal} accessibilityRole="button">
+            <Text style={styles.showButtonText}>Show</Text>
           </Pressable>
-        </View>
+        </>
       )}
       {review.currentCardId && review.isRevealed && (
         <View style={styles.reviewGradeRow}>
-          <Pressable
-            style={styles.modalButton}
-            disabled={review.isGrading}
-            onPress={() => review.grade("again")}
-            accessibilityRole="button"
-          >
-            <Text style={styles.deleteText}>Again</Text>
-          </Pressable>
-          <Pressable
-            style={styles.modalButton}
-            disabled={review.isGrading}
-            onPress={() => review.grade("hard")}
-            accessibilityRole="button"
-          >
-            <Text style={styles.reviewWarningText}>Hard</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.modalButton, styles.modalButtonPrimary]}
-            disabled={review.isGrading}
-            onPress={() => review.grade("good")}
-            accessibilityRole="button"
-          >
-            <Text style={styles.modalButtonPrimaryText}>Good</Text>
-          </Pressable>
-          <Pressable
-            style={styles.modalButton}
-            disabled={review.isGrading}
-            onPress={() => review.grade("easy")}
-            accessibilityRole="button"
-          >
-            <Text style={styles.reviewSuccessText}>Easy</Text>
-          </Pressable>
+          {GRADES.map((grade) => (
+            <Pressable
+              key={grade.rating}
+              style={styles.gradeButton}
+              disabled={review.isGrading}
+              onPress={() => review.grade(grade.rating)}
+              accessibilityRole="button"
+              accessibilityLabel={
+                review.nextIntervals
+                  ? `${grade.label}, ${describeInterval(review.nextIntervals[grade.rating])}`
+                  : grade.label
+              }
+            >
+              <Text style={[styles.gradeButtonText, { color: colors[grade.tone] }]}>
+                {grade.label}
+              </Text>
+              {review.nextIntervals && (
+                <Text style={styles.gradeInterval}>
+                  {formatInterval(review.nextIntervals[grade.rating])}
+                </Text>
+              )}
+            </Pressable>
+          ))}
         </View>
       )}
     </View>
+  );
+}
+
+/**
+ * Review as cards (design.md §11): one gap at a time, inside just the
+ * sentence that holds it, on light paper; the grade controls sit under it.
+ */
+function CardsOverlay({
+  review,
+  blocks,
+}: {
+  review: ReturnType<typeof useClozeReview>;
+  blocks: { type: string; text?: string | null }[];
+}) {
+  const styles = useStyles();
+  const card = review.currentCard;
+  const close = () => review.setCardsView(false);
+  let sentence: React.ReactNode = null;
+  let section = "Review";
+  if (card) {
+    for (let i = card.block_index; i >= 0; i -= 1) {
+      if (blocks[i]?.type === "heading") {
+        section = blocks[i]!.text ?? "Review";
+        break;
+      }
+    }
+    const text = blocks[card.block_index]?.text ?? "";
+    const { start, end } = sentenceAround(text, card.start_offset, card.end_offset);
+    const hidden = text.slice(card.start_offset, card.end_offset);
+    sentence = (
+      <Text style={styles.cardSentence}>
+        {start > 0 && "… "}
+        {text.slice(start, card.start_offset)}
+        {review.isRevealed ? (
+          <Text style={styles.cardRevealed}>{hidden}</Text>
+        ) : (
+          <ClozeGapText hidden={hidden} hints={review.hints} current />
+        )}
+        {text.slice(card.end_offset, end)}
+        {end < text.length && " …"}
+      </Text>
+    );
+  }
+  return (
+    <Modal visible={review.cardsView} transparent animationType="fade" onRequestClose={close}>
+      <View style={styles.cardsScrim}>
+        <Pressable style={styles.cardsDismiss} onPress={close} accessibilityLabel="Close cards" />
+        <View style={styles.paperCard} accessibilityLabel="Review card">
+          <View style={styles.cardMeta}>
+            <Text style={styles.cardMetaText} numberOfLines={1}>
+              {section}
+            </Text>
+            <Text style={styles.cardMetaText}>{review.queueLength} left</Text>
+          </View>
+          {sentence ?? <Text style={styles.cardSentence}>Nothing left to review.</Text>}
+        </View>
+        <ReviewBar review={review} inline />
+        <Pressable onPress={close} accessibilityRole="button">
+          <Text style={styles.cardsClose}>Back to the text</Text>
+        </Pressable>
+      </View>
+    </Modal>
   );
 }
 
@@ -952,6 +1264,7 @@ function TocModal({
   scopeId: string;
   currentDocumentId: string;
 }) {
+  const styles = useStyles();
   const { data, isPending } = useQuery({
     queryKey: ["documents", scopeId],
     queryFn: () => getApiClient().listDocuments(scopeId),
@@ -959,7 +1272,7 @@ function TocModal({
   });
 
   return (
-    <Overlay visible={visible} title="Contents" onClose={onClose}>
+    <Overlay visible={visible} title="Lessons in this chapter" onClose={onClose} side="left">
       {isPending && <Text style={styles.hint}>Loading...</Text>}
       {!isPending && (!data || data.length === 0) && <Text style={styles.hint}>No lessons.</Text>}
       {data?.map((doc) => (
@@ -990,6 +1303,7 @@ function NotesModal({
   onClose: () => void;
   documentId: string;
 }) {
+  const styles = useStyles();
   const [view, setView] = useState<NotesView>({ kind: "list" });
   const entries = useQuery({
     queryKey: ["notebook-entries"],
@@ -1003,8 +1317,9 @@ function NotesModal({
   return (
     <Overlay
       visible={visible}
-      title="Notes"
+      title="Notebook"
       onClose={onClose}
+      side="right"
       footer={
         view.kind === "list" ? (
           <NewEntryButtons
@@ -1059,6 +1374,8 @@ function NotesModal({
 }
 
 export default function LectureScreen() {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const { id, tab: tabParam } = useLocalSearchParams<{ id: string; tab?: string }>();
   const queryClient = useQueryClient();
   // Deep link support: navigating here with ?tab=review (e.g. from the
@@ -1069,11 +1386,48 @@ export default function LectureScreen() {
   );
   const [tocOpen, setTocOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
-  const [activeTool, setActiveTool] = useState<ActiveTool>(null);
+  const [activeTool, setActiveToolState] = useState<ActiveTool>(null);
+  // The first tapped word of a range being marked (see TappableParagraph).
+  const [markAnchor, setMarkAnchor] = useState<(WordSpan & { blockIndex: number }) | null>(null);
+  function setActiveTool(tool: ActiveTool) {
+    setActiveToolState(tool);
+    setMarkAnchor(null);
+  }
+
+  function tapWord(blockIndex: number, word: WordSpan) {
+    // A second tap in the same paragraph completes the range; a tap in
+    // another paragraph starts over there (marks are per paragraph).
+    if (!markAnchor || markAnchor.blockIndex !== blockIndex) {
+      setMarkAnchor({ blockIndex, ...word });
+      return;
+    }
+    setMarkAnchor(null);
+    handleSelectionSettled(
+      blockIndex,
+      Math.min(markAnchor.start, word.start),
+      Math.max(markAnchor.end, word.end),
+    );
+  }
   // Defaults to "text" -- the PDF/Text toggle itself only renders when the
   // lesson has a *ready* lecture_pdf attached (see `readyLecturePdf` below).
   const [lessonViewMode, setLessonViewMode] = useState<"text" | "pdf">("text");
   const review = useClozeReview(id, activeTab === "review");
+  const [textScale, setTextScale] = useState<(typeof TEXT_SCALES)[number]>(100);
+  // The lesson title stays on screen: once the page's h1 scrolls under the
+  // top notch, a compact title line appears inside the notch instead.
+  const [titleBottom, setTitleBottom] = useState<number | null>(null);
+  // "See in lesson" (design.md §12): the question it came from, its
+  // passages, and where the Quizzes tab was scrolled to, for the way back.
+  const [seeInLesson, setSeeInLesson] = useState<{
+    questionId: string;
+    quotes: string[];
+    returnY: number;
+  } | null>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const scrollY = useRef(0);
+  const pendingSourceBlock = useRef<number | null>(null);
+  const { height: windowHeight } = useWindowDimensions();
+  const [titleHidden, setTitleHidden] = useState(false);
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["documents", id],
@@ -1112,6 +1466,24 @@ export default function LectureScreen() {
       setNoteDraft("");
     },
   });
+
+  // Edited in place (PATCH): the note keeps its id. Saved on Close, only
+  // when the text actually changed.
+  const noteEdit = useRef<string | null>(null);
+  const updateNoteMutation = useMutation({
+    mutationFn: ({ annotationId, text }: { annotationId: string; text: string }) =>
+      getApiClient().updateAnnotation(id, annotationId, { note_text: text }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["annotations", id] }),
+  });
+
+  function closeNote() {
+    const text = noteEdit.current;
+    if (viewingNote && text !== null && text.trim() && text !== viewingNote.note_text) {
+      updateNoteMutation.mutate({ annotationId: viewingNote.id, text });
+    }
+    noteEdit.current = null;
+    setViewingNote(null);
+  }
 
   const deleteAnnotationMutation = useMutation({
     mutationFn: (annotationId: string) => getApiClient().deleteAnnotation(id, annotationId),
@@ -1180,6 +1552,18 @@ export default function LectureScreen() {
     }
   }
 
+  // Off while marking (a sideways drag is a selection then) and in PDF
+  // view, where drags pan, zoom and draw.
+  const swipeHandlers = useTabSwipe(
+    !(activeTab === "lesson" && (activeTool !== null || lessonViewMode === "pdf")),
+    (direction) => {
+      const next = TABS[TABS.findIndex((tab) => tab.key === activeTab) + direction];
+      if (!next) return;
+      setActiveTab(next.key);
+      setSeeInLesson(null);
+    },
+  );
+
   if (isPending) {
     return (
       <View style={styles.container}>
@@ -1196,331 +1580,675 @@ export default function LectureScreen() {
     );
   }
 
+  const blocks = version?.status === "ready" ? (version.extracted_content?.blocks ?? []) : [];
+  const sourcesByBlock = new Map<number, { start: number; end: number }[]>();
+  for (const quote of seeInLesson?.quotes ?? []) {
+    blocks.forEach((block, index) => {
+      const found = block.type === "paragraph" ? findQuote(block.text ?? "", quote) : null;
+      if (found) sourcesByBlock.set(index, [...(sourcesByBlock.get(index) ?? []), found]);
+    });
+  }
+
+  function showSources(questionId: string, quotes: string[]) {
+    const first = blocks.findIndex(
+      (block) => block.type === "paragraph" && quotes.some((q) => findQuote(block.text ?? "", q)),
+    );
+    // react-native-pdf exposes no text, so the passage is shown in the text
+    // view only.
+    if (first < 0) {
+      Alert.alert("See in lesson", "That passage isn't in this lesson's text any more.");
+      return;
+    }
+    setSeeInLesson({ questionId, quotes, returnY: scrollY.current });
+    pendingSourceBlock.current = first;
+    setActiveTool(null);
+    setLessonViewMode("text");
+    setActiveTab("lesson");
+  }
+
+  function backToQuizzes() {
+    const returnY = seeInLesson?.returnY ?? 0;
+    setSeeInLesson(null);
+    setActiveTab("quizzes");
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: returnY, animated: false }));
+  }
+
+  const subChapter = data.sub_chapter;
+  const tabLabel = TABS.find((tab) => tab.key === activeTab)!.label;
+  const textTools = activeTab === "lesson" && lessonViewMode === "text";
+
   return (
-    <View style={styles.screenRoot}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={[
-          styles.content,
-          activeTab === "review" && styles.contentWithReviewBar,
-        ]}
-      >
-        {data.sub_chapter && (
-          <Pressable
-            onPress={() =>
-              router.push(
-                `/learn/library/${data.sub_chapter!.chapter.book_id}/${data.sub_chapter!.chapter.id}`,
-              )
-            }
-            accessibilityRole="button"
-          >
-            <Text style={styles.breadcrumb}>
-              {data.sub_chapter.chapter.title} / {data.sub_chapter.title}
+    <TextScaleContext.Provider value={textScale}>
+      <View style={styles.screenRoot} {...swipeHandlers}>
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={[
+            styles.content,
+            activeTab === "review" && styles.contentWithReviewBar,
+          ]}
+          scrollEventThrottle={32}
+          onScroll={(event) => {
+            if (titleBottom === null) return;
+            // 64 = the top notch's height: the h1 is "away" once it's under it.
+            const hidden = event.nativeEvent.contentOffset.y > titleBottom - 64;
+            if (hidden !== titleHidden) setTitleHidden(hidden);
+          }}
+        >
+          <View style={styles.lessonHeader}>
+            <Pressable
+              onPress={() =>
+                subChapter
+                  ? router.push(
+                      `/learn/library/${subChapter.chapter.book_id}/${subChapter.chapter.id}`,
+                    )
+                  : undefined
+              }
+              disabled={!subChapter}
+              accessibilityRole={subChapter ? "link" : undefined}
+            >
+              <Text style={styles.breadcrumb}>
+                {subChapter ? `${subChapter.chapter.title} · ${subChapter.title}` : tabLabel}
+              </Text>
+            </Pressable>
+            <Text
+              style={styles.title}
+              accessibilityRole="header"
+              onLayout={(event) => {
+                const { y, height } = event.nativeEvent.layout;
+                setTitleBottom(y + height);
+              }}
+            >
+              {data.title}
             </Text>
-          </Pressable>
-        )}
-        <Text style={styles.title}>{data.title}</Text>
-
-        <View style={styles.headerActions}>
-          <Pressable
-            onPress={() => setTocOpen(true)}
-            style={styles.headerActionButton}
-            accessibilityRole="button"
-          >
-            <Text style={styles.headerActionText}>Contents</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setNotesOpen(true)}
-            style={styles.headerActionButton}
-            accessibilityRole="button"
-          >
-            <Text style={styles.headerActionText}>Notes</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.tabBar}>
-          {TABS.map((tab) => (
-            <Pressable
-              key={tab.key}
-              onPress={() => setActiveTab(tab.key)}
-              style={[styles.tabButton, activeTab === tab.key && styles.tabButtonActive]}
-              accessibilityRole="button"
-            >
-              <Text
-                style={[styles.tabButtonText, activeTab === tab.key && styles.tabButtonTextActive]}
-              >
-                {tab.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        {activeTab === "lesson" && readyLecturePdf && (
-          <View style={styles.viewModeToggle}>
-            <Pressable
-              onPress={() => setLessonViewMode("pdf")}
-              style={[
-                styles.viewModeButton,
-                lessonViewMode === "pdf" && styles.viewModeButtonActive,
-              ]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: lessonViewMode === "pdf" }}
-            >
-              <Text
-                style={[
-                  styles.viewModeButtonText,
-                  lessonViewMode === "pdf" && styles.viewModeButtonTextActive,
-                ]}
-              >
-                PDF
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setLessonViewMode("text")}
-              style={[
-                styles.viewModeButton,
-                lessonViewMode === "text" && styles.viewModeButtonActive,
-              ]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: lessonViewMode === "text" }}
-            >
-              <Text
-                style={[
-                  styles.viewModeButtonText,
-                  lessonViewMode === "text" && styles.viewModeButtonTextActive,
-                ]}
-              >
-                Text
-              </Text>
-            </Pressable>
           </View>
-        )}
 
-        {activeTab === "review" && (
-          <ReviewArticle
-            version={version}
-            spansByBlock={review.spansByBlock}
-            currentCardId={review.currentCardId}
-          />
-        )}
-        {activeTab === "quizzes" && <QuizzesTab documentId={id} />}
-        {activeTab === "flashcards" && <FlashcardsTab documentId={id} />}
-
-        {activeTab === "lesson" && lessonViewMode === "pdf" && readyLecturePdf && (
-          <PdfLessonView
-            documentId={id}
-            storagePath={readyLecturePdf.storage_path}
-            pageCount={readyLecturePdf.page_count}
-          />
-        )}
-
-        {activeTab === "lesson" && lessonViewMode === "text" && (
-          <>
-            <AnnotationToolbar activeTool={activeTool} onToolChange={setActiveTool} />
-
-            {!version && <Text style={styles.hint}>Not processed yet.</Text>}
-            {version?.status === "processing" && <Text style={styles.hint}>Processing...</Text>}
-            {version?.status === "failed" && (
-              <Text style={styles.error}>
-                Processing failed: {version.error_message ?? "Unknown error"}
-              </Text>
+          {/* The design's mobile dots: under the title on a phone. */}
+          <View style={styles.dots}>
+            <Dot
+              label="Back to the library"
+              onPress={() =>
+                subChapter
+                  ? router.push(
+                      `/learn/library/${subChapter.chapter.book_id}/${subChapter.chapter.id}`,
+                    )
+                  : router.back()
+              }
+            >
+              <ArrowLeftIcon color={colors.foreground} />
+            </Dot>
+            {activeTab === "lesson" && readyLecturePdf && (
+              <SegmentedSwitch
+                label="Lesson view mode"
+                options={VIEW_MODES}
+                value={lessonViewMode}
+                onChange={setLessonViewMode}
+              />
             )}
-            {version?.status === "ready" &&
-              version.extracted_content &&
-              version.extracted_content.blocks.map((block, index) => {
-                if (block.type === "heading") {
+          </View>
+
+          {activeTab === "review" && (
+            <ReviewArticle
+              version={version}
+              spansByBlock={review.spansByBlock}
+              currentCardId={review.currentCardId}
+              hints={review.hints}
+            />
+          )}
+          {/* Kept mounted (hidden) during a "See in lesson" visit, so the
+              way back finds the question with its answer still shown. */}
+          {(activeTab === "quizzes" || seeInLesson) && (
+            <View style={activeTab !== "quizzes" && styles.hidden}>
+              <QuizzesTab documentId={id} onSeeInLesson={showSources} />
+            </View>
+          )}
+          {activeTab === "flashcards" && <FlashcardsTab documentId={id} />}
+
+          {activeTab === "lesson" && lessonViewMode === "pdf" && readyLecturePdf && (
+            <PdfLessonView
+              documentId={id}
+              storagePath={readyLecturePdf.storage_path}
+              pageCount={readyLecturePdf.page_count}
+            />
+          )}
+
+          {activeTab === "lesson" && lessonViewMode === "text" && (
+            <>
+              {activeTool && (
+                <Text style={styles.markHint}>
+                  {markAnchor
+                    ? "Now tap the last word — or the same word again for just that one."
+                    : "Tap the first word, then the last."}
+                </Text>
+              )}
+              {!version && <Text style={styles.hint}>Not processed yet.</Text>}
+              {version?.status === "processing" && <Text style={styles.hint}>Processing...</Text>}
+              {version?.status === "failed" && (
+                <Text style={styles.error}>
+                  Processing failed: {version.error_message ?? "Unknown error"}
+                </Text>
+              )}
+              {version?.status === "ready" &&
+                version.extracted_content &&
+                version.extracted_content.blocks.map((block, index) => {
+                  if (block.type === "heading") {
+                    return (
+                      <Text key={index} style={styles.heading}>
+                        {block.text}
+                      </Text>
+                    );
+                  }
+                  if (block.type === "image") {
+                    return block.image_path ? (
+                      <ExtractedImage key={index} path={block.image_path} />
+                    ) : null;
+                  }
+                  if (activeTool) {
+                    return (
+                      <TappableParagraph
+                        key={index}
+                        text={block.text ?? ""}
+                        blockIndex={index}
+                        anchor={markAnchor?.blockIndex === index ? markAnchor : null}
+                        onTapWord={tapWord}
+                      />
+                    );
+                  }
                   return (
-                    <Text key={index} style={styles.heading}>
-                      {block.text}
-                    </Text>
-                  );
-                }
-                if (block.type === "image") {
-                  return block.image_path ? (
-                    <ExtractedImage key={index} path={block.image_path} />
-                  ) : null;
-                }
-                if (activeTool) {
-                  return (
-                    <SelectableParagraph
+                    <AnnotatedParagraph
                       key={index}
                       text={block.text ?? ""}
                       blockIndex={index}
-                      onSelectionSettled={handleSelectionSettled}
+                      annotations={annotations}
+                      sources={sourcesByBlock.get(index)}
+                      onLongPress={() => setActionMenuBlockIndex(index)}
+                      onOpenNote={setViewingNote}
+                      onLayoutY={(y) => {
+                        // The first passage, a third of the way down.
+                        if (pendingSourceBlock.current !== index) return;
+                        pendingSourceBlock.current = null;
+                        scrollRef.current?.scrollTo({ y: Math.max(0, y - windowHeight / 3) });
+                      }}
                     />
                   );
-                }
-                return (
-                  <AnnotatedParagraph
-                    key={index}
-                    text={block.text ?? ""}
-                    blockIndex={index}
-                    annotations={annotations}
-                    onLongPress={() => setActionMenuBlockIndex(index)}
-                    onOpenNote={setViewingNote}
-                  />
-                );
-              })}
-          </>
+                })}
+            </>
+          )}
+        </ScrollView>
+
+        <View style={styles.topNotch} pointerEvents="box-none">
+          <NotchTabs
+            tabs={TABS}
+            active={activeTab}
+            onChange={(key) => {
+              setActiveTab(key);
+              setActiveTool(null);
+              setSeeInLesson(null);
+            }}
+            label="Lesson sections"
+            header={
+              titleHidden ? (
+                <Text numberOfLines={1} style={styles.notchTitle}>
+                  {subChapter ? (
+                    <Text style={styles.notchKicker}>{subChapter.title} · </Text>
+                  ) : null}
+                  {data.title}
+                </Text>
+              ) : null
+            }
+          />
+        </View>
+
+        {seeInLesson && activeTab === "lesson" && (
+          <Pressable style={styles.backBar} onPress={backToQuizzes} accessibilityRole="button">
+            <Text style={styles.backBarText}>← Back to quizzes</Text>
+          </Pressable>
         )}
-      </ScrollView>
 
-      {activeTab === "review" && <ReviewBar review={review} />}
+        <ToolNotch
+          activeTool={activeTool}
+          onToolChange={setActiveTool}
+          toolsEnabled={textTools && version?.status === "ready"}
+          onContents={() => setTocOpen(true)}
+          onExplain={() => setExplainComingSoonVisible(true)}
+          onTextScale={() =>
+            setTextScale(
+              (current) => TEXT_SCALES[(TEXT_SCALES.indexOf(current) + 1) % TEXT_SCALES.length]!,
+            )
+          }
+        />
 
-      <Modal
-        visible={actionMenuBlockIndex !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setActionMenuBlockIndex(null)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Pressable
-              onPress={() => {
-                setComposingBlockIndex(actionMenuBlockIndex);
-                setActionMenuBlockIndex(null);
-              }}
-              style={styles.actionMenuItem}
-              accessibilityRole="button"
-              // The header's "Notes" button (whole-lesson notes panel) has the
-              // same visible label as this menu item (adds a margin note on
-              // the selected block) — distinct accessible names keep screen
-              // readers from announcing two identically-named buttons.
-              accessibilityLabel="Add note"
-            >
-              <Text style={styles.actionMenuItemText}>Notes</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                setExplainComingSoonVisible(true);
-                setActionMenuBlockIndex(null);
-              }}
-              style={styles.actionMenuItem}
-              accessibilityRole="button"
-            >
-              <Text style={styles.actionMenuItemText}>Explain</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setActionMenuBlockIndex(null)}
-              style={styles.modalButton}
-              accessibilityRole="button"
-            >
-              <Text style={styles.modalButtonText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+        <Pressable
+          style={[styles.edgeButton, activeTab === "review" && styles.edgeButtonRaised]}
+          onPress={() => setNotesOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Notes"
+        >
+          <SparkleIcon color={colors.foreground} />
+        </Pressable>
 
-      <Modal
-        visible={explainComingSoonVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setExplainComingSoonVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Explain</Text>
-            <Text style={styles.hint}>AI explanations are coming soon.</Text>
-            <Pressable
-              onPress={() => setExplainComingSoonVisible(false)}
-              style={[styles.modalButton, styles.modalButtonPrimary]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.modalButtonPrimaryText}>Got it</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+        {activeTab === "review" && <ReviewBar review={review} />}
+        {activeTab === "review" && <CardsOverlay review={review} blocks={blocks} />}
 
-      <Modal
-        visible={composingBlockIndex !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setComposingBlockIndex(null)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Add a note</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={noteDraft}
-              onChangeText={setNoteDraft}
-              placeholder="Note..."
-              multiline
-              autoFocus
-            />
-            <View style={styles.modalActions}>
+        <Modal
+          visible={actionMenuBlockIndex !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setActionMenuBlockIndex(null)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
               <Pressable
                 onPress={() => {
-                  setComposingBlockIndex(null);
-                  setNoteDraft("");
+                  setComposingBlockIndex(actionMenuBlockIndex);
+                  setActionMenuBlockIndex(null);
                 }}
+                style={styles.actionMenuItem}
+                accessibilityRole="button"
+                // The header's "Notes" button (whole-lesson notes panel) has the
+                // same visible label as this menu item (adds a margin note on
+                // the selected block) — distinct accessible names keep screen
+                // readers from announcing two identically-named buttons.
+                accessibilityLabel="Add note"
+              >
+                <Text style={styles.actionMenuItemText}>Notes</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setExplainComingSoonVisible(true);
+                  setActionMenuBlockIndex(null);
+                }}
+                style={styles.actionMenuItem}
+                accessibilityRole="button"
+              >
+                <Text style={styles.actionMenuItemText}>Explain</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setActionMenuBlockIndex(null)}
                 style={styles.modalButton}
                 accessibilityRole="button"
               >
                 <Text style={styles.modalButtonText}>Cancel</Text>
               </Pressable>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={explainComingSoonVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setExplainComingSoonVisible(false)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Explain</Text>
+              <Text style={styles.hint}>AI explanations are coming soon.</Text>
               <Pressable
-                onPress={() =>
-                  composingBlockIndex !== null && createNoteMutation.mutate(composingBlockIndex)
-                }
+                onPress={() => setExplainComingSoonVisible(false)}
                 style={[styles.modalButton, styles.modalButtonPrimary]}
-                disabled={!noteDraft.trim() || createNoteMutation.isPending}
                 accessibilityRole="button"
               >
-                {createNoteMutation.isPending ? (
-                  <ActivityIndicator color={colors.primaryForeground} />
-                ) : (
-                  <Text style={styles.modalButtonPrimaryText}>Save</Text>
-                )}
+                <Text style={styles.modalButtonPrimaryText}>Got it</Text>
               </Pressable>
             </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
 
-      <Modal
-        visible={viewingNote !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setViewingNote(null)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Note</Text>
-            <Text style={styles.noteText}>{viewingNote?.note_text}</Text>
-            <View style={styles.modalActions}>
-              <Pressable
-                onPress={() => setViewingNote(null)}
-                style={styles.modalButton}
-                accessibilityRole="button"
-              >
-                <Text style={styles.modalButtonText}>Close</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => viewingNote && deleteAnnotationMutation.mutate(viewingNote.id)}
-                style={styles.modalButton}
-                accessibilityRole="button"
-              >
-                <Text style={styles.deleteText}>Delete</Text>
-              </Pressable>
+        <Modal
+          visible={composingBlockIndex !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setComposingBlockIndex(null)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Add a note</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={noteDraft}
+                onChangeText={setNoteDraft}
+                placeholder="Note..."
+                multiline
+                autoFocus
+              />
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => {
+                    setComposingBlockIndex(null);
+                    setNoteDraft("");
+                  }}
+                  style={styles.modalButton}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.modalButtonText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() =>
+                    composingBlockIndex !== null && createNoteMutation.mutate(composingBlockIndex)
+                  }
+                  style={[styles.modalButton, styles.modalButtonPrimary]}
+                  disabled={!noteDraft.trim() || createNoteMutation.isPending}
+                  accessibilityRole="button"
+                >
+                  {createNoteMutation.isPending ? (
+                    <ActivityIndicator color={colors.primaryForeground} />
+                  ) : (
+                    <Text style={styles.modalButtonPrimaryText}>Save</Text>
+                  )}
+                </Pressable>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
 
-      <TocModal
-        visible={tocOpen}
-        onClose={() => setTocOpen(false)}
-        scopeId={data.sub_chapter?.id ?? "none"}
-        currentDocumentId={id}
-      />
-      <NotesModal visible={notesOpen} onClose={() => setNotesOpen(false)} documentId={id} />
-    </View>
+        <Modal
+          visible={viewingNote !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={closeNote}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Note</Text>
+              {viewingNote && (
+                <TextInput
+                  // Keyed by note so reopening another note starts from its text.
+                  key={viewingNote.id}
+                  style={styles.modalInput}
+                  defaultValue={viewingNote.note_text ?? ""}
+                  onChangeText={(text) => {
+                    noteEdit.current = text;
+                  }}
+                  multiline
+                  accessibilityLabel="Note text"
+                />
+              )}
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={closeNote}
+                  style={styles.modalButton}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.modalButtonText}>Close</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => viewingNote && deleteAnnotationMutation.mutate(viewingNote.id)}
+                  style={styles.modalButton}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.deleteText}>Delete</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <TocModal
+          visible={tocOpen}
+          onClose={() => setTocOpen(false)}
+          scopeId={data.sub_chapter?.id ?? "none"}
+          currentDocumentId={id}
+        />
+        <NotesModal visible={notesOpen} onClose={() => setNotesOpen(false)} documentId={id} />
+      </View>
+    </TextScaleContext.Provider>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
+  toolAa: {
+    fontSize: 13,
+    fontWeight: fontWeights.extrabold,
+    color: colors.foreground,
+  },
+  flashcardHint: {
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.semibold,
+    color: "#5F6269",
+  },
+  reviewBarInline: {
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  cardsScrim: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    backgroundColor: colors.scrim,
+  },
+  cardsDismiss: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
+  // Light paper in both themes, so its text uses the light palette.
+  paperCard: {
+    borderRadius: 18,
+    padding: 24,
+    backgroundColor: colors.paper,
+    ...shadows.card,
+  },
+  cardMeta: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 14,
+  },
+  cardMetaText: {
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    color: "#6C6F76",
+  },
+  cardSentence: {
+    fontSize: 19,
+    lineHeight: 29,
+    color: "#1D1F23",
+  },
+  cardRevealed: {
+    fontWeight: fontWeights.bold,
+    color: "#1D1F23",
+    backgroundColor: "rgba(47, 111, 159, 0.10)",
+  },
+  cardsClose: {
+    textAlign: "center",
+    fontSize: 14,
+    fontWeight: fontWeights.bold,
+    color: colors.accent,
+  },
+  markHint: {
+    fontSize: 13,
+    fontWeight: fontWeights.semibold,
+    color: colors.mutedForeground,
+  },
+  wordAnchor: {
+    backgroundColor: colors.clozeBg,
+    textDecorationLine: "underline",
+    textDecorationColor: colors.accent,
+  },
+  hidden: {
+    display: "none",
+  },
+  quizSource: {
+    backgroundColor: pageColors.quizSourceFillText,
+    textDecorationLine: "underline",
+    textDecorationColor: pageColors.quizSourceLine,
+  },
+  backBar: {
+    position: "absolute",
+    top: 72,
+    alignSelf: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.foreground,
+    ...shadows.notch,
+  },
+  backBarText: {
+    fontSize: 14,
+    fontWeight: fontWeights.bold,
+    color: colors.background,
+  },
+  lessonHeader: {
+    paddingTop: 30,
+  },
+  dots: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  dotText: {
+    fontSize: 14,
+    fontWeight: fontWeights.bold,
+    color: colors.foreground,
+  },
+  topNotch: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 12,
+  },
+  notchTitle: {
+    paddingHorizontal: 8,
+    paddingBottom: 4,
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: fontWeights.extrabold,
+    color: colors.foreground,
+  },
+  notchKicker: {
+    fontWeight: fontWeights.semibold,
+    color: colors.mutedForeground,
+  },
+  toolNotch: {
+    position: "absolute",
+    left: 0,
+    top: "30%",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    gap: 2,
+    alignItems: "center",
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderLeftWidth: 0,
+    borderColor: colors.border,
+    borderTopRightRadius: 16,
+    borderBottomRightRadius: 16,
+    ...shadows.notch,
+  },
+  tool: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  toolActive: {
+    backgroundColor: colors.foreground,
+  },
+  toolChevron: {
+    fontSize: 22,
+    lineHeight: 24,
+    fontWeight: fontWeights.semibold,
+    color: colors.foreground,
+  },
+  swatch: {
+    width: 14,
+    height: 20,
+    borderRadius: 4,
+  },
+  swatchActive: {
+    width: 18,
+    height: 24,
+    borderWidth: 2,
+    borderColor: colors.foreground,
+  },
+  toolSeparator: {
+    width: 20,
+    height: 1,
+    marginVertical: 4,
+    backgroundColor: colors.border,
+  },
+  edgeButton: {
+    position: "absolute",
+    right: 0,
+    top: "50%",
+    width: 40,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderRightWidth: 0,
+    borderColor: colors.border,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+    ...shadows.notch,
+  },
+  edgeButtonRaised: {
+    top: "35%",
+  },
+  reviewCountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  reviewCount: {
+    fontSize: 13,
+    fontWeight: fontWeights.semibold,
+    color: colors.mutedForeground,
+  },
+  showButton: {
+    minWidth: 220,
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#DEDBD2",
+    backgroundColor: colors.paper,
+  },
+  showButtonText: {
+    fontSize: 15,
+    fontWeight: fontWeights.extrabold,
+    color: "#1D1F23",
+  },
+  gradeButton: {
+    minWidth: 62,
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#DEDBD2",
+    backgroundColor: colors.paper,
+  },
+  gradeInterval: {
+    fontSize: 12,
+    fontWeight: fontWeights.semibold,
+    color: "#6C6F76",
+  },
+  gradeButtonText: {
+    fontSize: 15,
+    fontWeight: fontWeights.extrabold,
+  },
+  clozeGap: {
+    fontSize: 15,
+    fontWeight: fontWeights.semibold,
+    color: colors.cloze,
+    backgroundColor: colors.clozeBg,
+  },
+  clozeCurrent: {
+    textDecorationLine: "underline",
+    textDecorationColor: colors.cloze,
+  },
   screenRoot: {
     flex: 1,
   },
@@ -1529,7 +2257,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-    padding: spacing.xl,
+    // Room for the top notch above and the side notches either side
+    // (design.md §13: 50px side padding on a phone).
+    paddingTop: 64,
+    paddingHorizontal: 50,
+    paddingBottom: 140,
     gap: spacing.md,
   },
   contentWithReviewBar: {
@@ -1543,125 +2275,30 @@ const styles = StyleSheet.create({
   },
   breadcrumb: {
     fontSize: fontSizes.xs,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.7,
+    textTransform: "uppercase",
     color: colors.mutedForeground,
   },
   title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
-  },
-  headerActions: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  headerActionButton: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-  },
-  headerActionText: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
+    marginTop: 6,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: fontWeights.extrabold,
     color: colors.foreground,
   },
   // The overlay chrome these two sheets used now lives in @/lib/overlay, so
   // the question of the day gets the same sheet rather than a fourth copy.
   tocRow: {
-    borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: 8,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
   },
   tocRowActive: {
     backgroundColor: colors.muted,
   },
   tocRowActiveText: {
-    fontWeight: fontWeights.semibold,
-  },
-  tabBar: {
-    flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  annotationToolbar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  colorSwatch: {
-    height: 28,
-    width: 28,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  colorSwatchActive: {
-    borderWidth: 3,
-    borderColor: colors.primary,
-  },
-  eraserButton: {
-    height: 28,
-    width: 28,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  eraserButtonActive: {
-    backgroundColor: colors.muted,
-    borderWidth: 2,
-    borderColor: colors.primary,
-  },
-  eraserButtonText: {
-    fontSize: fontSizes.sm,
-  },
-  tabButton: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
-  tabButtonActive: {
-    borderBottomWidth: 2,
-    borderBottomColor: colors.primary,
-  },
-  tabButtonText: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
-    color: colors.mutedForeground,
-  },
-  tabButtonTextActive: {
-    color: colors.foreground,
-  },
-  viewModeToggle: {
-    flexDirection: "row",
-    alignSelf: "flex-end",
-    gap: spacing.xs,
-    marginTop: spacing.sm,
-  },
-  viewModeButton: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-  },
-  viewModeButtonActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  viewModeButtonText: {
-    fontSize: fontSizes.xs,
-    fontWeight: fontWeights.medium,
-    color: colors.mutedForeground,
-  },
-  viewModeButtonTextActive: {
-    color: colors.primaryForeground,
+    fontWeight: fontWeights.extrabold,
   },
   quizzesTab: {
     gap: spacing.md,
@@ -1674,20 +2311,26 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   tabListRow: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderWidth: 0,
+    borderRadius: 0,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 0,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   heading: {
-    fontSize: fontSizes.xl,
-    fontWeight: fontWeights.semibold,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    fontSize: 22,
+    lineHeight: 27,
+    fontWeight: fontWeights.extrabold,
     color: colors.foreground,
   },
   paragraph: {
-    fontSize: fontSizes.base,
-    lineHeight: lineHeight(fontSizes.base, "relaxed"),
+    fontSize: 17,
+    lineHeight: 27,
     color: colors.foreground,
   },
   noteRow: {
@@ -1762,16 +2405,13 @@ const styles = StyleSheet.create({
     minHeight: 80,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    fontSize: fontSizes.base,
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    fontSize: 15,
     color: colors.foreground,
     textAlignVertical: "top",
-  },
-  noteText: {
-    fontSize: fontSizes.base,
-    color: colors.foreground,
+    backgroundColor: colors.background,
   },
   actionMenuItem: {
     paddingVertical: spacing.sm,
@@ -1790,7 +2430,7 @@ const styles = StyleSheet.create({
   modalButton: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",
@@ -1804,6 +2444,7 @@ const styles = StyleSheet.create({
   modalButtonPrimary: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
+    borderRadius: 10,
   },
   modalButtonPrimaryText: {
     color: colors.primaryForeground,
@@ -1816,45 +2457,37 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
   },
   clozeHidden: {
-    fontWeight: fontWeights.semibold,
-    color: colors.mutedForeground,
+    color: colors.cloze,
   },
   clozeRevealed: {
-    fontWeight: fontWeights.semibold,
-    color: colors.primary,
+    fontWeight: fontWeights.bold,
+    color: colors.foreground,
+    backgroundColor: colors.clozeBg,
   },
   reviewBar: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    alignSelf: "center",
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: colors.border,
     backgroundColor: colors.background,
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: 12,
+    paddingBottom: 18,
     gap: spacing.sm,
-  },
-  reviewBarRow: {
-    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
+    ...shadows.notch,
+    shadowOffset: { width: 0, height: -6 },
   },
   reviewGradeRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
     justifyContent: "center",
-    gap: spacing.sm,
-  },
-  reviewWarningText: {
-    color: colors.warning,
-    fontWeight: fontWeights.medium,
-    fontSize: fontSizes.sm,
-  },
-  reviewSuccessText: {
-    color: colors.success,
-    fontWeight: fontWeights.medium,
-    fontSize: fontSizes.sm,
+    gap: 6,
   },
   flashcardsTab: {
     gap: spacing.md,
@@ -1874,7 +2507,7 @@ const styles = StyleSheet.create({
   scopeButton: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 999,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
   },
@@ -1892,7 +2525,7 @@ const styles = StyleSheet.create({
   scopeBadge: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 999,
     paddingVertical: 1,
     paddingHorizontal: spacing.xs,
   },
@@ -1906,47 +2539,39 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing.sm,
     minHeight: 160,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 18,
     padding: spacing.xl,
+    backgroundColor: colors.paper,
+    ...shadows.card,
   },
   flashcardFront: {
     fontSize: fontSizes.lg,
     lineHeight: lineHeight(fontSizes.lg),
     fontWeight: fontWeights.medium,
-    color: colors.foreground,
+    color: "#1D1F23",
     textAlign: "center",
   },
   flashcardBack: {
     fontSize: fontSizes.sm,
     lineHeight: lineHeight(fontSizes.sm),
-    color: colors.foreground,
+    color: "#1D1F23",
     textAlign: "center",
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: "rgba(0, 0, 0, 0.1)",
     paddingTop: spacing.sm,
     alignSelf: "stretch",
   },
   gradeRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
     justifyContent: "center",
-    gap: spacing.sm,
-  },
-  gradeButton: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    gap: 6,
   },
   cardForm: {
     alignSelf: "stretch",
     gap: spacing.xs,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 16,
     padding: spacing.md,
   },
   formLabel: {
@@ -1956,11 +2581,12 @@ const styles = StyleSheet.create({
   formInput: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    fontSize: fontSizes.sm,
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    fontSize: 15,
     color: colors.foreground,
+    backgroundColor: colors.background,
   },
   formInputMultiline: {
     minHeight: 72,
@@ -1973,7 +2599,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 10,
     backgroundColor: colors.primary,
     borderColor: colors.primary,
     paddingVertical: spacing.sm,
@@ -1987,7 +2613,7 @@ const styles = StyleSheet.create({
   secondaryButton: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
   },
@@ -2014,15 +2640,10 @@ const styles = StyleSheet.create({
     color: colors.foreground,
   },
   myCardRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    gap: 6,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   myCardRowSuspended: {
     opacity: 0.6,
@@ -2032,7 +2653,8 @@ const styles = StyleSheet.create({
   },
   myCardActions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
-});
+}));

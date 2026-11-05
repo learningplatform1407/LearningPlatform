@@ -41,6 +41,8 @@ from app.flashcards.service import (
     submit_flashcard_review,
     update_personal_card,
 )
+from app.srs.scheduler import preview_intervals, state_of
+from app.srs.schemas import NextIntervalsResponse
 from app.users.constants import Role
 from app.users.service import get_or_create_profile
 
@@ -125,6 +127,7 @@ def read_due_flashcards(
             is_mine=card.created_by == profile.id,
             due_at=state.due_at if state and state.last_reviewed_at is not None else None,
             is_new=state is None or state.last_reviewed_at is None,
+            next_intervals=NextIntervalsResponse.of(preview_intervals(state_of(state))),
         )
         for card, state in deck
     ]

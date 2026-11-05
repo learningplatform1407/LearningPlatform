@@ -7,6 +7,8 @@ const mockGetQuestionBankTree = jest.fn();
 const mockListQuestionBank = jest.fn();
 const mockGetQuizAvailableCount = jest.fn();
 const mockAnswerBankQuestion = jest.fn();
+const mockFavouriteQuestion = jest.fn();
+const mockUnfavouriteQuestion = jest.fn();
 
 jest.mock("@/lib/api-client", () => ({
   getApiClient: () => ({
@@ -14,6 +16,8 @@ jest.mock("@/lib/api-client", () => ({
     listQuestionBank: mockListQuestionBank,
     getQuizAvailableCount: mockGetQuizAvailableCount,
     answerBankQuestion: mockAnswerBankQuestion,
+    favouriteQuestion: mockFavouriteQuestion,
+    unfavouriteQuestion: mockUnfavouriteQuestion,
   }),
 }));
 
@@ -103,6 +107,8 @@ beforeEach(() => {
   mockListQuestionBank.mockReset();
   mockGetQuizAvailableCount.mockReset();
   mockAnswerBankQuestion.mockReset();
+  mockFavouriteQuestion.mockReset().mockResolvedValue(undefined);
+  mockUnfavouriteQuestion.mockReset().mockResolvedValue(undefined);
 });
 
 test("shows an error message when the tree fails to load", async () => {
@@ -242,4 +248,21 @@ test("answering a question reveals the outcome", async () => {
 
   expect(await screen.findByText("correct — 1/1 points")).toBeTruthy();
   expect(mockAnswerBankQuestion).toHaveBeenCalledWith("q1", ["o2"]);
+});
+
+test("the heart favourites a question, and Favourites lists only those", async () => {
+  mockGetQuestionBankTree.mockResolvedValue(TREE);
+  mockListQuestionBank.mockImplementation((params: { favourites?: boolean }) =>
+    Promise.resolve(params?.favourites ? [{ ...QUESTION, is_favourite: true }] : []),
+  );
+
+  renderScreen();
+  fireEvent.press(await screen.findByText("Favourites"));
+
+  expect(await screen.findByText("♥")).toBeTruthy();
+  expect(mockListQuestionBank).toHaveBeenCalledWith(expect.objectContaining({ favourites: true }));
+
+  fireEvent.press(screen.getByLabelText("Favourite"));
+  expect(await screen.findByText("♡")).toBeTruthy();
+  expect(mockUnfavouriteQuestion).toHaveBeenCalledWith("q1");
 });

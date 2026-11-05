@@ -2,14 +2,16 @@ import { computeProfileBadges } from "@lp/api-client";
 import { formatMonthYear } from "@lp/ui";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { MetricBarChart } from "@/lib/metric-bar-chart";
 import { StatTile } from "@/lib/stat-tile";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 export default function ProfileScreen() {
+  const styles = useStyles();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
     queryFn: () => getApiClient().getMe(),
@@ -56,7 +58,10 @@ export default function ProfileScreen() {
             )}
           </View>
           <View>
-            <Text style={styles.name}>{data.display_name ?? data.email ?? "Unnamed"}</Text>
+            <Text style={styles.kicker}>Profile</Text>
+            <Text style={styles.name} accessibilityRole="header">
+              {data.display_name ?? data.email ?? "Unnamed"}
+            </Text>
             <Text style={styles.joined}>Joined {formatMonthYear(data.created_at)}</Text>
           </View>
         </View>
@@ -149,7 +154,7 @@ export default function ProfileScreen() {
 
 const AVATAR_SIZE = 64;
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -203,10 +208,17 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.medium,
     color: colors.mutedForeground,
   },
+  kicker: {
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.7,
+    textTransform: "uppercase",
+    color: colors.mutedForeground,
+  },
   name: {
-    fontSize: fontSizes.xl,
-    lineHeight: lineHeight(fontSizes.xl, "tight"),
-    fontWeight: fontWeights.semibold,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: fontWeights.extrabold,
     color: colors.foreground,
   },
   joined: {
@@ -217,7 +229,7 @@ const styles = StyleSheet.create({
   editButton: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",
@@ -238,8 +250,10 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     marginBottom: spacing.xs,
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
     color: colors.mutedForeground,
   },
   badgeCell: {
@@ -294,4 +308,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

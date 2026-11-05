@@ -11,7 +11,13 @@ from app.common.errors import ApiError
 from app.db.session import get_db
 from app.documents.dependencies import require_admin
 from app.progress.schemas import BankTreeResponse
-from app.progress.service import get_bank_tree, get_progress_for_questions, grade_and_record
+from app.progress.service import (
+    get_bank_tree,
+    get_favourite_ids,
+    get_progress_for_questions,
+    grade_and_record,
+    set_favourite,
+)
 from app.questions.grading import build_reveal, validate_selection
 from app.questions.models import Question
 from app.questions.schemas import (
@@ -130,6 +136,7 @@ def read_question_bank(
     document_ids: list[UUID] = Query(default_factory=list),
     tag_ids: list[UUID] = Query(default_factory=list),
     unassigned: bool = Query(False),
+    favourites: bool = Query(False),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     user: AuthenticatedUser = Depends(get_current_user),
@@ -153,8 +160,11 @@ def read_question_bank(
         limit=limit,
         offset=offset,
         unassigned=unassigned,
+        favourites_of=user.id if favourites else None,
     )
-    progress = get_progress_for_questions(db, user.id, [question.id for question in questions])
+    question_ids = [question.id for question in questions]
+    progress = get_progress_for_questions(db, user.id, question_ids)
+    favourite_ids = get_favourite_ids(db, user.id, question_ids)
     return [
         QuestionBankItem(
             id=question.id,
@@ -169,6 +179,7 @@ def read_question_bank(
                 for tag in tags_by_question.get(question.id, [])
             ],
             progress=progress.get(question.id),
+            is_favourite=question.id in favourite_ids,
         )
         for question in questions
     ]
@@ -185,6 +196,40 @@ def read_bank_tree(
     literal path rather than parsed as a question id.
     """
     return get_bank_tree(db, user.id)
+
+
+def _published_or_404(db: Session, question_id: UUID) -> Question:
+    # Through the published filter, not by primary key: a draft or archived
+    # question is not there as far as a learner is concerned.
+    question: Question | None = db.scalar(
+        apply_published_filter(select(Question), document_ids=None, tag_ids=[]).where(
+            Question.id == question_id
+        )
+    )
+    if question is None:
+        raise ApiError(404, "not_found", "Question not found")
+    return question
+
+
+@bank_router.put("/{question_id}/favourite", status_code=204)
+def favourite_question(
+    question_id: UUID,
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    _published_or_404(db, question_id)
+    profile = get_or_create_profile(db, user)
+    set_favourite(db, profile.id, question_id, on=True)
+
+
+@bank_router.delete("/{question_id}/favourite", status_code=204)
+def unfavourite_question(
+    question_id: UUID,
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    profile = get_or_create_profile(db, user)
+    set_favourite(db, profile.id, question_id, on=False)
 
 
 @bank_router.post("/{question_id}/answers", response_model=QuestionRevealResponse)

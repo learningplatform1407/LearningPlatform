@@ -1,6 +1,8 @@
 import { lineHeights } from "@lp/ui";
 
-export { colors, fontSizes, fontWeights, radii, shadows, spacing } from "@lp/ui";
+// Colours are not exported here: they depend on the active theme. Use
+// `useThemeColors()` or `makeStyles()` from `./theme-context`.
+export { fontSizes, fontWeights, radii, shadows, spacing } from "@lp/ui";
 export type {
   ColorToken,
   FontSizeToken,

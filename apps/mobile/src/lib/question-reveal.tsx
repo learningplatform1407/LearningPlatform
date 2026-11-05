@@ -1,39 +1,99 @@
 import type { QuestionReveal, QuizOptionResult } from "@lp/api-client";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
-import { colors, fontSizes, fontWeights, radii, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
+/** `tone` names a theme colour, read as `colors[mark.tone]` so the mark
+ * follows the active theme. */
 export const OUTCOME_MARKS = {
-  correct: { icon: "✓", label: "Answered correctly", color: colors.success },
-  partial: { icon: "◐", label: "Answered partially correctly", color: colors.warning },
-  incorrect: { icon: "✗", label: "Answered incorrectly", color: colors.danger },
+  correct: { icon: "✓", label: "Answered correctly", tone: "good" },
+  partial: { icon: "◐", label: "Answered partially correctly", tone: "hard" },
+  incorrect: { icon: "✗", label: "Answered incorrectly", tone: "again" },
 } as const;
 
 export type Outcome = keyof typeof OUTCOME_MARKS;
 
-/** One graded option. Exported because the quiz results screen lists options
- * without the surrounding panel. */
-export function OptionResultRow({ option }: { option: QuizOptionResult }) {
+export function optionLetter(index: number): string {
+  return String.fromCharCode(65 + index);
+}
+
+/** One graded option, with the design's letter circle (design.md §12):
+ * green when the option is in the answer, red when you picked it and it
+ * isn't. Exported because the quiz results screen lists options without the
+ * surrounding panel. */
+export function OptionResultRow({ option, index }: { option: QuizOptionResult; index: number }) {
+  const styles = useStyles();
   // Two independent axes: whether the option belongs in the answer (in_key)
   // and whether the student earned its point (classified_correctly). Avoiding
   // a wrong option scores, so collapsing these would call a wrong option
   // "right".
-  const color = option.classified_correctly
-    ? colors.success
-    : option.selected
-      ? colors.danger
-      : colors.mutedForeground;
+  const earned = option.classified_correctly ? "you got this right" : "you missed this";
   return (
-    <View style={styles.optionResultRow}>
-      <Text style={{ color }}>{option.selected ? "☑" : "☐"}</Text>
-      <View style={styles.optionResultText}>
-        <Text style={styles.optionText}>
-          {option.text}
-          {option.in_key && <Text style={styles.hint}> (correct answer)</Text>}
+    <View
+      style={styles.optionRow}
+      accessible
+      accessibilityLabel={`${optionLetter(index)}. ${option.text}${option.selected ? ", your choice" : ""}${
+        option.in_key ? ", in the answer" : ""
+      }, ${earned}`}
+    >
+      <View
+        style={[
+          styles.letter,
+          option.in_key ? styles.letterKey : option.selected ? styles.letterWrong : null,
+        ]}
+      >
+        <Text
+          style={[styles.letterText, (option.in_key || option.selected) && styles.letterTextOn]}
+        >
+          {optionLetter(index)}
         </Text>
-        {option.rationale && <Text style={styles.rationale}>{option.rationale}</Text>}
+      </View>
+      <View style={styles.optionBody}>
+        <Text style={styles.optionText}>{option.text}</Text>
+        <Text style={styles.rationale}>
+          <Text style={option.in_key ? styles.verdictTrue : styles.verdictFalse}>
+            {option.in_key ? "True." : "False."}
+          </Text>
+          {option.rationale ? ` ${option.rationale}` : ""}
+        </Text>
       </View>
     </View>
+  );
+}
+
+/** One answerable option: the letter circle fills with ink when chosen. */
+export function OptionChoice({
+  kind,
+  index,
+  text,
+  checked,
+  disabled,
+  onPress,
+}: {
+  kind: string;
+  index: number;
+  text: string;
+  checked: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  const styles = useStyles();
+  return (
+    <Pressable
+      style={styles.optionRow}
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole={kind === "single" ? "radio" : "checkbox"}
+      accessibilityState={{ checked, disabled }}
+    >
+      <View style={[styles.letter, checked && styles.letterChosen]}>
+        <Text style={[styles.letterText, checked && styles.letterTextChosen]}>
+          {optionLetter(index)}
+        </Text>
+      </View>
+      <Text style={[styles.optionText, styles.optionBody]}>{text}</Text>
+    </Pressable>
   );
 }
 
@@ -48,53 +108,69 @@ export function OptionResultRow({ option }: { option: QuizOptionResult }) {
  * type it renders.
  */
 export function QuestionRevealPanel({ reveal }: { reveal: QuestionReveal }) {
+  const styles = useStyles();
   return (
     <View style={styles.reveal}>
-      <Text style={styles.revealTitle}>
-        {reveal.outcome} — {reveal.points_awarded}/{reveal.points_possible} points
-      </Text>
-      <View style={styles.optionResultList}>
-        {reveal.options.map((option) => (
-          <OptionResultRow key={option.id} option={option} />
+      <View>
+        {reveal.options.map((option, index) => (
+          <OptionResultRow key={option.id} option={option} index={index} />
         ))}
       </View>
       {reveal.explanation && <Text style={styles.rationale}>{reveal.explanation}</Text>}
+      <Text style={styles.revealTitle}>
+        {reveal.outcome} — {reveal.points_awarded}/{reveal.points_possible} points
+      </Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   reveal: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
-    padding: spacing.sm,
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   revealTitle: {
     fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
+    fontWeight: fontWeights.bold,
     color: colors.foreground,
   },
-  optionResultList: { gap: spacing.xs },
-  optionResultRow: {
+  optionRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: spacing.xs,
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  optionResultText: { flex: 1 },
+  optionBody: { flex: 1, gap: 4 },
   optionText: {
-    flex: 1,
-    fontSize: fontSizes.sm,
+    fontSize: fontSizes.base,
+    lineHeight: 22,
     color: colors.foreground,
   },
+  letter: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  letterKey: { backgroundColor: colors.good, borderColor: colors.good },
+  letterWrong: { backgroundColor: colors.again, borderColor: colors.again },
+  letterChosen: { backgroundColor: colors.foreground, borderColor: colors.foreground },
+  letterText: {
+    fontSize: 13,
+    fontWeight: fontWeights.extrabold,
+    color: colors.foreground,
+  },
+  letterTextOn: { color: "#FFFFFF" },
+  letterTextChosen: { color: colors.background },
   rationale: {
-    fontSize: fontSizes.xs,
+    fontSize: 14.5,
+    lineHeight: 20,
     color: colors.mutedForeground,
   },
-  hint: {
-    fontSize: fontSizes.sm,
-    color: colors.mutedForeground,
-  },
-});
+  verdictTrue: { fontWeight: fontWeights.bold, color: colors.good },
+  verdictFalse: { fontWeight: fontWeights.bold, color: colors.again },
+}));

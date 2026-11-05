@@ -82,3 +82,19 @@ if (
   // @ts-expect-error -- polyfilling a constructor jsdom doesn't provide
   globalThis.PointerEvent = PointerEventPolyfill;
 }
+
+// jsdom has no matchMedia; the theme provider reads prefers-color-scheme
+// through it. Reports "no match" (light, motion allowed) for every query.
+if (typeof window !== "undefined" && typeof window.matchMedia === "undefined") {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
+}

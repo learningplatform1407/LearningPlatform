@@ -1,8 +1,9 @@
 import type { BankStatsCounts } from "@lp/api-client";
 import { computeBankStatsRates } from "@lp/api-client";
-import { StyleSheet, Text } from "react-native";
+import { Text } from "react-native";
 
-import { colors, fontSizes } from "@/lib/theme";
+import { fontSizes } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
 
 function formatPercent(rate: number | null): string {
   return rate === null ? "—" : `${Math.round(rate * 100)}%`;
@@ -18,6 +19,7 @@ function formatPercent(rate: number | null): string {
  * there.
  */
 export function BankStatsLine({ counts }: { counts: BankStatsCounts }) {
+  const styles = useStyles();
   if (counts.question_count === 0) return null;
   if (counts.answered_count === 0) {
     return (
@@ -36,9 +38,9 @@ export function BankStatsLine({ counts }: { counts: BankStatsCounts }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   text: {
     fontSize: fontSizes.xs,
     color: colors.mutedForeground,
   },
-});
+}));

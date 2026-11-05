@@ -1,12 +1,14 @@
 import type { DailyQuestion } from "@lp/api-client";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { DailyQuestionCard } from "@/lib/daily-question-card";
 import { DailyQuestionOverlay, useDailyQuestion } from "@/lib/daily-question-overlay";
-import { colors, fontSizes, fontWeights, lineHeight, radii, shadows, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, shadows, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 const STATUS_LABEL: Record<string, string> = {
   processing: "Processing...",
@@ -28,6 +30,7 @@ function LearnContent({
   today: DailyQuestion | undefined;
   onOpenToday: () => void;
 }) {
+  const styles = useStyles();
   const {
     data: recentLessons,
     isPending,
@@ -58,7 +61,7 @@ function LearnContent({
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Learn</Text>
+      <ScreenHeader kicker="Your course" title="Learn" />
 
       {continueLesson && (
         <Pressable
@@ -172,7 +175,7 @@ export default function LearnScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -181,41 +184,40 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     gap: spacing.lg,
   },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
-  },
   continueCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
+    borderWidth: 0,
+    borderRadius: 0,
     padding: spacing.lg,
-    ...shadows.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: 0,
   },
   cardPressed: {
     opacity: 0.85,
   },
   continueLabel: {
     fontSize: fontSizes.xs,
-    fontWeight: fontWeights.medium,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
     color: colors.mutedForeground,
   },
   continueTitle: {
     marginTop: spacing.xs,
-    fontSize: fontSizes.lg,
-    fontWeight: fontWeights.semibold,
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: fontWeights.extrabold,
     color: colors.foreground,
   },
   section: {
     gap: spacing.sm,
   },
   sectionHeading: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    color: colors.mutedForeground,
   },
   list: {
     gap: spacing.xs,
@@ -224,11 +226,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderWidth: 0,
+    borderRadius: 0,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 0,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   rowTitle: {
     fontSize: fontSizes.sm,
@@ -249,7 +252,7 @@ const styles = StyleSheet.create({
     flexBasis: "45%",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.md,
+    borderRadius: 16,
     backgroundColor: colors.background,
     padding: spacing.lg,
     ...shadows.sm,
@@ -272,4 +275,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Button } from "@/components/button";
+import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { ProgressBar } from "@/components/progress-bar";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
@@ -84,28 +85,30 @@ export function UncategorizedLessonsPage({ showAdminTools }: { showAdminTools: b
 
   if (uncategorized.isPending) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p className="text-sm text-muted-foreground">Loading...</p>
       </PageMain>
     );
   }
 
   return (
-    <PageMain>
-      <h1 className="text-2xl font-bold text-foreground">Uncategorized</h1>
+    <PageMain width="reading">
+      <PageHeader kicker="Library" title="Uncategorized" />
       <div className="mt-lg">
         {uncategorized.data && uncategorized.data.length === 0 ? (
           <p className="text-sm text-muted-foreground">No lessons yet.</p>
         ) : (
-          <ul className="flex flex-col gap-xs">
+          <ul>
             {uncategorized.data?.map((doc) => (
-              <li
-                key={doc.id}
-                className="rounded-md border border-border px-md py-sm hover:bg-muted"
-              >
-                <Link href={`/learn/${doc.id}`} className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-foreground">{doc.title}</span>
-                  <span className="text-xs text-muted-foreground">
+              <li key={doc.id} className="border-t border-border py-2.5 first:border-t-0">
+                <Link
+                  href={`/learn/${doc.id}`}
+                  className="group flex items-center justify-between gap-md"
+                >
+                  <span className="text-ui font-semibold text-foreground group-hover:underline">
+                    {doc.title}
+                  </span>
+                  <span className="shrink-0 text-caption font-semibold text-muted-foreground">
                     {doc.status ? (STATUS_LABEL[doc.status] ?? doc.status) : ""}
                   </span>
                 </Link>
@@ -139,18 +142,18 @@ export function UncategorizedLessonsPage({ showAdminTools }: { showAdminTools: b
               uploadMutation.mutate();
             }}
           >
-            <h3 className="text-sm font-semibold text-foreground">Upload a new lesson</h3>
-            <label className="flex flex-col gap-xs text-sm text-foreground">
+            <h3 className="label-caps">Upload a new lesson</h3>
+            <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
               Title
               <input
                 type="text"
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 required
-                className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="field"
               />
             </label>
-            <label className="flex flex-col gap-xs text-sm text-foreground">
+            <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
               PDF file
               <input
                 type="file"
@@ -425,12 +428,17 @@ function LessonList({
       {documents.data.length === 0 ? (
         <p className="text-sm text-muted-foreground">No lessons yet.</p>
       ) : (
-        <ul className="flex flex-col gap-xs">
+        <ul>
           {documents.data.map((doc) => (
-            <li key={doc.id} className="rounded-md border border-border px-md py-sm hover:bg-muted">
-              <Link href={`/learn/${doc.id}`} className="flex items-center justify-between">
-                <span className="text-sm font-medium text-foreground">{doc.title}</span>
-                <span className="text-xs text-muted-foreground">
+            <li key={doc.id} className="border-t border-border py-2.5 first:border-t-0">
+              <Link
+                href={`/learn/${doc.id}`}
+                className="group flex items-center justify-between gap-md"
+              >
+                <span className="text-ui font-semibold text-foreground group-hover:underline">
+                  {doc.title}
+                </span>
+                <span className="shrink-0 text-caption font-semibold text-muted-foreground">
                   {doc.status ? (STATUS_LABEL[doc.status] ?? doc.status) : ""}
                 </span>
               </Link>
@@ -464,18 +472,18 @@ function LessonList({
             uploadMutation.mutate();
           }}
         >
-          <h3 className="text-sm font-semibold text-foreground">Upload a new lesson</h3>
-          <label className="flex flex-col gap-xs text-sm text-foreground">
+          <h3 className="label-caps">Upload a new lesson</h3>
+          <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
             Title
             <input
               type="text"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               required
-              className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="field"
             />
           </label>
-          <label className="flex flex-col gap-xs text-sm text-foreground">
+          <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
             PDF file
             <input
               type="file"
@@ -517,26 +525,31 @@ function SubChapterRow({
     subChapterNode?.lessons.map((lesson) => [lesson.id, lesson]),
   );
   return (
-    <li className="rounded-md border border-border">
+    <li className="border-t border-border first:border-t-0">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={isExpanded}
-        className="flex w-full items-center justify-between px-md py-sm text-left hover:bg-muted"
+        className="flex w-full items-center gap-sm py-2.5 text-left"
       >
-        <span className="text-sm font-medium text-foreground">{subChapter.title}</span>
-        <span className="text-xs text-muted-foreground">
-          {subChapter.lesson_count} {subChapter.lesson_count === 1 ? "lesson" : "lessons"}{" "}
-          {isExpanded ? "▲" : "▼"}
+        <span
+          aria-hidden="true"
+          className={`text-lg leading-none font-semibold text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`}
+        >
+          ›
+        </span>
+        <span className="flex-1 text-toc font-bold text-foreground">{subChapter.title}</span>
+        <span className="shrink-0 text-caption font-semibold text-muted-foreground">
+          {subChapter.lesson_count} {subChapter.lesson_count === 1 ? "lesson" : "lessons"}
         </span>
       </button>
       {subChapterNode && (
-        <div className="px-md pb-sm">
+        <div className="pb-2.5 pl-lg">
           <ProgressBar percent={computeLessonCompletionPercent(subChapterNode)} />
         </div>
       )}
       {isExpanded && (
-        <div className="border-t border-border px-md py-md">
+        <div className="pb-md pl-lg">
           <LessonList
             subChapterId={subChapter.id}
             isAdmin={isAdmin}
@@ -592,27 +605,32 @@ function ChapterRow({
   });
 
   return (
-    <li className="rounded-md border border-border">
+    <li className="border-t border-border first:border-t-0">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={isExpanded}
-        className="flex w-full items-center justify-between px-md py-sm text-left hover:bg-muted"
+        className="flex w-full items-center gap-sm py-2.5 text-left"
       >
-        <span className="text-sm font-medium text-foreground">{chapter.title}</span>
-        <span className="text-xs text-muted-foreground">
+        <span
+          aria-hidden="true"
+          className={`text-lg leading-none font-semibold text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`}
+        >
+          ›
+        </span>
+        <span className="flex-1 text-toc font-bold text-foreground">{chapter.title}</span>
+        <span className="shrink-0 text-caption font-semibold text-muted-foreground">
           {chapter.sub_chapter_count}{" "}
-          {chapter.sub_chapter_count === 1 ? "sub-chapter" : "sub-chapters"}{" "}
-          {isExpanded ? "▲" : "▼"}
+          {chapter.sub_chapter_count === 1 ? "sub-chapter" : "sub-chapters"}
         </span>
       </button>
       {chapterNode && (
-        <div className="px-md pb-sm">
+        <div className="pb-2.5 pl-lg">
           <ProgressBar percent={computeLessonCompletionPercent(chapterNode)} />
         </div>
       )}
       {isExpanded && (
-        <div className="border-t border-border px-md py-md">
+        <div className="pb-md pl-lg">
           {subChapters.isPending ? (
             <p className="text-sm text-muted-foreground">Loading...</p>
           ) : subChapters.isError ? (
@@ -622,7 +640,7 @@ function ChapterRow({
           ) : subChapters.data.length === 0 ? (
             <p className="text-sm text-muted-foreground">No sub-chapters yet.</p>
           ) : (
-            <ul className="flex flex-col gap-xs">
+            <ul>
               {subChapters.data.map((subChapter) => (
                 <SubChapterRow
                   key={subChapter.id}
@@ -650,15 +668,15 @@ function ChapterRow({
                 createSubChapterMutation.mutate();
               }}
             >
-              <h3 className="text-sm font-semibold text-foreground">New sub-chapter</h3>
-              <label className="flex flex-col gap-xs text-sm text-foreground">
+              <h3 className="label-caps">New sub-chapter</h3>
+              <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
                 Title
                 <input
                   type="text"
                   value={newSubChapterTitle}
                   onChange={(event) => setNewSubChapterTitle(event.target.value)}
                   required
-                  className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="field"
                 />
               </label>
               {createError && (
@@ -720,7 +738,7 @@ export function BookChaptersPage({
 
   if (chapters.isPending) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p className="text-sm text-muted-foreground">Loading...</p>
       </PageMain>
     );
@@ -728,7 +746,7 @@ export function BookChaptersPage({
 
   if (chapters.isError) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p role="alert" className="text-sm text-danger">
           Failed to load chapters: {(chapters.error as Error).message}
         </p>
@@ -737,8 +755,8 @@ export function BookChaptersPage({
   }
 
   return (
-    <PageMain>
-      <h1 className="text-2xl font-bold text-foreground">Chapters</h1>
+    <PageMain width="reading">
+      <PageHeader kicker="Library" title="Chapters" />
       {bookNode && (
         <div className="mt-sm max-w-[24rem]">
           <ProgressBar
@@ -751,7 +769,7 @@ export function BookChaptersPage({
       {chapters.data.length === 0 ? (
         <p className="mt-md text-sm text-muted-foreground">No chapters yet.</p>
       ) : (
-        <ul className="mt-lg flex flex-col gap-xs">
+        <ul className="mt-lg border-y border-border">
           {chapters.data.map((chapter) => (
             <ChapterRow
               key={chapter.id}
@@ -777,15 +795,15 @@ export function BookChaptersPage({
             createChapterMutation.mutate();
           }}
         >
-          <h2 className="text-sm font-semibold text-foreground">New chapter</h2>
-          <label className="flex flex-col gap-xs text-sm text-foreground">
+          <h2 className="label-caps">New chapter</h2>
+          <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
             Title
             <input
               type="text"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               required
-              className="rounded-md border border-border px-sm py-xs text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="field"
             />
           </label>
           {createError && (

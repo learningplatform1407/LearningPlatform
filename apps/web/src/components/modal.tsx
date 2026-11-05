@@ -3,6 +3,8 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import { CloseIcon } from "@/components/icons";
+
 /** The first overlay in this app, so it is shared from the start.
  *
  * Nothing here previously rendered a dialog: no portal, no focus handling, no
@@ -83,7 +85,7 @@ export function Modal({
     // `--z-modal` would be drift its parity test cannot catch. Note `z-*` is
     // not generated from --spacing-*, unlike widths, so no bracket is needed.
     <div
-      className="fixed inset-0 z-30 flex items-start justify-center overflow-y-auto bg-foreground/40 p-lg"
+      className="fixed inset-0 z-30 flex items-start justify-center overflow-y-auto bg-scrim px-md pt-[80px] pb-lg"
       onClick={(event) => {
         // Only a click on the backdrop itself, not one that bubbled up from
         // inside the panel.
@@ -96,10 +98,10 @@ export function Modal({
         aria-labelledby={titleId}
         // Bracket width: --spacing-* shadows the named width scale, so
         // max-w-lg would silently render 24px.
-        className="w-full max-w-[36rem] rounded-md border border-border bg-background p-lg shadow-md"
+        className="w-full max-w-[36rem] rounded-sheet border border-border bg-background p-[30px] pb-lg shadow-card"
       >
         <div className="flex items-start justify-between gap-md">
-          <h2 id={titleId} className="text-lg font-semibold text-foreground">
+          <h2 id={titleId} className="text-heading leading-[1.25] font-extrabold text-foreground">
             {title}
           </h2>
           <button
@@ -107,11 +109,9 @@ export function Modal({
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="rounded-md px-sm text-lg text-muted-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
           >
-            {/* A bare glyph with an accessible name, the idiom sidebar.tsx
-                already uses for its collapse chevrons. */}
-            <span aria-hidden="true">×</span>
+            <CloseIcon />
           </button>
         </div>
         <div className="mt-md">{children}</div>

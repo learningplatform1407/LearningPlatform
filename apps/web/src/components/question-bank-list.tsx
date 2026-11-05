@@ -5,7 +5,8 @@ import type { QuestionBankItem, QuestionReveal, TopicFilter } from "@lp/api-clie
 import { useState } from "react";
 
 import { Button } from "@/components/button";
-import { OUTCOME_MARKS, QuestionRevealPanel } from "@/components/question-reveal";
+import { Tag } from "@/components/chip";
+import { OptionChoice, OUTCOME_MARKS, QuestionRevealPanel } from "@/components/question-reveal";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
 /**
@@ -28,7 +29,7 @@ function ProgressMark({
   const tries = attemptCount !== undefined && attemptCount > 1 ? `, ${attemptCount} attempts` : "";
   return (
     <span
-      className={`flex shrink-0 items-center gap-xs text-xs ${mark.className}`}
+      className={`flex shrink-0 items-center gap-xs text-xs font-bold ${mark.className}`}
       aria-label={`${mark.label}, ${pointsAwarded} of ${pointsPossible} points${tries}`}
     >
       <span aria-hidden="true">{mark.icon}</span>
@@ -45,13 +46,30 @@ function ProgressMark({
 function QuestionCard({
   question,
   onAnswered,
+  onSeeInLesson,
 }: {
   question: QuestionBankItem;
   onAnswered: () => void;
+  onSeeInLesson?: SeeInLesson;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [reveal, setReveal] = useState<QuestionReveal | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  // Shown at once; the server is told in the background, and a failure
+  // puts the heart back.
+  const [favourite, setFavourite] = useState(question.is_favourite ?? false);
+  const favouriteMutation = useMutation({
+    mutationFn: (on: boolean) =>
+      on
+        ? getBrowserApiClient().favouriteQuestion(question.id)
+        : getBrowserApiClient().unfavouriteQuestion(question.id),
+    onError: (_error, on) => {
+      setFavourite(!on);
+      setError("Could not save that favourite.");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["question-bank"] }),
+  });
 
   const answer = useMutation({
     mutationFn: () => getBrowserApiClient().answerBankQuestion(question.id, selected),
@@ -79,48 +97,58 @@ function QuestionCard({
   const latest = reveal ?? question.progress;
 
   return (
-    <li className="rounded-md border border-border p-md">
-      <div className="flex items-start justify-between gap-sm">
-        <p className="text-sm font-medium text-foreground">{question.prompt}</p>
-        {latest && (
-          <ProgressMark
-            outcome={latest.outcome}
-            pointsAwarded={latest.points_awarded}
-            pointsPossible={latest.points_possible}
-            // Only the stored row knows the count; a fresh reveal does not
-            // carry one, and inventing "+1" would be a guess.
-            attemptCount={question.progress?.attempt_count}
-          />
-        )}
+    <li
+      id={questionElementId(question.id)}
+      className="scroll-mt-[96px] border-t border-border py-[20px]"
+    >
+      <div className="mb-2.5 flex items-start justify-between gap-3">
+        <p className="font-bold text-foreground">{question.prompt}</p>
+        <span className="flex shrink-0 items-center gap-3">
+          {latest && (
+            <ProgressMark
+              outcome={latest.outcome}
+              pointsAwarded={latest.points_awarded}
+              pointsPossible={latest.points_possible}
+              // Only the stored row knows the count; a fresh reveal does not
+              // carry one, and inventing "+1" would be a guess.
+              attemptCount={question.progress?.attempt_count}
+            />
+          )}
+          <button
+            type="button"
+            aria-label="Favourite"
+            aria-pressed={favourite}
+            title={favourite ? "Remove from favourites" : "Add to favourites"}
+            onClick={() => {
+              setError(null);
+              setFavourite(!favourite);
+              favouriteMutation.mutate(!favourite);
+            }}
+            className="text-[18px] leading-none text-again"
+          >
+            {favourite ? "♥" : "♡"}
+          </button>
+        </span>
       </div>
-      <ul className="mt-sm flex flex-col gap-xs">
-        {question.options.map((option) => (
-          <li key={option.id}>
-            <label className="flex items-center gap-xs text-sm text-foreground">
-              <input
-                type={question.kind === "single" ? "radio" : "checkbox"}
+
+      {reveal ? (
+        <QuestionRevealPanel reveal={reveal} />
+      ) : (
+        <ul>
+          {question.options.map((option, index) => (
+            <li key={option.id}>
+              <OptionChoice
                 name={`bank-${question.id}`}
+                kind={question.kind}
+                index={index}
+                text={option.text}
                 checked={selected.includes(option.id)}
-                disabled={reveal !== null}
                 onChange={() => toggle(option.id)}
               />
-              {option.text}
-            </label>
-          </li>
-        ))}
-      </ul>
-
-      <div className="mt-sm flex flex-wrap items-center gap-xs text-xs text-muted-foreground">
-        <span>
-          {question.kind === "single" ? "Single answer" : "Multiple answers"} ·{" "}
-          {question.points_possible} points · {question.difficulty}
-        </span>
-        {question.tags.map((tag) => (
-          <span key={tag.id} className="rounded-md border border-border px-xs py-xs">
-            {tag.label}
-          </span>
-        ))}
-      </div>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {error && (
         <p role="alert" className="mt-xs text-sm text-danger">
@@ -128,13 +156,11 @@ function QuestionCard({
         </p>
       )}
 
-      {reveal ? (
-        <>
-          <QuestionRevealPanel reveal={reveal} />
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        {reveal ? (
           <Button
             type="button"
             variant="secondary"
-            className="mt-sm"
             onClick={() => {
               setReveal(null);
               setSelected([]);
@@ -142,20 +168,44 @@ function QuestionCard({
           >
             Try again
           </Button>
-        </>
-      ) : (
-        <Button
-          type="button"
-          variant="secondary"
-          className="mt-sm"
-          disabled={selected.length === 0 || answer.isPending}
-          onClick={() => answer.mutate()}
-        >
-          {answer.isPending ? "Checking..." : "Check answer"}
-        </Button>
-      )}
+        ) : (
+          <Button
+            type="button"
+            disabled={selected.length === 0 || answer.isPending}
+            onClick={() => answer.mutate()}
+          >
+            {answer.isPending ? "Checking..." : "Check answer"}
+          </Button>
+        )}
+        {/* Shown once checked, like the design: before that the passage
+            would give the answer away. */}
+        {reveal && onSeeInLesson && reveal.source_quotes && reveal.source_quotes.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onSeeInLesson(question.id, reveal.source_quotes!)}
+            className="text-toc font-bold text-accent hover:underline"
+          >
+            ↗ See in lesson
+          </button>
+        )}
+        <span className="ml-auto flex flex-wrap items-center justify-end gap-1.5 text-caption font-bold text-muted-foreground">
+          {question.kind === "single" ? "Single answer" : "Multiple answers"} ·{" "}
+          {question.points_possible} points · {question.difficulty}
+          {question.tags.map((tag) => (
+            <Tag key={tag.id}>{tag.label}</Tag>
+          ))}
+        </span>
+      </div>
     </li>
   );
+}
+
+/** Jump to the passages a checked question came from. */
+export type SeeInLesson = (questionId: string, quotes: string[]) => void;
+
+/** The element a question renders as, so a "back to quizzes" can return to it. */
+export function questionElementId(questionId: string): string {
+  return `question-${questionId}`;
 }
 
 /**
@@ -167,22 +217,28 @@ export function QuestionBankList({
   filter,
   unassigned,
   emptyMessage = "No questions here yet.",
+  onSeeInLesson,
+  favourites,
 }: {
   filter?: TopicFilter;
   unassigned?: boolean;
+  /** Only the learner's favourites. */
+  favourites?: boolean;
   emptyMessage?: string;
+  /** Offered inside a lesson only, where there is a lesson to show. */
+  onSeeInLesson?: SeeInLesson;
 }) {
   const queryClient = useQueryClient();
   const questions = useQuery({
-    queryKey: ["question-bank", filter ?? null, unassigned ?? false],
-    queryFn: () => getBrowserApiClient().listQuestionBank({ ...filter, unassigned }),
+    queryKey: ["question-bank", filter ?? null, unassigned ?? false, favourites ?? false],
+    queryFn: () => getBrowserApiClient().listQuestionBank({ ...filter, unassigned, favourites }),
   });
   const total = useQuery({
     queryKey: ["question-bank-total", filter ?? null],
     queryFn: () => getBrowserApiClient().getQuizAvailableCount(filter),
-    // The unassigned bucket has no equivalent count endpoint, and there the
-    // list is the whole truth anyway.
-    enabled: !unassigned,
+    // The unassigned bucket and the favourites have no equivalent count
+    // endpoint, and there the list is the whole truth anyway.
+    enabled: !unassigned && !favourites,
   });
 
   if (questions.isPending) {
@@ -204,16 +260,17 @@ export function QuestionBankList({
 
   return (
     <>
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm font-semibold text-muted-foreground">
         {totalCount !== undefined && totalCount > shown
           ? `Showing ${shown} of ${totalCount} questions`
           : `${shown} question${shown === 1 ? "" : "s"}`}
       </p>
-      <ul className="mt-sm flex flex-col gap-sm">
+      <ul className="mt-sm border-b border-border">
         {questions.data.map((question) => (
           <QuestionCard
             key={question.id}
             question={question}
+            onSeeInLesson={onSeeInLesson}
             onAnswered={() => {
               // Answering moves the counts in the tree above it, and the
               // stored progress behind every list this question appears in —

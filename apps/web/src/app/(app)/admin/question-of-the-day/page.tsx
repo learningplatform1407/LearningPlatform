@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Button } from "@/components/button";
+import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
@@ -55,9 +56,9 @@ function DayRow({
   const isToday = day.forDate === serverToday;
 
   return (
-    <li className="rounded-md border border-border p-lg">
+    <li className="border-t border-border py-md">
       <div className="flex flex-wrap items-baseline justify-between gap-sm">
-        <p className="text-sm font-semibold text-foreground">
+        <p className="text-ui font-extrabold text-foreground">
           {isToday ? `Today — ${formatCalendarDate(day.forDate)}` : formatCalendarDate(day.forDate)}
         </p>
         <p className="text-xs text-muted-foreground">
@@ -94,7 +95,7 @@ function DayRow({
             onChange={(event) => setQuestionId(event.target.value)}
             placeholder="Question id"
             aria-label={`Question id for ${formatCalendarDate(day.forDate)}`}
-            className="min-w-0 flex-1 rounded-md border border-border bg-background px-sm py-xs text-sm text-foreground"
+            className="field flex-1"
           />
           <Button
             variant="secondary"
@@ -135,7 +136,7 @@ export default function DailyQuestionAdminPage() {
 
   if (me.isPending) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p className="text-sm text-muted-foreground">Loading...</p>
       </PageMain>
     );
@@ -143,17 +144,17 @@ export default function DailyQuestionAdminPage() {
 
   if (me.data?.role !== "admin") {
     return (
-      <PageMain>
-        <h1 className="text-2xl font-bold text-foreground">Question of the day</h1>
+      <PageMain width="reading">
+        <PageHeader kicker="Admin" title="Question of the day" />
         <p className="mt-md text-sm font-medium text-muted-foreground">Admin access required.</p>
       </PageMain>
     );
   }
 
   return (
-    <PageMain>
-      <h1 className="text-2xl font-bold text-foreground">Question of the day</h1>
-      <p className="mt-xs max-w-[48rem] text-sm font-medium text-muted-foreground">
+    <PageMain width="reading">
+      <PageHeader kicker="Admin" title="Question of the day" />
+      <p className="text-toc text-muted-foreground">
         Today and the next {days.data?.horizon_days ?? 14} days. A day nobody has drawn yet gets a
         random published question the first time a learner opens it, so leaving these alone is a
         valid plan. Past days never appear here: changing one would rewrite history people have
@@ -168,7 +169,7 @@ export default function DailyQuestionAdminPage() {
       )}
 
       {days.data && (
-        <ul className="mt-lg flex w-full max-w-[48rem] flex-col gap-sm">
+        <ul className="mt-lg border-b border-border">
           {/* The API returns only the days that have a row, so the window is
               rebuilt from server_today -- never from the device clock, which
               could be in another timezone and would mis-label every row. Its

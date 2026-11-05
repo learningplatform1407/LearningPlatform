@@ -16,6 +16,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/button";
 import { Card } from "@/components/card";
+import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { createClient } from "@/lib/supabase/client";
@@ -28,7 +29,7 @@ import { createClient } from "@/lib/supabase/client";
  * @lp/ui, shared with mobile so the http(s)-only rule has one home. */
 function LinkifiedBody({ body }: { body: string }) {
   return (
-    <p className="mt-sm whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+    <p className="mt-sm whitespace-pre-wrap [overflow-wrap:anywhere] text-foreground">
       {splitLinkifiedBody(body).map((segment, index) =>
         segment.href === undefined ? (
           <Fragment key={index}>{segment.text}</Fragment>
@@ -38,7 +39,7 @@ function LinkifiedBody({ body }: { body: string }) {
             href={segment.href}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary underline underline-offset-2"
+            className="text-accent underline underline-offset-2"
           >
             {segment.text}
           </a>
@@ -56,7 +57,7 @@ function imageUrl(imagePath: string): string {
 
 function CategoryChip({ category }: { category: FeedCategory }) {
   return (
-    <span className="rounded-full bg-muted px-sm py-0.5 text-xs font-medium text-muted-foreground">
+    <span className="rounded-full border border-border px-2.5 py-0.5 text-xs font-bold text-muted-foreground">
       {FEED_CATEGORY_LABELS[category]}
     </span>
   );
@@ -64,7 +65,7 @@ function CategoryChip({ category }: { category: FeedCategory }) {
 
 function Byline({ post }: { post: FeedPost }) {
   return (
-    <div className="flex flex-wrap items-center gap-sm text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-sm text-caption font-semibold text-muted-foreground">
       {post.author?.avatar_url ? (
         // eslint-disable-next-line @next/next/no-img-element -- public Supabase Storage URL, not worth next/image config
         <img src={post.author.avatar_url} alt="" className="size-6 rounded-full object-cover" />
@@ -72,7 +73,7 @@ function Byline({ post }: { post: FeedPost }) {
       {/* `author` is null once the authoring admin's profile is deleted: the
           announcement outlives them by design, so this needs a fallback
           rather than a guard that hides the post. */}
-      <span className="font-medium text-foreground">{post.author?.display_name ?? "Staff"}</span>
+      <span className="font-bold text-foreground">{post.author?.display_name ?? "Staff"}</span>
       <span>·</span>
       <span>{formatPostDate(post.published_at)}</span>
       {post.updated_at !== post.created_at ? (
@@ -154,7 +155,7 @@ function ImageField({
 
   return (
     <div>
-      <label className="block text-sm font-medium text-foreground" htmlFor={inputId}>
+      <label className="block text-toc font-semibold text-foreground" htmlFor={inputId}>
         {label}
       </label>
       <input
@@ -255,11 +256,11 @@ function Composer() {
   const canPost = title.trim().length > 0 && body.trim().length > 0;
 
   return (
-    <Card className="mt-lg w-full max-w-[42rem] p-md">
-      <h2 className="text-sm font-semibold text-foreground">New announcement</h2>
+    <Card className="mt-lg w-full p-md shadow-dot">
+      <h2 className="label-caps">New announcement</h2>
       <div className="mt-md flex flex-col gap-md">
         <div>
-          <label className="block text-sm font-medium text-foreground" htmlFor="feed-title">
+          <label className="block text-toc font-semibold text-foreground" htmlFor="feed-title">
             Title
           </label>
           <input
@@ -268,11 +269,11 @@ function Composer() {
             onChange={(event) => setTitle(event.target.value)}
             disabled={createMutation.isPending}
             placeholder="January timetable is up"
-            className="mt-xs w-full rounded-md border border-border bg-background px-md py-sm text-sm text-foreground"
+            className="field mt-xs"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-foreground" htmlFor="feed-body">
+          <label className="block text-toc font-semibold text-foreground" htmlFor="feed-body">
             Body
           </label>
           <textarea
@@ -282,11 +283,11 @@ function Composer() {
             disabled={createMutation.isPending}
             rows={4}
             placeholder="Share an announcement… paste a link and it becomes clickable."
-            className="mt-xs w-full rounded-md border border-border bg-background px-md py-sm text-sm text-foreground"
+            className="field mt-xs"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-foreground" htmlFor="feed-category">
+          <label className="block text-toc font-semibold text-foreground" htmlFor="feed-category">
             Category
           </label>
           <select
@@ -294,7 +295,7 @@ function Composer() {
             value={category}
             onChange={(event) => setCategory(event.target.value as FeedCategory)}
             disabled={createMutation.isPending}
-            className="mt-xs w-full rounded-md border border-border bg-background px-md py-sm text-sm text-foreground"
+            className="field mt-xs"
           >
             <option value="news">News</option>
             <option value="media">Media — a livestream or social link</option>
@@ -404,19 +405,19 @@ function PostCard({ post }: { post: FeedPost }) {
   const isBusy = updateMutation.isPending || deleteMutation.isPending;
 
   return (
-    <Card as="article" className="w-full max-w-[42rem] p-md">
+    <article className="w-full border-t border-border pt-md">
       {isEditing ? (
         <div className="flex flex-col gap-sm">
-          <label className="text-sm font-medium text-foreground" htmlFor={`title-${post.id}`}>
+          <label className="text-toc font-semibold text-foreground" htmlFor={`title-${post.id}`}>
             Title
           </label>
           <input
             id={`title-${post.id}`}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            className="w-full rounded-md border border-border bg-background px-md py-sm text-sm text-foreground"
+            className="field"
           />
-          <label className="text-sm font-medium text-foreground" htmlFor={`body-${post.id}`}>
+          <label className="text-toc font-semibold text-foreground" htmlFor={`body-${post.id}`}>
             Body
           </label>
           <textarea
@@ -424,7 +425,7 @@ function PostCard({ post }: { post: FeedPost }) {
             value={body}
             onChange={(event) => setBody(event.target.value)}
             rows={4}
-            className="w-full rounded-md border border-border bg-background px-md py-sm text-sm text-foreground"
+            className="field"
           />
           {/* Without these the server's replace and clear branches had no
               caller at all: an announcement published with the wrong photo
@@ -482,7 +483,9 @@ function PostCard({ post }: { post: FeedPost }) {
         </div>
       ) : (
         <>
-          <h2 className="text-lg font-semibold leading-snug text-foreground">{post.title}</h2>
+          <h2 className="text-heading leading-tight font-extrabold text-foreground">
+            {post.title}
+          </h2>
           <div className="mt-xs">
             <Byline post={post} />
           </div>
@@ -527,7 +530,7 @@ function PostCard({ post }: { post: FeedPost }) {
           {error}
         </p>
       ) : null}
-    </Card>
+    </article>
   );
 }
 
@@ -540,7 +543,7 @@ export default function FeedPage() {
 
   if (me.isPending || feed.isPending) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p className="text-sm text-muted-foreground">Loading...</p>
       </PageMain>
     );
@@ -548,7 +551,7 @@ export default function FeedPage() {
 
   if (feed.isError) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p role="alert" className="text-sm text-danger">
           Failed to load the feed: {(feed.error as Error).message}
         </p>
@@ -562,7 +565,7 @@ export default function FeedPage() {
   // exactly like losing your permissions.
   if (me.isError) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p role="alert" className="text-sm text-danger">
           Failed to load your profile: {(me.error as Error).message}
         </p>
@@ -574,8 +577,8 @@ export default function FeedPage() {
   const posts = feed.data ?? [];
 
   return (
-    <PageMain>
-      <h1 className="text-2xl font-bold text-foreground">Feed</h1>
+    <PageMain width="reading">
+      <PageHeader kicker="Announcements" title="Feed" />
 
       {isAdmin ? <Composer /> : null}
 
@@ -583,7 +586,7 @@ export default function FeedPage() {
         <p className="mt-md text-sm text-muted-foreground">No announcements yet.</p>
       ) : (
         <>
-          <ul className="mt-lg flex flex-col gap-lg">
+          <ul className="mt-lg flex flex-col gap-xl">
             {posts.map((post) => (
               <li key={post.id}>
                 <PostCard post={post} />
@@ -594,7 +597,7 @@ export default function FeedPage() {
               announcements exist that this screen cannot reach. Saying so
               beats a list that simply ends and reads as the whole history. */}
           {posts.length >= FEED_PAGE_SIZE ? (
-            <p className="mt-lg max-w-[42rem] text-sm text-muted-foreground">
+            <p className="mt-lg text-sm text-muted-foreground">
               Showing the {FEED_PAGE_SIZE} most recent announcements.
             </p>
           ) : null}

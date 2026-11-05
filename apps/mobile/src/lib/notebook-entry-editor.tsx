@@ -1,12 +1,13 @@
 import type { NotebookEntry, Stroke } from "@lp/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ComponentRef, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { colors, fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 
 import { DrawingCanvas, DrawingThumbnail } from "./notebook-drawing-canvas";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
 // Shared between the Notebook list screen and the lesson reader's Notes
 // modal — notes live in one common pool (`notebook_entries`), not linked to
@@ -27,6 +28,7 @@ export function NotebookEntryList({
   selectedEntryId?: string;
   onSelect: (entryId: string) => void;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.list}>
       {entries.length === 0 && <Text style={styles.hint}>No notes yet.</Text>}
@@ -60,6 +62,7 @@ export function NewEntryButtons({
   onNewText: () => void;
   onNewDrawing: () => void;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.newRow}>
       <Pressable style={styles.newButton} onPress={onNewText} accessibilityRole="button">
@@ -85,6 +88,8 @@ export function NotebookEntryEditor({
   onCreated?: (id: string) => void;
   onDeleted?: () => void;
 }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const queryClient = useQueryClient();
   const isNew = !entry;
   const resolvedType: "text" | "drawing" = entry?.type ?? type;
@@ -218,17 +223,18 @@ export function NotebookEntryEditor({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   list: {
     gap: spacing.xs,
   },
   row: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderWidth: 0,
+    borderRadius: 0,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 0,
     gap: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   rowActive: {
     backgroundColor: colors.muted,
@@ -254,7 +260,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 999,
     paddingVertical: spacing.sm,
     alignItems: "center",
   },
@@ -296,7 +302,7 @@ const styles = StyleSheet.create({
   button: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",
@@ -305,6 +311,7 @@ const styles = StyleSheet.create({
   buttonPrimary: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
+    borderRadius: 10,
   },
   buttonPrimaryText: {
     color: colors.primaryForeground,
@@ -323,4 +330,4 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: colors.mutedForeground,
   },
-});
+}));

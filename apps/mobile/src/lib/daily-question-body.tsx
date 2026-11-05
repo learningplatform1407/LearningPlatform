@@ -2,11 +2,12 @@ import type { DailyQuestion } from "@lp/api-client";
 import { ApiClientError } from "@lp/api-client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { QuestionRevealPanel } from "@/lib/question-reveal";
-import { colors, fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
 function describeError(err: unknown): string {
   if (err instanceof ApiClientError) {
@@ -38,6 +39,8 @@ export function DailyQuestionBody({
    * `attempt` say, and the host derives its open state from them. */
   onAnswered: () => void;
 }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -159,7 +162,7 @@ export function DailyQuestionBody({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   body: {
     gap: spacing.sm,
   },
@@ -205,7 +208,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",
@@ -227,4 +230,4 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: colors.danger,
   },
-});
+}));

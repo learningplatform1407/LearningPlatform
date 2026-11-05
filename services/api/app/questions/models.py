@@ -28,6 +28,12 @@ class Question(Base):
     correct_option_ids: Mapped[list[str]] = mapped_column(JSON)
     rationales: Mapped[dict[str, str]] = mapped_column(JSON)
     explanation: Mapped[str | None] = mapped_column(String, default=None)
+    # Sentences from the lesson that support the options, quoted verbatim
+    # (design.md §12, "See in lesson"). Quotes rather than offsets: they are
+    # what an author can write in an import file, and they still resolve
+    # after the lecture text is replaced, as long as the sentence survives.
+    # Part of the answer key -- only returned once the question is checked.
+    source_quotes: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
     difficulty: Mapped[str] = mapped_column(String, default="medium")
     status: Mapped[str] = mapped_column(String, default="draft")
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("profiles.id", ondelete="CASCADE"))

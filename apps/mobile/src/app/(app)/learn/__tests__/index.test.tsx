@@ -361,7 +361,7 @@ test("answering keeps the sheet open, showing the score and reasoning", async ()
   // form left open across midnight cannot post yesterday.
   await waitFor(() => expect(mockAnswerDailyQuestion).toHaveBeenCalledWith("q1", ["o1"]));
   expect(await screen.findByText("correct — 2/2 points")).toBeTruthy();
-  expect(screen.getByText("Divisible only by 1 and itself.")).toBeTruthy();
+  expect(screen.getByText("True. Divisible only by 1 and itself.")).toBeTruthy();
 });
 
 test("asks for every day the grid renders, not just the month", async () => {

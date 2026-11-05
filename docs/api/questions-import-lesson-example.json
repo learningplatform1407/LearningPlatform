@@ -23,7 +23,8 @@
         "c": "Vasopressor — raises preload and afterload.",
         "d": "Inotrope; increases contractility, not a preload reducer."
       },
-      "explanation": "Preload is venous return. Venodilators lower it."
+      "explanation": "Preload is venous return. Venodilators lower it.",
+      "source_quotes": []
     },
     {
       "external_id": "lesson-b-002",

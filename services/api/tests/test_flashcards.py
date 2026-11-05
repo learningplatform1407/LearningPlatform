@@ -422,6 +422,10 @@ def test_the_deck_puts_due_cards_before_new_ones(
     assert deck[1]["is_new"] is True
     assert deck[1]["due_at"] is None
     assert {card["id"] for card in deck} == {str(due_card.id), str(new_card.id)}
+    # Previews come from each card's own state: one good review in, Good
+    # jumps to 6 days; a new card's Good is 1 day.
+    assert deck[0]["next_intervals"]["good"] == 6
+    assert deck[1]["next_intervals"]["good"] == 1
 
 
 def test_the_deck_excludes_cards_that_are_not_due_yet(

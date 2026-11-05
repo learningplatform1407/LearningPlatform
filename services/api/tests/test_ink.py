@@ -120,13 +120,13 @@ def test_get_ink_past_the_page_count_is_empty_rather_than_an_error(
     """
     response = authed_client.get(f"/v1/documents/{lesson_with_pdf}/pages/99/ink")
     assert response.status_code == 200
-    assert response.json() == {"strokes": []}
+    assert response.json() == {"strokes": [], "highlights": []}
 
 
 def test_get_ink_defaults_to_empty(authed_client: TestClient, lesson_with_pdf: uuid.UUID) -> None:
     response = authed_client.get(f"/v1/documents/{lesson_with_pdf}/pages/1/ink")
     assert response.status_code == 200
-    assert response.json() == {"strokes": []}
+    assert response.json() == {"strokes": [], "highlights": []}
 
 
 def test_put_ink_replaces_full_array(authed_client: TestClient, lesson_with_pdf: uuid.UUID) -> None:
@@ -182,3 +182,53 @@ def test_ink_404s_when_lesson_has_no_lecture_pdf(
         f"/v1/documents/{lesson_without_pdf}/pages/1/ink", json={"strokes": []}
     )
     assert put_response.status_code == 404
+
+
+def _highlight(color: str = "yellow") -> dict[str, object]:
+    return {"color": color, "rects": [[0.1, 0.2, 0.4, 0.23]]}
+
+
+def test_highlights_round_trip(authed_client: TestClient, lesson_with_pdf: uuid.UUID) -> None:
+    url = f"/v1/documents/{lesson_with_pdf}/pages/2/ink"
+    response = authed_client.put(url, json={"strokes": [], "highlights": [_highlight("blue")]})
+    assert response.status_code == 200
+    assert response.json()["highlights"] == [_highlight("blue")]
+    assert authed_client.get(url).json()["highlights"] == [_highlight("blue")]
+
+
+def test_a_strokes_only_save_keeps_existing_highlights(
+    authed_client: TestClient, lesson_with_pdf: uuid.UUID
+) -> None:
+    """Mobile can't highlight a PDF and only ever sends strokes. Its saves
+    must not wipe highlights made on the web."""
+    url = f"/v1/documents/{lesson_with_pdf}/pages/1/ink"
+    authed_client.put(url, json={"strokes": [], "highlights": [_highlight()]})
+
+    response = authed_client.put(url, json={"strokes": [_stroke()]})
+
+    assert response.json() == {"strokes": [_stroke()], "highlights": [_highlight()]}
+
+
+def test_an_empty_highlights_list_clears_them(
+    authed_client: TestClient, lesson_with_pdf: uuid.UUID
+) -> None:
+    url = f"/v1/documents/{lesson_with_pdf}/pages/1/ink"
+    authed_client.put(url, json={"strokes": [], "highlights": [_highlight()]})
+
+    response = authed_client.put(url, json={"strokes": [], "highlights": []})
+
+    assert response.json()["highlights"] == []
+
+
+@pytest.mark.parametrize(
+    "rects",
+    [[[0.1, 0.2, 1.4, 0.3]], [[-0.1, 0.2, 0.4, 0.3]], [[0.1, 0.2, 0.3]], []],
+)
+def test_highlight_rects_must_be_on_the_page(
+    authed_client: TestClient, lesson_with_pdf: uuid.UUID, rects: list[list[float]]
+) -> None:
+    url = f"/v1/documents/{lesson_with_pdf}/pages/1/ink"
+    response = authed_client.put(
+        url, json={"strokes": [], "highlights": [{"color": "yellow", "rects": rects}]}
+    )
+    assert response.status_code == 422

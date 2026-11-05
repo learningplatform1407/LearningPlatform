@@ -26,3 +26,13 @@ class AnnotationCreateRequest(BaseModel):
     end_offset: int | None = None
     note_text: str | None = None
     color: str | None = None
+
+
+class AnnotationUpdateRequest(BaseModel):
+    """Edits in place, so a note keeps its id and creation time (it used to be
+    deleted and recreated). Only the fields sent are changed: `note_text` on a
+    margin note, `color` on a highlight. The anchor never moves -- a note on
+    a different passage is a different note."""
+
+    note_text: str | None = None
+    color: str | None = None

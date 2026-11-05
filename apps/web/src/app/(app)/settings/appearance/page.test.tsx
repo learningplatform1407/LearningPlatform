@@ -44,7 +44,7 @@ test("picking a theme and saving", async () => {
   const user = userEvent.setup();
   renderPage();
 
-  await user.click(await screen.findByRole("button", { name: "dark" }));
+  await user.click(await screen.findByRole("button", { name: "Dark" }));
   await user.click(screen.getByRole("button", { name: "Save" }));
 
   expect(updateMe).toHaveBeenCalledWith({ theme: "dark" });

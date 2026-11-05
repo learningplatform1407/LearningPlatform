@@ -15,11 +15,15 @@ import {
 
 import { getApiClient } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
 export default function ProfileSettingsScreen() {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const queryClient = useQueryClient();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
@@ -114,7 +118,7 @@ export default function ProfileSettingsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Profile Settings</Text>
+      <ScreenHeader kicker="Settings" title="Profile Settings" />
 
       <View style={styles.avatarRow}>
         <Pressable
@@ -167,7 +171,7 @@ export default function ProfileSettingsScreen() {
 
 const AVATAR_SIZE = 64;
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -179,12 +183,6 @@ const styles = StyleSheet.create({
   centered: {
     justifyContent: "center",
     padding: spacing.xl,
-  },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
   },
   avatarRow: {
     marginTop: spacing.md,
@@ -234,15 +232,16 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    fontSize: fontSizes.base,
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    fontSize: 15,
     color: colors.foreground,
+    backgroundColor: colors.background,
   },
   saveButton: {
     marginTop: spacing.lg,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: "center",
@@ -266,4 +265,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

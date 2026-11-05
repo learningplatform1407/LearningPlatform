@@ -8,6 +8,31 @@ import { Card } from "@/components/card";
 import { DailyQuestionOverlay, useDailyQuestion } from "@/components/daily-question-overlay";
 import { DailyQuestionCard, DailyQuestionRail } from "@/components/daily-question-panel";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { PageHeader } from "@/components/page-header";
+
+const TOOLS = [
+  { href: "/learn/library", title: "Library", description: "Browse books, chapters, and lessons." },
+  {
+    href: "/learn/review",
+    title: "Review",
+    description: "See how many words are due today, across every lesson.",
+  },
+  {
+    href: "/question-bank",
+    title: "Question Bank",
+    description: "Browse and answer questions, with stats on your progress.",
+  },
+  {
+    href: "/learn/flashcards",
+    title: "Flashcards",
+    description: "Spaced-repetition cards per lesson, official and your own.",
+  },
+  {
+    href: "/learn/notebook",
+    title: "Notebook",
+    description: "All your notes and drawings in one place.",
+  },
+];
 
 const STATUS_LABEL: Record<string, string> = {
   processing: "Processing...",
@@ -57,32 +82,35 @@ function LearnContent({
 
   return (
     <>
-      <h1 className="text-2xl font-bold text-foreground">Learn</h1>
+      <PageHeader kicker="Your course" title="Learn" />
 
       {continueLesson && (
-        <Card
-          as={Link}
+        <Link
           href={`/learn/${continueLesson.id}`}
-          interactive
-          className="mt-lg block bg-muted px-lg py-md"
+          className="group mt-lg block border-t border-border pt-md"
         >
-          <p className="text-xs font-medium text-muted-foreground">Continue where you left off</p>
-          <p className="mt-xs text-lg font-semibold text-foreground">{continueLesson.title}</p>
-        </Card>
+          <p className="label-caps">Continue where you left off</p>
+          <p className="mt-xs text-heading leading-tight font-extrabold text-foreground group-hover:underline">
+            {continueLesson.title}
+          </p>
+          <p className="mt-xs text-toc font-bold text-accent">Resume reading →</p>
+        </Link>
       )}
 
       {recentlyOpened.length > 0 && (
-        <section className="mt-lg">
-          <h2 className="text-sm font-semibold text-foreground">Recently opened</h2>
-          <ul className="mt-sm flex flex-col gap-xs">
+        <section className="mt-xl">
+          <h2 className="label-caps">Recently opened</h2>
+          <ul className="mt-sm border-t border-border">
             {recentlyOpened.map((lesson) => (
-              <li key={lesson.id}>
+              <li key={lesson.id} className="border-b border-border">
                 <Link
                   href={`/learn/${lesson.id}`}
-                  className="flex items-center justify-between rounded-md border border-border px-md py-sm hover:bg-muted"
+                  className="-mx-sm flex items-center justify-between gap-md rounded-sm px-sm py-2.5 hover:bg-muted"
                 >
-                  <span className="text-sm font-medium text-foreground">{lesson.title}</span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="min-w-0 truncate text-ui font-semibold text-foreground">
+                    {lesson.title}
+                  </span>
+                  <span className="shrink-0 text-caption font-semibold text-muted-foreground">
                     {lesson.status ? (STATUS_LABEL[lesson.status] ?? lesson.status) : ""}
                   </span>
                 </Link>
@@ -92,37 +120,20 @@ function LearnContent({
         </section>
       )}
 
-      <div className="mt-2xl grid max-w-[80rem] grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <Card as={Link} href="/learn/library" interactive className="block p-lg">
-          <p className="text-lg font-semibold text-foreground">Library</p>
-          <p className="mt-xs text-sm text-muted-foreground">
-            Browse books, chapters, and lessons.
-          </p>
-        </Card>
-        <Card as={Link} href="/learn/review" interactive className="block p-lg">
-          <p className="text-lg font-semibold text-foreground">Review</p>
-          <p className="mt-xs text-sm text-muted-foreground">
-            See how many words are due today, across every lesson.
-          </p>
-        </Card>
-        <Card as={Link} href="/question-bank" interactive className="block p-lg">
-          <p className="text-lg font-semibold text-foreground">Question Bank</p>
-          <p className="mt-xs text-sm text-muted-foreground">
-            Browse and answer questions, with stats on your progress.
-          </p>
-        </Card>
-        <Card as={Link} href="/learn/flashcards" interactive className="block p-lg">
-          <p className="text-lg font-semibold text-foreground">Flashcards</p>
-          <p className="mt-xs text-sm text-muted-foreground">
-            Spaced-repetition cards per lesson, official and your own.
-          </p>
-        </Card>
-        <Card as={Link} href="/learn/notebook" interactive className="block p-lg">
-          <p className="text-lg font-semibold text-foreground">Notebook</p>
-          <p className="mt-xs text-sm text-muted-foreground">
-            All your notes and drawings in one place.
-          </p>
-        </Card>
+      <h2 className="mt-xl label-caps">Study tools</h2>
+      <div className="mt-sm grid grid-cols-1 gap-sm sm:grid-cols-2 lg:grid-cols-3">
+        {TOOLS.map((tool) => (
+          <Card
+            key={tool.href}
+            as={Link}
+            href={tool.href}
+            interactive
+            className="block px-md py-3.5"
+          >
+            <p className="text-card leading-snug font-extrabold text-foreground">{tool.title}</p>
+            <p className="mt-xs text-toc leading-snug text-muted-foreground">{tool.description}</p>
+          </Card>
+        ))}
         {/* Below `lg` the rail is hidden, so the question gets a sixth card
             here instead -- which is also the shape mobile uses. */}
         {today && <DailyQuestionCard today={today} onOpen={onOpenToday} />}
@@ -139,16 +150,18 @@ export default function LearnPage() {
     <main className="flex w-full">
       {/* min-w-0 so a long lesson title cannot push the rail off screen: a
           flex item's default min-width is auto, which is its content. */}
-      <div className="min-w-0 flex-1 p-xl">
-        <LearnContent
-          today={day}
-          onOpenToday={() => {
-            if (day) open(day.server_today);
-          }}
-        />
+      <div className="min-w-0 flex-1 px-md pb-3xl md:px-xl">
+        <div className="mx-auto w-full max-w-[47.5rem]">
+          <LearnContent
+            today={day}
+            onOpenToday={() => {
+              if (day) open(day.server_today);
+            }}
+          />
+        </div>
       </div>
 
-      <aside className="hidden shrink-0 border-l border-border p-lg lg:flex lg:w-[20rem]">
+      <aside className="hidden shrink-0 border-l border-border px-lg pt-[42px] lg:flex lg:w-[20rem]">
         {day ? (
           <DailyQuestionRail today={day} onOpenDay={open} />
         ) : today.isError ? (

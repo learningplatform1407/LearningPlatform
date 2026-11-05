@@ -13,20 +13,13 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import * as WebBrowser from "expo-web-browser";
 import { Fragment, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, FlatList, Pressable, Text, TextInput, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
-import { colors, fontSizes, fontWeights, lineHeight, radii, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, lineHeight, radii, spacing } from "@/lib/theme";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 function imageUrl(imagePath: string): string {
   // A synchronous string concat against a public bucket -- no network call
@@ -43,6 +36,7 @@ function imageUrl(imagePath: string): string {
  * the in-app browser rather than handed to Linking.openURL, so an unexpected
  * target cannot hand off to another app. */
 function LinkifiedBody({ body }: { body: string }) {
+  const styles = useStyles();
   return (
     <Text style={styles.body}>
       {splitLinkifiedBody(body).map((segment, index) =>
@@ -103,6 +97,8 @@ async function uploadImage(asset: ImagePicker.ImagePickerAsset): Promise<string>
 }
 
 function Composer() {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -277,6 +273,7 @@ function Composer() {
 }
 
 function PostCard({ post }: { post: FeedPost }) {
+  const styles = useStyles();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(post.title);
@@ -560,6 +557,7 @@ function PostCard({ post }: { post: FeedPost }) {
 }
 
 export default function FeedScreen() {
+  const styles = useStyles();
   const me = useQuery({ queryKey: ["me"], queryFn: () => getApiClient().getMe() });
   const feed = useQuery({
     queryKey: ["feed"],
@@ -615,7 +613,7 @@ export default function FeedScreen() {
       keyExtractor={(post) => post.id}
       ListHeaderComponent={
         <View>
-          <Text style={styles.title}>Feed</Text>
+          <ScreenHeader kicker="Announcements" title="Feed" />
           {isAdmin ? <Composer /> : null}
         </View>
       }
@@ -633,16 +631,10 @@ export default function FeedScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   list: { flex: 1, backgroundColor: colors.background },
   listContent: { padding: spacing.xl, gap: spacing.lg },
   centered: { flex: 1, justifyContent: "center", padding: spacing.xl },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"]),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
-  },
   loading: { fontSize: fontSizes.sm, color: colors.mutedForeground },
   empty: { fontSize: fontSizes.sm, color: colors.mutedForeground },
   error: { fontSize: fontSizes.sm, color: colors.danger },
@@ -652,7 +644,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.md,
+    borderRadius: 16,
   },
   composerTitle: {
     fontSize: fontSizes.sm,
@@ -668,10 +660,10 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    fontSize: fontSizes.sm,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 15,
     color: colors.foreground,
     backgroundColor: colors.background,
   },
@@ -682,7 +674,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.md,
+    borderRadius: 999,
   },
   segmentSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
   segmentText: { fontSize: fontSizes.sm, color: colors.foreground },
@@ -692,7 +684,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: radii.md,
+    borderRadius: 10,
     backgroundColor: colors.primary,
   },
   primaryButtonText: {
@@ -707,7 +699,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.md,
+    borderRadius: 10,
   },
   secondaryButtonText: { fontSize: fontSizes.sm, color: colors.foreground },
   dangerButtonText: { fontSize: fontSizes.sm, color: colors.danger },
@@ -716,10 +708,11 @@ const styles = StyleSheet.create({
   preview: { width: 96, height: 96, borderRadius: radii.md },
   card: {
     padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    backgroundColor: colors.background,
+    borderWidth: 0,
+    borderRadius: 0,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: 0,
   },
   postTitle: {
     fontSize: fontSizes.lg,
@@ -763,4 +756,4 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
   },
   actions: { flexDirection: "row", gap: spacing.sm },
-});
+}));

@@ -1,12 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { NewEntryButtons, NotebookEntryList } from "@/lib/notebook-entry-editor";
-import { colors, fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, spacing } from "@/lib/theme";
+import { makeStyles } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 export default function NotebookScreen() {
+  const styles = useStyles();
   const entries = useQuery({
     queryKey: ["notebook-entries"],
     queryFn: () => getApiClient().listNotebookEntries(),
@@ -30,7 +33,7 @@ export default function NotebookScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Notebook</Text>
+      <ScreenHeader kicker="Learn" title="Notebook" />
 
       <NotebookEntryList
         entries={entries.data}
@@ -45,7 +48,7 @@ export default function NotebookScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -53,12 +56,6 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.xl,
     gap: spacing.lg,
-  },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
   },
   error: {
     color: colors.danger,
@@ -68,4 +65,4 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: fontSizes.sm,
   },
-});
+}));

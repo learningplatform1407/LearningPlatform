@@ -171,3 +171,80 @@ def test_cannot_delete_another_users_annotation(
     )
     assert delete_response.status_code == 404
     app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_update_margin_note_text_keeps_id_and_anchor(
+    authed_client: TestClient, ready_document_id: uuid.UUID
+) -> None:
+    created = authed_client.post(
+        f"/v1/documents/{ready_document_id}/annotations",
+        json={
+            "type": "margin_note",
+            "block_index": 0,
+            "start_offset": 0,
+            "end_offset": 5,
+            "note_text": "first",
+        },
+    ).json()
+
+    response = authed_client.patch(
+        f"/v1/documents/{ready_document_id}/annotations/{created['id']}",
+        json={"note_text": "second"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == created["id"]
+    assert body["created_at"] == created["created_at"]
+    assert body["note_text"] == "second"
+    assert (body["block_index"], body["start_offset"], body["end_offset"]) == (0, 0, 5)
+
+
+def test_update_highlight_colour(authed_client: TestClient, ready_document_id: uuid.UUID) -> None:
+    created = authed_client.post(
+        f"/v1/documents/{ready_document_id}/annotations",
+        json={"type": "highlight", "block_index": 0, "start_offset": 0, "end_offset": 5},
+    ).json()
+
+    response = authed_client.patch(
+        f"/v1/documents/{ready_document_id}/annotations/{created['id']}",
+        json={"color": "purple"},
+    )
+    assert response.status_code == 200
+    assert response.json()["color"] == "purple"
+
+
+def test_update_rejects_a_field_the_type_does_not_have(
+    authed_client: TestClient, ready_document_id: uuid.UUID
+) -> None:
+    created = authed_client.post(
+        f"/v1/documents/{ready_document_id}/annotations",
+        json={"type": "highlight", "block_index": 0, "start_offset": 0, "end_offset": 5},
+    ).json()
+
+    response = authed_client.patch(
+        f"/v1/documents/{ready_document_id}/annotations/{created['id']}",
+        json={"note_text": "a highlight has no text"},
+    )
+    assert response.status_code == 422
+
+
+def test_cannot_update_another_users_annotation(
+    client: TestClient,
+    ready_document_id: uuid.UUID,
+    authenticated_user: AuthenticatedUser,
+) -> None:
+    app.dependency_overrides[get_current_user] = lambda: authenticated_user
+    annotation_id = client.post(
+        f"/v1/documents/{ready_document_id}/annotations",
+        json={"type": "margin_note", "block_index": 0, "note_text": "mine"},
+    ).json()["id"]
+    app.dependency_overrides.pop(get_current_user, None)
+
+    other_user = AuthenticatedUser(id=uuid.uuid4(), email="other@example.com")
+    app.dependency_overrides[get_current_user] = lambda: other_user
+    response = client.patch(
+        f"/v1/documents/{ready_document_id}/annotations/{annotation_id}",
+        json={"note_text": "theirs now"},
+    )
+    assert response.status_code == 404
+    app.dependency_overrides.pop(get_current_user, None)

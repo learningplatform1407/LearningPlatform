@@ -5,6 +5,7 @@ import type { MeResponse } from "@lp/contracts";
 import { useState } from "react";
 
 import { Button } from "@/components/button";
+import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
@@ -32,7 +33,7 @@ export default function NotificationsSettingsPage() {
 
   if (isPending) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p className="text-sm text-muted-foreground">Loading...</p>
       </PageMain>
     );
@@ -40,7 +41,7 @@ export default function NotificationsSettingsPage() {
 
   if (isError) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p role="alert" className="text-sm text-danger">
           Failed to load settings: {(error as Error).message}
         </p>
@@ -49,8 +50,8 @@ export default function NotificationsSettingsPage() {
   }
 
   return (
-    <PageMain>
-      <h1 className="text-2xl font-bold text-foreground">Notifications</h1>
+    <PageMain width="reading">
+      <PageHeader kicker="Settings" title="Notifications" />
 
       <form
         className="mt-lg flex max-w-[32rem] flex-col gap-md"

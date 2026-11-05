@@ -3,12 +3,14 @@ import type { z } from "zod";
 import type {
   accountSettingsSchema,
   annotationCreateRequestSchema,
+  annotationUpdateRequestSchema,
   annotationResponseSchema,
   bookCreateRequestSchema,
   bookResponseSchema,
   chapterCreateRequestSchema,
   chapterResponseSchema,
   clozeCardResponseSchema,
+  clozeDueCardResponseSchema,
   clozeRatingRequestSchema,
   clozeRatingSchema,
   clozeReviewStateResponseSchema,
@@ -44,6 +46,7 @@ import type {
   questionImportResultSchema,
   lecturePdfResponseSchema,
   lessonPageInkResponseSchema,
+  pageHighlightSchema,
   lessonPageInkUpdateRequestSchema,
   meResponseSchema,
   notebookEntryCreateRequestSchema,
@@ -88,10 +91,12 @@ export type DocumentCreateRequest = z.infer<typeof documentCreateRequestSchema>;
 export type LecturePdf = z.infer<typeof lecturePdfResponseSchema>;
 export type ReplaceLectureTextRequest = z.infer<typeof replaceLectureTextRequestSchema>;
 export type UpsertLecturePdfRequest = z.infer<typeof upsertLecturePdfRequestSchema>;
+export type PageHighlight = z.infer<typeof pageHighlightSchema>;
 export type LessonPageInk = z.infer<typeof lessonPageInkResponseSchema>;
 export type LessonPageInkUpdateRequest = z.infer<typeof lessonPageInkUpdateRequestSchema>;
 export type Annotation = z.infer<typeof annotationResponseSchema>;
 export type AnnotationCreateRequest = z.infer<typeof annotationCreateRequestSchema>;
+export type AnnotationUpdateRequest = z.infer<typeof annotationUpdateRequestSchema>;
 export type Book = z.infer<typeof bookResponseSchema>;
 export type BookCreateRequest = z.infer<typeof bookCreateRequestSchema>;
 export type Chapter = z.infer<typeof chapterResponseSchema>;
@@ -104,6 +109,7 @@ export type FlashcardScope = z.infer<typeof flashcardScopeSchema>;
 export type FlashcardStatus = z.infer<typeof flashcardStatusSchema>;
 export type FlashcardScopeFilter = z.infer<typeof flashcardScopeFilterSchema>;
 export type FlashcardCard = z.infer<typeof flashcardCardSchema>;
+export type NextIntervals = FlashcardCard["next_intervals"];
 export type FlashcardCreateRequest = z.infer<typeof flashcardCreateRequestSchema>;
 export type FlashcardUpdateRequest = z.infer<typeof flashcardUpdateRequestSchema>;
 export type FlashcardRatingRequest = z.infer<typeof flashcardRatingRequestSchema>;
@@ -117,6 +123,7 @@ export type FlashcardSuspensionRequest = z.infer<typeof flashcardSuspensionReque
 export type ReviewRating = z.infer<typeof reviewRatingSchema>;
 export type ClozeRating = z.infer<typeof clozeRatingSchema>;
 export type ClozeCard = z.infer<typeof clozeCardResponseSchema>;
+export type ClozeDueCard = z.infer<typeof clozeDueCardResponseSchema>;
 export type ClozeRatingRequest = z.infer<typeof clozeRatingRequestSchema>;
 export type ClozeReviewState = z.infer<typeof clozeReviewStateResponseSchema>;
 export type ReviewSummaryLesson = z.infer<typeof reviewSummaryLessonSchema>;

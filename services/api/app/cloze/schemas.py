@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from app.srs.scheduler import ReviewRating
+from app.srs.schemas import NextIntervalsResponse
 
 
 class ClozeCardResponse(BaseModel):
@@ -15,6 +16,12 @@ class ClozeCardResponse(BaseModel):
     start_offset: int
     end_offset: int
     created_at: datetime
+
+
+class ClozeDueCardResponse(ClozeCardResponse):
+    """A due card plus what each grade would schedule it for."""
+
+    next_intervals: NextIntervalsResponse
 
 
 class ClozeRatingRequest(BaseModel):

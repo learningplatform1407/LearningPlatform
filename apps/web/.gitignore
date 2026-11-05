@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Playwright saved login for local screenshot runs -- contains session cookies.
+.auth/

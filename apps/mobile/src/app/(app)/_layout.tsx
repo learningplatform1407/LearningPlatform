@@ -1,14 +1,18 @@
 import { Drawer, DrawerContentScrollView, DrawerItem } from "expo-router/drawer";
 import { Tabs } from "expo-router/tabs";
-import { StyleSheet, useWindowDimensions, View } from "react-native";
+import { useWindowDimensions, View } from "react-native";
 
-import { colors, fontWeights, spacing } from "@/lib/theme";
+import { fontWeights, spacing } from "@/lib/theme";
 
 import type { DrawerContentComponentProps } from "expo-router/drawer";
+import { HIDDEN_TAB_ROUTES, NotchTabBar } from "@/lib/ui/notch-tab-bar";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
 const TABLET_BREAKPOINT = 768;
 
 function AppDrawerContent({ state, navigation, descriptors }: DrawerContentComponentProps) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const activeKey = state.routes[state.index]?.key;
   // "settings" and "question-bank" are registered with
   // options={{ href: null }} for parity with the Tabs branch, but Expo
@@ -19,10 +23,7 @@ function AppDrawerContent({ state, navigation, descriptors }: DrawerContentCompo
   // "index" joins them: it exists only to redirect `/` to Learn, so it is a
   // route rather than a place, and would otherwise show up as a nameless
   // drawer item above Learn.
-  const visibleRoutes = state.routes.filter(
-    (route) =>
-      route.name !== "settings" && route.name !== "question-bank" && route.name !== "index",
-  );
+  const visibleRoutes = state.routes.filter((route) => !HIDDEN_TAB_ROUTES.has(route.name));
   const profileIndex = visibleRoutes.findIndex((route) => route.name === "profile");
   const topRoutes = visibleRoutes.filter((_, index) => index !== profileIndex);
   const profileRoute = profileIndex >= 0 ? visibleRoutes[profileIndex] : undefined;
@@ -35,8 +36,9 @@ function AppDrawerContent({ state, navigation, descriptors }: DrawerContentCompo
         label={typeof drawerLabel === "string" ? drawerLabel : route.name}
         focused={activeKey === route.key}
         activeTintColor={colors.foreground}
-        inactiveTintColor={colors.mutedForeground}
-        labelStyle={styles.drawerItemLabel}
+        inactiveTintColor={colors.foreground}
+        activeBackgroundColor={colors.muted}
+        labelStyle={activeKey === route.key ? styles.drawerItemLabelActive : styles.drawerItemLabel}
         onPress={() => navigation.navigate(route.name)}
         style={isProfile ? styles.profileItem : undefined}
       />
@@ -52,7 +54,7 @@ function AppDrawerContent({ state, navigation, descriptors }: DrawerContentCompo
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   drawerContent: {
     flexGrow: 1,
     paddingVertical: spacing.md,
@@ -61,16 +63,22 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   drawerItemLabel: {
+    fontSize: 14.5,
     fontWeight: fontWeights.semibold,
+  },
+  drawerItemLabelActive: {
+    fontSize: 14.5,
+    fontWeight: fontWeights.extrabold,
   },
   profileItem: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
     marginTop: spacing.sm,
   },
-});
+}));
 
 export default function AppLayout() {
+  const colors = useThemeColors();
   const { width } = useWindowDimensions();
   const isTablet = width >= TABLET_BREAKPOINT;
 
@@ -81,6 +89,12 @@ export default function AppLayout() {
         screenOptions={{
           headerShown: false,
           drawerType: "permanent",
+          drawerStyle: {
+            width: 240,
+            backgroundColor: colors.background,
+            borderRightColor: colors.border,
+          },
+          sceneStyle: { backgroundColor: colors.background },
         }}
       >
         {/* Answers `/` and redirects to Learn; AppDrawerContent filters it
@@ -103,11 +117,10 @@ export default function AppLayout() {
 
   return (
     <Tabs
+      tabBar={(props) => <NotchTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.foreground,
-        tabBarInactiveTintColor: colors.mutedForeground,
-        tabBarLabelStyle: { fontWeight: fontWeights.semibold },
+        sceneStyle: { backgroundColor: colors.background },
       }}
     >
       {/* Answers `/` and redirects to Learn — not a tab of its own. */}
@@ -118,10 +131,13 @@ export default function AppLayout() {
       <Tabs.Screen name="roadmap" options={{ title: "Roadmap" }} />
       <Tabs.Screen name="feed" options={{ title: "Feed" }} />
       <Tabs.Screen name="profile" options={{ title: "Profile" }} />
-      <Tabs.Screen name="settings" options={{ href: null }} />
-      {/* Reachable only from inside Learn, not as its own tab — see the
-          NAV_ITEMS comment in apps/web/src/components/sidebar.tsx. */}
-      <Tabs.Screen name="question-bank" options={{ href: null }} />
+      {/* Settings (from Profile) and the Question Bank (from Learn) are real
+          tabs without a button: NotchTabBar leaves them out by name. Not
+          `href: null` -- since Expo Router 58 that hides the route itself,
+          and navigating to a hidden tab redirects to the first one, so both
+          screens were unreachable on a phone. */}
+      <Tabs.Screen name="settings" options={{ title: "Settings" }} />
+      <Tabs.Screen name="question-bank" options={{ title: "Question Bank" }} />
     </Tabs>
   );
 }

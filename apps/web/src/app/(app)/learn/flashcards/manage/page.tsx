@@ -7,6 +7,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Button } from "@/components/button";
+import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
@@ -27,7 +28,7 @@ function ImportResultSummary({
   dryRun: boolean;
 }) {
   return (
-    <div className="mt-md rounded-md border border-border p-md">
+    <div className="mt-md rounded-xl border border-border p-md shadow-dot">
       <p className="text-sm font-medium text-foreground">
         {dryRun ? "Dry run — nothing written yet" : "Import committed"}
       </p>
@@ -174,17 +175,17 @@ function ImportForm() {
         re-importing the same payload updates those cards rather than duplicating them.
       </p>
 
-      <label className="flex flex-col gap-xs text-sm text-foreground">
+      <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
         Upload a JSON file
         <input
           type="file"
           accept="application/json"
           onChange={handleFileChange}
-          className="w-full rounded-md border border-border px-sm py-sm text-sm file:mr-sm file:rounded-md file:border-0 file:bg-secondary file:px-sm file:py-xs file:text-sm file:font-medium file:text-foreground"
+          className="field file:mr-sm file:rounded-md file:border-0 file:bg-secondary file:px-sm file:py-xs file:text-sm file:font-medium file:text-foreground"
         />
       </label>
 
-      <label className="flex flex-col gap-xs text-sm text-foreground">
+      <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
         Import payload (JSON)
         <textarea
           value={jsonText}
@@ -193,7 +194,7 @@ function ImportForm() {
           placeholder={
             '{"flashcards": [{"external_id": "fc-1", "document_id": "...", "front_text": "...", "back_text": "..."}]}'
           }
-          className="w-full resize-y rounded-md border border-border px-sm py-xs font-mono text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="field resize-y font-mono text-xs!"
         />
       </label>
 
@@ -260,7 +261,7 @@ export default function ManageFlashcardsPage() {
 
   return (
     <PageMain>
-      <h1 className="text-2xl font-bold text-foreground">Import flashcards</h1>
+      <PageHeader kicker="Admin" title="Import flashcards" />
 
       {isAdmin ? (
         <ImportForm />

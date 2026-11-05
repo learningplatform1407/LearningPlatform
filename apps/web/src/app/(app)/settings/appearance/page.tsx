@@ -5,10 +5,18 @@ import type { MeResponse } from "@lp/contracts";
 import { useState } from "react";
 
 import { Button } from "@/components/button";
+import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
+import { SegmentedSwitch } from "@/components/segmented-switch";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 
-const THEMES = ["light", "dark", "system"] as const;
+const THEME_OPTIONS = [
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+  { value: "system", label: "System" },
+] as const;
+
+type ThemeChoice = (typeof THEME_OPTIONS)[number]["value"];
 
 export default function AppearanceSettingsPage() {
   const queryClient = useQueryClient();
@@ -17,12 +25,12 @@ export default function AppearanceSettingsPage() {
     queryFn: () => getBrowserApiClient().getMe(),
   });
 
-  const [theme, setTheme] = useState<(typeof THEMES)[number]>("system");
+  const [theme, setTheme] = useState<ThemeChoice>("system");
 
   // See the comment in profile/page.tsx — render-time state sync, not an effect.
   const [syncedFrom, setSyncedFrom] = useState<MeResponse | null>(null);
   if (data && data !== syncedFrom) {
-    setTheme(data.settings.theme as (typeof THEMES)[number]);
+    setTheme(data.settings.theme as ThemeChoice);
     setSyncedFrom(data);
   }
 
@@ -33,7 +41,7 @@ export default function AppearanceSettingsPage() {
 
   if (isPending) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p className="text-sm text-muted-foreground">Loading...</p>
       </PageMain>
     );
@@ -41,7 +49,7 @@ export default function AppearanceSettingsPage() {
 
   if (isError) {
     return (
-      <PageMain>
+      <PageMain width="reading">
         <p role="alert" className="text-sm text-danger">
           Failed to load settings: {(error as Error).message}
         </p>
@@ -50,8 +58,8 @@ export default function AppearanceSettingsPage() {
   }
 
   return (
-    <PageMain>
-      <h1 className="text-2xl font-bold text-foreground">Appearance</h1>
+    <PageMain width="reading">
+      <PageHeader kicker="Settings" title="Appearance" />
 
       <form
         className="mt-lg flex max-w-[32rem] flex-col gap-md"
@@ -60,26 +68,17 @@ export default function AppearanceSettingsPage() {
           saveMutation.mutate();
         }}
       >
-        <div className="flex flex-col gap-xs">
-          <span className="text-sm font-medium text-foreground">Theme</span>
-          <div className="inline-flex w-fit rounded-md border border-border p-xs">
-            {THEMES.map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => setTheme(option)}
-                className={`rounded px-md py-xs text-sm font-medium capitalize ${
-                  theme === option
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Dark mode isn&apos;t implemented yet — this just saves your preference for later.
+        <div className="flex flex-col gap-sm">
+          <span className="text-toc font-semibold text-foreground">Theme</span>
+          <SegmentedSwitch
+            label="Theme"
+            options={THEME_OPTIONS}
+            value={theme}
+            onChange={setTheme}
+            className="w-fit"
+          />
+          <p className="text-caption text-muted-foreground">
+            System follows your device. The moon button in the sidebar switches it too.
           </p>
         </div>
 
@@ -92,7 +91,9 @@ export default function AppearanceSettingsPage() {
           <Button type="submit" disabled={saveMutation.isPending}>
             {saveMutation.isPending ? "Saving..." : "Save"}
           </Button>
-          {saveMutation.isSuccess && <span className="text-sm text-success">Saved.</span>}
+          {saveMutation.isSuccess && (
+            <span className="text-sm font-semibold text-good">Saved.</span>
+          )}
         </div>
       </form>
     </PageMain>

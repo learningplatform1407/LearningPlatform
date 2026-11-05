@@ -1,11 +1,12 @@
 import type { QuestionBankItem, QuestionReveal, TopicFilter } from "@lp/api-client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { OUTCOME_MARKS, QuestionRevealPanel } from "@/lib/question-reveal";
-import { colors, fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { OUTCOME_MARKS, OptionChoice, QuestionRevealPanel } from "@/lib/question-reveal";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
 /**
  * Marks a question the reader has attempted before. Outcome-coloured rather
@@ -23,6 +24,8 @@ function ProgressMark({
   pointsPossible: number;
   attemptCount?: number;
 }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const mark = OUTCOME_MARKS[outcome];
   const tries = attemptCount !== undefined && attemptCount > 1 ? `, ${attemptCount} attempts` : "";
   return (
@@ -30,8 +33,8 @@ function ProgressMark({
       style={styles.progressMark}
       accessibilityLabel={`${mark.label}, ${pointsAwarded} of ${pointsPossible} points${tries}`}
     >
-      <Text style={{ color: mark.color }}>{mark.icon}</Text>
-      <Text style={[styles.progressMarkText, { color: mark.color }]}>
+      <Text style={{ color: colors[mark.tone] }}>{mark.icon}</Text>
+      <Text style={[styles.progressMarkText, { color: colors[mark.tone] }]}>
         {pointsAwarded}/{pointsPossible}
       </Text>
       {attemptCount !== undefined && attemptCount > 1 && (
@@ -41,16 +44,39 @@ function ProgressMark({
   );
 }
 
+/** Jump to the passages a checked question came from. */
+export type SeeInLesson = (questionId: string, quotes: string[]) => void;
+
 function QuestionCard({
   question,
   onAnswered,
+  onSeeInLesson,
 }: {
   question: QuestionBankItem;
   onAnswered: () => void;
+  onSeeInLesson?: SeeInLesson;
 }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
   const [selected, setSelected] = useState<string[]>([]);
   const [reveal, setReveal] = useState<QuestionReveal | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const queryClient = useQueryClient();
+  // Shown at once; the server is told in the background, and a failure
+  // puts the heart back.
+  const [favourite, setFavourite] = useState(question.is_favourite ?? false);
+  const favouriteMutation = useMutation({
+    mutationFn: (on: boolean) =>
+      on
+        ? getApiClient().favouriteQuestion(question.id)
+        : getApiClient().unfavouriteQuestion(question.id),
+    onError: (_error, on) => {
+      setFavourite(!on);
+      setError("Could not save that favourite.");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["question-bank"] }),
+  });
 
   const answer = useMutation({
     mutationFn: () => getApiClient().answerBankQuestion(question.id, selected),
@@ -90,27 +116,33 @@ function QuestionCard({
             attemptCount={question.progress?.attempt_count}
           />
         )}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Favourite"
+          accessibilityState={{ selected: favourite }}
+          hitSlop={8}
+          onPress={() => {
+            setError(null);
+            setFavourite(!favourite);
+            favouriteMutation.mutate(!favourite);
+          }}
+        >
+          <Text style={styles.heart}>{favourite ? "♥" : "♡"}</Text>
+        </Pressable>
       </View>
 
       <View style={styles.optionList}>
-        {question.options.map((option) => {
-          const checked = selected.includes(option.id);
-          return (
-            <Pressable
-              key={option.id}
-              style={styles.optionRow}
-              onPress={() => toggle(option.id)}
-              disabled={reveal !== null}
-              accessibilityRole={question.kind === "single" ? "radio" : "checkbox"}
-              accessibilityState={{ checked, disabled: reveal !== null }}
-            >
-              <Text style={styles.optionMark}>
-                {question.kind === "single" ? (checked ? "●" : "○") : checked ? "☑" : "☐"}
-              </Text>
-              <Text style={styles.optionText}>{option.text}</Text>
-            </Pressable>
-          );
-        })}
+        {question.options.map((option, index) => (
+          <OptionChoice
+            key={option.id}
+            kind={question.kind}
+            index={index}
+            text={option.text}
+            checked={selected.includes(option.id)}
+            disabled={reveal !== null}
+            onPress={() => toggle(option.id)}
+          />
+        ))}
       </View>
 
       <Text style={styles.meta}>
@@ -132,6 +164,16 @@ function QuestionCard({
       {reveal ? (
         <>
           <QuestionRevealPanel reveal={reveal} />
+          {/* Shown once checked, like the design: before that the passage
+              would give the answer away. */}
+          {onSeeInLesson && reveal.source_quotes && reveal.source_quotes.length > 0 && (
+            <Pressable
+              onPress={() => onSeeInLesson(question.id, reveal.source_quotes!)}
+              accessibilityRole="link"
+            >
+              <Text style={styles.seeInLesson}>↗ See in lesson</Text>
+            </Pressable>
+          )}
           <Pressable
             style={styles.button}
             onPress={() => {
@@ -173,20 +215,27 @@ export function QuestionBankList({
   filter,
   unassigned,
   emptyMessage = "No questions here yet.",
+  onSeeInLesson,
+  favourites,
 }: {
   filter?: TopicFilter;
   unassigned?: boolean;
   emptyMessage?: string;
+  /** Offered inside a lesson only, where there is a lesson to show. */
+  onSeeInLesson?: SeeInLesson;
+  /** Only the learner's favourites. */
+  favourites?: boolean;
 }) {
+  const styles = useStyles();
   const queryClient = useQueryClient();
   const questions = useQuery({
-    queryKey: ["question-bank", filter ?? null, unassigned ?? false],
-    queryFn: () => getApiClient().listQuestionBank({ ...filter, unassigned }),
+    queryKey: ["question-bank", filter ?? null, unassigned ?? false, favourites ?? false],
+    queryFn: () => getApiClient().listQuestionBank({ ...filter, unassigned, favourites }),
   });
   const total = useQuery({
     queryKey: ["question-bank-total", filter ?? null],
     queryFn: () => getApiClient().getQuizAvailableCount(filter),
-    enabled: !unassigned,
+    enabled: !unassigned && !favourites,
   });
 
   if (questions.isPending) {
@@ -213,6 +262,7 @@ export function QuestionBankList({
         <QuestionCard
           key={question.id}
           question={question}
+          onSeeInLesson={onSeeInLesson}
           onAnswered={() => {
             queryClient.invalidateQueries({ queryKey: ["question-bank-tree"] });
             queryClient.invalidateQueries({ queryKey: ["question-bank"] });
@@ -223,16 +273,28 @@ export function QuestionBankList({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
+  heart: {
+    fontSize: 20,
+    lineHeight: 22,
+    color: colors.again,
+  },
+  seeInLesson: {
+    fontSize: 14,
+    fontWeight: fontWeights.bold,
+    color: colors.accent,
+  },
   list: {
     gap: spacing.sm,
   },
   card: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderWidth: 0,
+    borderRadius: 0,
     padding: spacing.md,
     gap: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: 0,
   },
   cardHeader: {
     flexDirection: "row",
@@ -242,8 +304,9 @@ const styles = StyleSheet.create({
   },
   prompt: {
     flex: 1,
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: fontWeights.bold,
     color: colors.foreground,
   },
   progressMark: {
@@ -288,7 +351,7 @@ const styles = StyleSheet.create({
   tag: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 999,
     paddingVertical: 2,
     paddingHorizontal: spacing.xs,
   },
@@ -298,21 +361,20 @@ const styles = StyleSheet.create({
   },
   button: {
     alignSelf: "flex-start",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.primary,
   },
   buttonDisabled: {
     opacity: 0.5,
   },
   buttonText: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
-    color: colors.foreground,
+    fontSize: 15,
+    fontWeight: fontWeights.bold,
+    color: colors.primaryForeground,
   },
   reveal: {
     borderWidth: 1,
@@ -350,4 +412,4 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: colors.danger,
   },
-});
+}));

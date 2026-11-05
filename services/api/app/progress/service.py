@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.common.hierarchy import load_content_tree
 from app.documents.models import Document
 from app.progress.constants import LESSON_COMPLETION_THRESHOLD
-from app.progress.models import QuestionProgress
+from app.progress.models import QuestionFavourite, QuestionProgress
 from app.progress.schemas import (
     BankTreeBook,
     BankTreeChapter,
@@ -458,3 +458,30 @@ def grade_and_record(
             now=now,
         )
     return points, outcome
+
+
+def get_favourite_ids(
+    db: Session, user_id: uuid.UUID, question_ids: Sequence[uuid.UUID]
+) -> set[uuid.UUID]:
+    """Which of `question_ids` this user has favourited -- one query per page."""
+    if not question_ids:
+        return set()
+    return set(
+        db.scalars(
+            select(QuestionFavourite.question_id).where(
+                QuestionFavourite.user_id == user_id,
+                QuestionFavourite.question_id.in_(set(question_ids)),
+            )
+        )
+    )
+
+
+def set_favourite(db: Session, user_id: uuid.UUID, question_id: uuid.UUID, on: bool) -> None:
+    """Idempotent both ways: favouriting twice, or removing one that isn't
+    there, is not an error -- the heart just reflects the state asked for."""
+    existing = db.get(QuestionFavourite, (user_id, question_id))
+    if on and existing is None:
+        db.add(QuestionFavourite(user_id=user_id, question_id=question_id))
+    elif not on and existing is not None:
+        db.delete(existing)
+    db.commit()
