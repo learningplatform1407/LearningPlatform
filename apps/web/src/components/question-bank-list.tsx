@@ -99,7 +99,7 @@ function QuestionCard({
   return (
     <li
       id={questionElementId(question.id)}
-      className="scroll-mt-[96px] border-t border-border py-[20px]"
+      className="scroll-mt-[96px] border-t border-border py-[26px]"
     >
       <div className="mb-2.5 flex items-start justify-between gap-3">
         <p className="font-bold text-foreground">{question.prompt}</p>

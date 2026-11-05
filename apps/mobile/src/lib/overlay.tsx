@@ -44,9 +44,9 @@ export function Overlay({
     <View
       style={[
         overlayStyles.container,
-        side && overlayStyles.sidePanel,
+        side ? overlayStyles.sidePanel : overlayStyles.sheet,
         side && overlayStyles[side],
-        side && { width: panelWidth },
+        side && { width: panelWidth, flexBasis: panelWidth },
       ]}
     >
       <View style={overlayStyles.header}>
@@ -85,15 +85,18 @@ export function Overlay({
 
 export const useOverlayStyles = makeStyles((colors) => ({
   container: {
-    flex: 1,
     backgroundColor: colors.background,
   },
-  // Spelled out rather than `flex: 0`: react-native-web turns that into a
-  // flex-basis of 0%, which wins over the width and collapses the panel.
+  sheet: {
+    flex: 1,
+  },
+  // No `flex` on the side panel at all, and the basis given in pixels next
+  // to the width: Yoga resolves a `flex: 1` with `flexBasis: "auto"` to a
+  // basis of 0 on native, and react-native-web turns `flex: 0` into 0% --
+  // either way the panel collapses and only the dimmed page shows.
   sidePanel: {
     flexGrow: 0,
     flexShrink: 0,
-    flexBasis: "auto",
     height: "100%",
   },
   left: {

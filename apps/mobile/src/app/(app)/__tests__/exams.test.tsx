@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { Alert } from "react-native";
 
 import ExamsScreen from "../exams";
 
@@ -150,7 +151,7 @@ test("shows a running session with its first question and saves an answer", asyn
   fireEvent.press(screen.getByText("4"));
   fireEvent.press(screen.getByText("Save answer"));
 
-  expect(await screen.findByText("correct — 1/1 points")).toBeTruthy();
+  expect(await screen.findByText("Answers · correct — 1/1 points")).toBeTruthy();
   expect(mockAnswerQuizQuestion).toHaveBeenCalledWith("session-1", 0, ["o2"]);
 });
 
@@ -203,4 +204,90 @@ test("shows results for a finished attempt", async () => {
   fireEvent.press(await screen.findByText(/completed · 1\/1 points · 1 questions/));
 
   expect(await screen.findByText("1 / 1 points")).toBeTruthy();
+});
+
+function sessionWith(overrides: Record<string, unknown>) {
+  return {
+    id: "session-3",
+    status: "active",
+    reveal_mode: "on_finish",
+    question_count: 1,
+    duration_seconds: null,
+    remaining_seconds: null,
+    server_time: "2026-01-01T00:00:00Z",
+    points_awarded: null,
+    points_possible: null,
+    finished_at: null,
+    questions: [
+      {
+        position: 0,
+        prompt: "Pick one",
+        kind: "single",
+        scoring_scheme: "all_or_nothing",
+        points_possible: 1,
+        options: [{ id: "o1", text: "Only option" }],
+        selected_option_ids: null,
+        answered_at: null,
+        points_awarded: null,
+        outcome: null,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+test("an out-of-range question count disables Start", async () => {
+  mockGetCurrentQuizSession.mockResolvedValue(null);
+
+  renderScreen();
+
+  fireEvent.changeText(await screen.findByDisplayValue("10"), "0");
+
+  expect(await screen.findByText("Between 1 and 100 questions.")).toBeTruthy();
+  fireEvent.press(screen.getByText("Start quiz"));
+  expect(mockStartQuizSession).not.toHaveBeenCalled();
+});
+
+test("submitting with unanswered questions asks first", async () => {
+  const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+  mockGetCurrentQuizSession.mockResolvedValue(sessionWith({}));
+
+  renderScreen();
+
+  fireEvent.press(await screen.findByText("Submit quiz"));
+
+  expect(alert).toHaveBeenCalledWith(
+    "Submit the quiz?",
+    "1 question is not answered and will score 0.",
+    expect.any(Array),
+  );
+  expect(mockSubmitQuizSession).not.toHaveBeenCalled();
+  alert.mockRestore();
+});
+
+test("when the time runs out the results are shown", async () => {
+  jest.useFakeTimers();
+  mockGetCurrentQuizSession.mockResolvedValue(
+    sessionWith({ duration_seconds: 60, remaining_seconds: 1 }),
+  );
+  mockGetQuizResults.mockResolvedValue({
+    id: "session-3",
+    status: "expired",
+    reveal_mode: "on_finish",
+    points_awarded: 0,
+    points_possible: 1,
+    finished_at: "2026-01-01T00:01:00Z",
+    questions: [],
+  });
+
+  renderScreen();
+
+  expect(await screen.findByText("Pick one", { exact: false })).toBeTruthy();
+  act(() => {
+    jest.advanceTimersByTime(3000);
+  });
+
+  expect(await screen.findByText("0 / 1 points")).toBeTruthy();
+  expect(mockGetQuizResults).toHaveBeenCalledWith("session-3");
+  jest.useRealTimers();
 });
