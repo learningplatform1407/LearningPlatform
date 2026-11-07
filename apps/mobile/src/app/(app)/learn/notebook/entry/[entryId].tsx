@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { NotebookEntryEditor } from "@/lib/notebook-entry-editor";
-import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
+import { ScreenHeader } from "@/lib/ui/primitives";
 
 // entryId is either a real notebook entry id (editing) or one of these
 // sentinels (creating) — same idiom as the "uncategorized" sentinel already
@@ -45,9 +46,12 @@ export default function NotebookEntryScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>
-        {isNew ? "New note" : (entry?.type ?? "text") === "text" ? "Note" : "Drawing"}
-      </Text>
+      {/* As on the web notebook at phone width: back to the list, then the
+          page header, then the note itself. */}
+      <Pressable onPress={() => router.back()} accessibilityRole="button" hitSlop={8}>
+        <Text style={styles.back}>‹ All notes</Text>
+      </Pressable>
+      <ScreenHeader kicker="Learn" title="Notebook" />
 
       <NotebookEntryEditor
         entry={entry}
@@ -68,11 +72,10 @@ const useStyles = makeStyles((colors) => ({
     padding: spacing.xl,
     gap: spacing.md,
   },
-  title: {
-    fontSize: fontSizes["2xl"],
-    lineHeight: lineHeight(fontSizes["2xl"], "tight"),
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
+  back: {
+    fontSize: 14.5,
+    fontWeight: fontWeights.bold,
+    color: colors.accent,
   },
   error: {
     color: colors.danger,

@@ -469,6 +469,19 @@ export const lessonPageInkUpdateRequestSchema = z.object({
   highlights: z.array(pageHighlightSchema).optional(),
 });
 
+/** The words on a PDF page with their boxes ([x0, y0, x1, y1] in page
+ * units), for clients whose PDF view exposes no text (mobile). `line`
+ * groups the words of one printed line. */
+export const pageWordsResponseSchema = z.object({
+  words: z.array(
+    z.object({
+      text: z.string(),
+      box: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+      line: z.number().int(),
+    }),
+  ),
+});
+
 export const notebookEntryTypeSchema = z.enum(["text", "drawing"]);
 
 export const notebookEntryResponseSchema = z.object({

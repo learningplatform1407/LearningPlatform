@@ -46,11 +46,11 @@ strict = true
 plugins = ["pydantic.mypy"]
 
 # pymupdf is a compiled extension with no complete type stubs — relax just
-# the untyped-call check for the one module that talks to it directly,
+# the untyped-call check for the modules that talk to it directly,
 # rather than losing strict mode checking everywhere or scattering
 # type: ignore comments across every call into it.
 [[tool.mypy.overrides]]
-module = "app.documents.extraction"
+module = ["app.documents.extraction", "app.ink.service"]
 disallow_untyped_calls = false
 
 [tool.pytest.ini_options]

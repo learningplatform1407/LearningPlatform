@@ -9,6 +9,7 @@ const listChapters = vi.fn();
 const listSubChapters = vi.fn();
 const listDocuments = vi.fn();
 const getQuestionBankTree = vi.fn();
+const listBooks = vi.fn();
 
 let mockBookId = "b1";
 
@@ -18,6 +19,7 @@ vi.mock("@/lib/api-client.browser", () => ({
     listSubChapters,
     listDocuments,
     getQuestionBankTree,
+    listBooks,
   }),
 }));
 
@@ -114,12 +116,20 @@ beforeEach(() => {
   listSubChapters.mockReset().mockResolvedValue(SUB_CHAPTERS);
   listDocuments.mockReset().mockResolvedValue([]);
   getQuestionBankTree.mockReset().mockResolvedValue(EMPTY_TREE);
+  listBooks.mockReset().mockResolvedValue([{ id: "b1", title: "Orthopaedics", chapter_count: 1 }]);
 });
 
 // Creating/uploading content is an admin tool -- it now lives at
 // /admin/library/[bookId], not here, regardless of the viewer's role. See
 // admin/library/[bookId]/page.test.tsx.
 describe("BookPage (real book)", () => {
+  test("is headed by the book's name", async () => {
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Orthopaedics" })).toBeInTheDocument();
+    expect(screen.getByText("Library · Chapters")).toBeInTheDocument();
+  });
+
   test("renders chapters for the book, collapsed by default", async () => {
     renderPage();
 

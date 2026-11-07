@@ -48,6 +48,7 @@ import type {
   lessonPageInkResponseSchema,
   pageHighlightSchema,
   lessonPageInkUpdateRequestSchema,
+  pageWordsResponseSchema,
   meResponseSchema,
   notebookEntryCreateRequestSchema,
   notebookEntryResponseSchema,
@@ -94,6 +95,8 @@ export type UpsertLecturePdfRequest = z.infer<typeof upsertLecturePdfRequestSche
 export type PageHighlight = z.infer<typeof pageHighlightSchema>;
 export type LessonPageInk = z.infer<typeof lessonPageInkResponseSchema>;
 export type LessonPageInkUpdateRequest = z.infer<typeof lessonPageInkUpdateRequestSchema>;
+export type PageWords = z.infer<typeof pageWordsResponseSchema>;
+export type PageWord = PageWords["words"][number];
 export type Annotation = z.infer<typeof annotationResponseSchema>;
 export type AnnotationCreateRequest = z.infer<typeof annotationCreateRequestSchema>;
 export type AnnotationUpdateRequest = z.infer<typeof annotationUpdateRequestSchema>;

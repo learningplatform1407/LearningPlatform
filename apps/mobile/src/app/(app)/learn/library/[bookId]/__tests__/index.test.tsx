@@ -18,6 +18,7 @@ const mockReplaceLectureText = jest.fn();
 const mockUpsertLecturePdf = jest.fn();
 const mockUploadToSignedUrl = jest.fn();
 const mockGetQuestionBankTree = jest.fn();
+const mockListBooks = jest.fn();
 
 let mockBookId = "b1";
 
@@ -34,6 +35,7 @@ jest.mock("@/lib/api-client", () => ({
     replaceLectureText: mockReplaceLectureText,
     upsertLecturePdf: mockUpsertLecturePdf,
     getQuestionBankTree: mockGetQuestionBankTree,
+    listBooks: mockListBooks,
   }),
 }));
 
@@ -138,6 +140,9 @@ const EMPTY_TREE = {
 
 beforeEach(() => {
   mockBookId = "b1";
+  mockListBooks
+    .mockReset()
+    .mockResolvedValue([{ id: "b1", title: "Orthopaedics", chapter_count: 1 }]);
   (useLocalSearchParams as jest.Mock).mockImplementation(() => ({ bookId: mockBookId }));
   mockGetMe.mockReset();
   mockListChapters.mockReset().mockResolvedValue(CHAPTERS);
@@ -572,4 +577,13 @@ describe("BookScreen (Uncategorized)", () => {
     const [bar] = await findProgressBars();
     expect(bar!.props.accessibilityValue).toEqual({ min: 0, max: 100, now: 100 });
   });
+});
+
+test("the book's name heads the screen", async () => {
+  mockGetMe.mockResolvedValue(STUDENT_ME);
+
+  renderScreen();
+
+  expect(await screen.findByText("Orthopaedics")).toBeTruthy();
+  expect(screen.getByText("Library · Chapters")).toBeTruthy();
 });

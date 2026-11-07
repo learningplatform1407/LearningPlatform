@@ -767,6 +767,13 @@ export default function ExamsScreen() {
     queryClient.invalidateQueries({ queryKey: ["quiz-session-history"] });
   }
 
+  function attemptEnded(sessionId: string) {
+    setViewingResultsFor(sessionId);
+    refreshCurrent();
+    // The profile's exam numbers (and the streak) count finished attempts.
+    queryClient.invalidateQueries({ queryKey: ["me-stats"] });
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <ScreenHeader kicker="Practice" title="Exam Hub" />
@@ -788,10 +795,7 @@ export default function ExamsScreen() {
         <Runner
           key={current.data.id}
           session={current.data}
-          onFinished={() => {
-            setViewingResultsFor(current.data!.id);
-            refreshCurrent();
-          }}
+          onFinished={() => attemptEnded(current.data!.id)}
         />
       ) : (
         <>

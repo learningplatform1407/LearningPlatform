@@ -1,82 +1,145 @@
-import type { Stroke } from "@lp/contracts";
+import type { PageHighlight, PageWord, Stroke, StrokePoint } from "@lp/contracts";
 import { highlightIndex } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { type LayoutChangeEvent, Pressable, Text, View, useWindowDimensions } from "react-native";
+import { useRef, useState } from "react";
+import { Alert, type LayoutChangeEvent, Pressable, Text, View } from "react-native";
 import Pdf from "react-native-pdf";
 
 import { getApiClient } from "@/lib/api-client";
 import { DrawingCanvas } from "@/lib/notebook-drawing-canvas";
 import { supabase } from "@/lib/supabase";
-import { fontSizes, spacing } from "@/lib/theme";
+import { fontSizes, shadows } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
-// react-native-pdf downloads the whole file before rendering, so unlike
-// pdf.js on web this URL only has to outlive the initial fetch. Kept in step
-// with the web TTL anyway, and with staleTime below for the same reason:
-// react-query's default window-focus refetch mints a fresh token, which
-// changes `source.uri` and makes the native view re-download the whole PDF.
+// react-native-pdf downloads the file once (see `cache` below), so this URL
+// only has to outlive that first fetch. Kept in step with the web TTL, and
+// with staleTime below so a window-focus refetch doesn't mint a new URL.
 const SIGNED_URL_TTL_SECONDS = 8 * 60 * 60;
+
+const PAGE_GAP = 18;
+// A4 until the first page reports its real size.
+const DEFAULT_ASPECT = 1.414;
+// How far beyond the screen, above and below, pages are kept rendered.
+const RENDER_MARGIN_SCREENS = 1;
+// Normalised hit radius when erasing highlights, as for strokes.
+const ERASE_RADIUS = 0.02;
+
+/** A tool from the lesson's tool notch, as it applies to a PDF page. */
+export type PdfTool =
+  { type: "highlight"; color: string } | { type: "pen"; color: string } | { type: "eraser" } | null;
 
 interface PdfLessonViewProps {
   documentId: string;
   storagePath: string;
-  /** The server's own page count for this PDF, from `lecture_pdf`. Known
-   * before the file downloads, so the page label never has to read
-   * "page 1 of ?". */
+  /** The server's page count, known before the file downloads. */
   pageCount: number;
+  tool: PdfTool;
+  /** The part of the lesson's scroll content on screen, in the same
+   * coordinates as this view's own layout: pages near it are rendered. */
+  viewportTop: number;
+  viewportHeight: number;
+  /** Whether a highlight's first word has been tapped, for the screen's
+   * marking hint. */
+  onAnchorChange?: (set: boolean) => void;
+  /** A highlight or ink save failed. */
+  onSaveError?: () => void;
+}
+
+type WordAnchor = { page: number; index: number };
+
+/** One rectangle per run of words on a printed line, padded a little so the
+ * mark covers the whole glyphs rather than their tight boxes. */
+export function rectsForWords(words: PageWord[]): PageHighlight["rects"] {
+  const rects: PageHighlight["rects"] = [];
+  let line: number | null = null;
+  for (const { box, line: wordLine } of words) {
+    const last = rects[rects.length - 1];
+    if (last && wordLine === line) {
+      last[0] = Math.min(last[0], box[0]);
+      last[1] = Math.min(last[1], box[1]);
+      last[2] = Math.max(last[2], box[2]);
+      last[3] = Math.max(last[3], box[3]);
+    } else {
+      rects.push([...box]);
+    }
+    line = wordLine;
+  }
+  const pad = 0.002;
+  return rects.map(([x0, y0, x1, y1]) => [
+    Math.max(0, x0 - pad),
+    Math.max(0, y0 - pad),
+    Math.min(1, x1 + pad),
+    Math.min(1, y1 + pad),
+  ]);
+}
+
+/** The word under a point, or failing that the closest one on the same line
+ * height -- a tap between two words still means one of them. */
+export function wordAt(words: PageWord[], x: number, y: number): number | null {
+  let best: number | null = null;
+  let bestDistance = 0.05;
+  words.forEach(({ box: [x0, y0, x1, y1] }, index) => {
+    if (y < y0 - 0.01 || y > y1 + 0.01) return;
+    const distance = x < x0 ? x0 - x : x > x1 ? x - x1 : 0;
+    if (distance < bestDistance) {
+      best = index;
+      bestDistance = distance;
+    }
+  });
+  return best;
+}
+
+function hitsHighlight(highlight: PageHighlight, { x, y }: StrokePoint): boolean {
+  return highlight.rects.some(
+    ([x0, y0, x1, y1]) =>
+      x >= x0 - ERASE_RADIUS &&
+      x <= x1 + ERASE_RADIUS &&
+      y >= y0 - ERASE_RADIUS &&
+      y <= y1 + ERASE_RADIUS,
+  );
 }
 
 /**
- * react-native-pdf's public API exposes a page's current zoom scale
- * (`onScaleChanged`) but no pan-offset callback at all -- there's no way to
- * read how far a zoomed page has been panned, so a separately-rendered ink
- * overlay (react-native-svg, same as the standalone notebook canvas) can't
- * be kept aligned with the native view while the user pans around a zoomed
- * page. Confirmed from the installed package's index.d.ts, not assumed.
+ * The lecture PDF as a column of pages, like the web (design.md §8): each
+ * page a card of its own, scrolled with the lesson, marked with the same
+ * tools from the tool notch as the text view.
  *
- * Per the product decision this led to: read and draw are two distinct
- * modes, not simultaneous. In read mode, the native view owns pinch-zoom
- * and pan exactly like any PDF viewer, and ink is hidden/inert. "Draw"
- * locks the page to a fixed fit-width scale with panning disabled
- * (`scrollEnabled=false`), at which point the page's geometry is pinned and
- * known, so the ink overlay can be sized to match it exactly. "Done
- * drawing" hands pan/zoom back to the native view.
- *
- * The exact overlay size in the locked state is computed from
- * `onLoadComplete`'s reported page size (points) and the container's own
- * width, since react-native-pdf doesn't expose the native view's actual
- * rendered page bounds to JS -- this should be checked against a real
- * device/dev client (not Expo Go -- see the mobile section of the ink
- * annotation plan) before shipping, the same way the no-pan-offset finding
- * above was confirmed against the real package rather than assumed.
+ * Every page is its own single-page native view at a fixed fit-width size,
+ * not one zoomable viewer. react-native-pdf reports no pan offset, so an
+ * overlay could only be kept on a zoomed, panned page by guessing; a fixed
+ * page has known geometry, and its highlights and ink sit exactly on it.
+ * Only pages near the screen are rendered, and only after the first has
+ * loaded: that first load fills the download cache the rest then read from,
+ * instead of every page fetching the whole file at once.
  */
-export function PdfLessonView({ documentId, storagePath, pageCount }: PdfLessonViewProps) {
-  const colors = useThemeColors();
+export function PdfLessonView({
+  documentId,
+  storagePath,
+  pageCount,
+  tool,
+  viewportTop,
+  viewportHeight,
+  onAnchorChange,
+  onSaveError,
+}: PdfLessonViewProps) {
   const styles = useStyles();
-  const queryClient = useQueryClient();
-  const { height: windowHeight } = useWindowDimensions();
-  const [pageNumber, setPageNumber] = useState(1);
-  // Seeded from the server's count so the page label is correct immediately,
-  // then narrowed to the lower of the two once the native view reports its
-  // own: the ink endpoint refuses a write past the server's page_count, so
-  // navigating beyond it would offer a page that can be drawn on but not
-  // saved.
-  const [nativePages, setNativePages] = useState(0);
-  const numPages = nativePages > 0 ? Math.min(nativePages, pageCount) : pageCount;
-  const [pageAspect, setPageAspect] = useState(1.4); // height / width, refined by onLoadComplete
-  const [drawMode, setDrawMode] = useState(false);
-  const [renderFailed, setRenderFailed] = useState(false);
-  // Measured rather than derived from window width minus an assumed parent
-  // padding: the overlay has to match the native view's real rendered width
-  // exactly, and hardcoding the lesson screen's padding silently misaligns
-  // the ink the moment that padding changes (or the device rotates).
-  const [boxWidth, setBoxWidth] = useState(0);
+  const [width, setWidth] = useState(0);
+  const [top, setTop] = useState(0);
+  const [aspect, setAspect] = useState(DEFAULT_ASPECT);
+  const [firstLoaded, setFirstLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [anchor, setAnchor] = useState<WordAnchor | null>(null);
+  // A new tool starts a new range.
+  const [anchorTool, setAnchorTool] = useState(tool);
+  if (anchorTool !== tool) {
+    setAnchorTool(tool);
+    setAnchor(null);
+  }
 
   const {
     data: signedUrl,
-    isPending: urlPending,
-    isError: urlError,
+    isPending,
+    isError,
   } = useQuery({
     queryKey: ["lecture-pdf-url", storagePath],
     queryFn: async () => {
@@ -84,9 +147,8 @@ export function PdfLessonView({ documentId, storagePath, pageCount }: PdfLessonV
         .from("documents")
         .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
       if (error) {
-        // Same reasoning as onError below: the UI stays generic, but the
-        // Storage error (bucket policy, missing object, expired session) is
-        // the only thing that says which of those it was.
+        // The UI stays generic; the Storage error (bucket policy, missing
+        // object, expired session) is the only thing that says which.
         console.warn("[lecture-pdf] signed URL failed:", storagePath, error);
         throw error;
       }
@@ -96,212 +158,302 @@ export function PdfLessonView({ documentId, storagePath, pageCount }: PdfLessonV
     refetchOnWindowFocus: false,
   });
 
-  const { data: ink } = useQuery({
-    queryKey: ["page-ink", documentId, pageNumber],
-    queryFn: () => getApiClient().getPageInk(documentId, pageNumber),
-    enabled: drawMode,
-  });
-
-  const updateInkMutation = useMutation({
-    mutationFn: (strokes: Stroke[]) =>
-      getApiClient().updatePageInk(documentId, pageNumber, { strokes }),
-    onSuccess: (result) => queryClient.setQueryData(["page-ink", documentId, pageNumber], result),
-  });
-
-  const overlayWidth = boxWidth;
-  const overlayHeight = overlayWidth * pageAspect;
-
-  function handleBoxLayout(event: LayoutChangeEvent) {
-    setBoxWidth(event.nativeEvent.layout.width);
+  function handleLayout(event: LayoutChangeEvent) {
+    setWidth(event.nativeEvent.layout.width);
+    setTop(event.nativeEvent.layout.y);
   }
 
-  if (urlError || renderFailed) {
+  if (isError || failed) {
     return <Text style={styles.error}>Failed to load the lecture PDF.</Text>;
   }
-
-  if (urlPending || !signedUrl) {
+  if (isPending || !signedUrl) {
     return <Text style={styles.hint}>Loading PDF...</Text>;
   }
 
-  return (
-    <View>
-      <View style={styles.toolbar}>
-        <Pressable
-          onPress={() => setPageNumber((n) => Math.max(1, n - 1))}
-          disabled={pageNumber <= 1}
-          style={[styles.toolButton, pageNumber <= 1 && styles.toolButtonDisabled]}
-          accessibilityRole="button"
-        >
-          <Text style={styles.toolButtonText}>Previous</Text>
-        </Pressable>
-        <Text style={styles.pageLabel}>
-          Page {pageNumber} of {numPages}
-        </Text>
-        <Pressable
-          onPress={() => setPageNumber((n) => Math.min(numPages, n + 1))}
-          disabled={pageNumber >= numPages}
-          style={[styles.toolButton, pageNumber >= numPages && styles.toolButtonDisabled]}
-          accessibilityRole="button"
-        >
-          <Text style={styles.toolButtonText}>Next</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setDrawMode((d) => !d)}
-          style={[styles.toolButton, drawMode && styles.toolButtonActive]}
-          accessibilityRole="button"
-          accessibilityState={{ selected: drawMode }}
-        >
-          <Text style={styles.toolButtonText}>{drawMode ? "Done drawing" : "Draw"}</Text>
-        </Pressable>
-      </View>
+  // A storage path is never reused for different bytes (a replacement gets
+  // a new one), so it names the cached file safely.
+  const source = {
+    uri: signedUrl,
+    cache: true,
+    cacheFileName: `lecture-${storagePath.replace(/[^\w.-]/g, "_")}`,
+  };
+  const pageHeight = width * aspect;
+  const renderFrom = viewportTop - top - viewportHeight * RENDER_MARGIN_SCREENS;
+  const renderTo = viewportTop - top + viewportHeight * (1 + RENDER_MARGIN_SCREENS);
 
-      <View
-        onLayout={handleBoxLayout}
-        style={
-          drawMode ? styles.pdfBoxLocked : [styles.pdfBoxFree, { height: windowHeight * 0.65 }]
-        }
-      >
+  return (
+    <View onLayout={handleLayout} style={styles.column} testID="pdf-column">
+      {width > 0 &&
+        Array.from({ length: pageCount }, (_, index) => {
+          const page = index + 1;
+          const pageTop = index * (pageHeight + PAGE_GAP);
+          const near = pageTop + pageHeight >= renderFrom && pageTop <= renderTo;
+          return (
+            <PdfPage
+              key={page}
+              documentId={documentId}
+              page={page}
+              source={source}
+              width={width}
+              height={pageHeight}
+              rendered={near && (page === 1 || firstLoaded)}
+              tool={tool}
+              anchor={anchor?.page === page ? anchor.index : null}
+              onAnchor={(next) => {
+                setAnchor(next === null ? null : { page, index: next });
+                onAnchorChange?.(next !== null);
+              }}
+              onSaveError={onSaveError}
+              onLoaded={(size) => {
+                if (page !== 1) return;
+                setFirstLoaded(true);
+                if (size.width > 0) setAspect(size.height / size.width);
+              }}
+              onFailed={() => setFailed(true)}
+            />
+          );
+        })}
+    </View>
+  );
+}
+
+function PdfPage({
+  documentId,
+  page,
+  source,
+  width,
+  height,
+  rendered,
+  tool,
+  anchor,
+  onAnchor,
+  onLoaded,
+  onFailed,
+  onSaveError,
+}: {
+  documentId: string;
+  page: number;
+  source: { uri: string; cache: boolean; cacheFileName: string };
+  width: number;
+  height: number;
+  rendered: boolean;
+  tool: PdfTool;
+  anchor: number | null;
+  onAnchor: (index: number | null) => void;
+  onLoaded: (size: { width: number; height: number }) => void;
+  onFailed: () => void;
+  onSaveError?: () => void;
+}) {
+  const styles = useStyles();
+  const colors = useThemeColors();
+  const queryClient = useQueryClient();
+  const inkKey = ["page-ink", documentId, page];
+
+  const { data: ink } = useQuery({
+    queryKey: inkKey,
+    queryFn: () => getApiClient().getPageInk(documentId, page),
+    enabled: rendered,
+  });
+  const marking = tool?.type === "highlight";
+  const { data: words } = useQuery({
+    queryKey: ["page-words", documentId, page],
+    queryFn: () => getApiClient().getPageWords(documentId, page),
+    enabled: rendered && marking,
+    staleTime: Infinity,
+  });
+
+  const save = useMutation({
+    mutationFn: (body: { strokes: Stroke[]; highlights?: PageHighlight[] }) =>
+      getApiClient().updatePageInk(documentId, page, body),
+    onMutate: (body) => {
+      // Shown at once; the server's answer replaces it.
+      queryClient.setQueryData(inkKey, {
+        strokes: body.strokes,
+        highlights: body.highlights ?? ink?.highlights ?? [],
+      });
+    },
+    onSuccess: (result) => queryClient.setQueryData(inkKey, result),
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: inkKey });
+      onSaveError?.();
+    },
+  });
+
+  const strokes = ink?.strokes ?? [];
+  const highlights = ink?.highlights ?? [];
+  // One erase gesture's results, saved together when the finger lifts.
+  const [erasedHighlights, setErasedHighlights] = useState<PageHighlight[] | null>(null);
+  const pendingStrokes = useRef<Stroke[] | null>(null);
+
+  function finishGesture() {
+    const nextStrokes = pendingStrokes.current;
+    const nextHighlights =
+      erasedHighlights && erasedHighlights.length !== highlights.length
+        ? erasedHighlights
+        : undefined;
+    pendingStrokes.current = null;
+    setErasedHighlights(null);
+    if (nextStrokes || nextHighlights) {
+      save.mutate({ strokes: nextStrokes ?? strokes, highlights: nextHighlights });
+    }
+  }
+
+  function tapToMark(x: number, y: number) {
+    if (tool?.type !== "highlight" || !words) return;
+    if (words.words.length === 0) {
+      Alert.alert("Highlight", "This page has no text to highlight — it may be a scan.");
+      return;
+    }
+    const index = wordAt(words.words, x / width, y / height);
+    if (index === null) return;
+    if (anchor === null) {
+      onAnchor(index);
+      return;
+    }
+    onAnchor(null);
+    const run = words.words.slice(Math.min(anchor, index), Math.max(anchor, index) + 1);
+    save.mutate({
+      strokes,
+      highlights: [...highlights, { color: tool.color, rects: rectsForWords(run) }],
+    });
+  }
+
+  const shownHighlights = erasedHighlights ?? highlights;
+  const anchorBox = anchor !== null ? words?.words[anchor]?.box : undefined;
+
+  return (
+    <View
+      style={[styles.page, { width, height }]}
+      accessibilityLabel={`Page ${page}`}
+      testID={`pdf-page-${page}`}
+    >
+      {rendered ? (
         <Pdf
-          source={{ uri: signedUrl }}
-          page={pageNumber}
-          scale={drawMode ? 1 : undefined}
-          minScale={1}
-          maxScale={3}
+          source={source}
+          page={page}
+          singlePage
           fitPolicy={0}
-          // react-native-pdf defaults `trustAllCerts` to true, which routes
-          // the download through react-native-blob-util's
-          // getUnsafeOkHttpClient -- an all-trusting TrustManager plus a
-          // hostnameVerifier that returns true for every host. On Android
-          // that path throws outright ("Use of own trust manager but none
-          // defined") because the shared trust manager is never set, so the
-          // PDF simply never loads. Turning it off is the fix *and* the
-          // correct posture: this is a signed HTTPS URL to Supabase and its
-          // certificate should be verified normally.
+          spacing={0}
+          scrollEnabled={false}
+          enableDoubleTapZoom={false}
+          // react-native-pdf defaults this to true, which on Android routes
+          // the download through an all-trusting client that throws ("Use of
+          // own trust manager but none defined") and never loads. Off is the
+          // fix and the right posture for a signed HTTPS URL.
           trustAllCerts={false}
-          scrollEnabled={!drawMode}
-          enableDoubleTapZoom={!drawMode}
-          horizontal={false}
-          // Free mode is bounded by pdfBoxFree's fixed height, so flex:1
-          // fills it; locked mode's container has no height of its own
-          // (see pdfBoxLocked), so the Pdf view needs an explicit height
-          // matching the ink overlay it's pinned under instead.
-          style={drawMode ? [styles.pdf, { height: overlayHeight }] : [styles.pdf, styles.pdfFree]}
-          onLoadComplete={(pages, _path, size) => {
-            setNativePages(pages);
-            if (size.width > 0) setPageAspect(size.height / size.width);
-          }}
-          onPageChanged={(page) => setPageNumber(page)}
-          // An empty handler here meant every native render failure showed
-          // an empty box and no message -- urlError only covers minting the
-          // signed URL, not anything that happens after. The learner still
-          // gets a generic message, but the reason is logged rather than
-          // discarded: it comes from the native view and is the only
-          // description of what actually went wrong.
+          style={[styles.pdf, { width, height }]}
+          onLoadComplete={(_pages, _path, size) => onLoaded(size)}
           onError={(error) => {
-            console.warn("[lecture-pdf] native render failed:", error);
-            setRenderFailed(true);
+            // Logged, since the native view's message is the only account
+            // of what went wrong; the learner sees the generic one.
+            console.warn("[lecture-pdf] native render failed:", page, error);
+            onFailed();
           }}
         />
-        {drawMode && overlayWidth > 0 && (
-          <View
-            style={[styles.inkOverlay, { width: overlayWidth, height: overlayHeight }]}
-            pointerEvents="box-none"
-          >
-            {/* Word highlights made on the web (design.md §8), shown under the
-                ink. Read-only here: react-native-pdf exposes no text to mark,
-                and the PUT below sends strokes only, which leaves them
-                untouched on the server. */}
-            <View style={styles.highlightLayer} pointerEvents="none">
-              {(ink?.highlights ?? []).flatMap((highlight, h) =>
-                highlight.rects.map(([x0, y0, x1, y1], r) => (
-                  <View
-                    key={`${h}-${r}`}
-                    style={{
-                      position: "absolute",
-                      left: x0 * overlayWidth,
-                      top: y0 * overlayHeight,
-                      width: (x1 - x0) * overlayWidth,
-                      height: (y1 - y0) * overlayHeight,
-                      backgroundColor: colors[`highlight${highlightIndex(highlight.color)}`],
-                    }}
-                  />
-                )),
-              )}
-            </View>
-            <DrawingCanvas
-              strokes={ink?.strokes ?? []}
-              onChange={(strokes) => updateInkMutation.mutate(strokes)}
-              width={overlayWidth}
-              height={overlayHeight}
-              pageKey={pageNumber}
+      ) : (
+        <Text style={styles.placeholder}>Page {page}</Text>
+      )}
+
+      <View style={styles.layer} pointerEvents="none">
+        {shownHighlights.flatMap((highlight, h) =>
+          highlight.rects.map(([x0, y0, x1, y1], r) => (
+            <View
+              key={`${h}-${r}`}
+              testID="pdf-highlight"
+              style={{
+                position: "absolute",
+                left: x0 * width,
+                top: y0 * height,
+                width: (x1 - x0) * width,
+                height: (y1 - y0) * height,
+                backgroundColor: colors[`highlight${highlightIndex(highlight.color)}`],
+              }}
             />
-          </View>
+          )),
+        )}
+        {anchorBox && (
+          <View
+            style={[
+              styles.anchor,
+              {
+                left: anchorBox[0] * width - 2,
+                top: anchorBox[1] * height - 2,
+                width: (anchorBox[2] - anchorBox[0]) * width + 4,
+                height: (anchorBox[3] - anchorBox[1]) * height + 4,
+              },
+            ]}
+          />
         )}
       </View>
+
+      {/* Ink on top: read-only until the pen or eraser is picked up. */}
+      <View
+        style={styles.layer}
+        pointerEvents={tool?.type === "pen" || tool?.type === "eraser" ? "auto" : "none"}
+      >
+        <DrawingCanvas
+          strokes={strokes}
+          width={width}
+          height={height}
+          pageKey={page}
+          readOnly={!(tool?.type === "pen" || tool?.type === "eraser")}
+          tool={tool?.type === "eraser" ? "eraser" : "pen"}
+          penColor={tool?.type === "pen" ? tool.color : undefined}
+          onChange={(next) => {
+            pendingStrokes.current = next;
+          }}
+          onErasePoint={(point) =>
+            setErasedHighlights((current) =>
+              (current ?? highlights).filter((highlight) => !hitsHighlight(highlight, point)),
+            )
+          }
+          onGestureEnd={finishGesture}
+        />
+      </View>
+
+      {marking && (
+        <Pressable
+          style={styles.layer}
+          onPress={(event) => tapToMark(event.nativeEvent.locationX, event.nativeEvent.locationY)}
+          accessibilityRole="button"
+          accessibilityLabel={`Mark words on page ${page}`}
+        />
+      )}
     </View>
   );
 }
 
 const useStyles = makeStyles((colors) => ({
-  highlightLayer: {
+  column: {
+    gap: PAGE_GAP,
+  },
+  page: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 4,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    ...shadows.card,
+  },
+  pdf: {
+    backgroundColor: "#FFFFFF",
+  },
+  placeholder: {
+    fontSize: fontSizes.sm,
+    color: "#8A8D93",
+  },
+  layer: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
   },
-  toolbar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    flexWrap: "wrap",
-    marginBottom: spacing.sm,
-  },
-  toolButton: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-  },
-  toolButtonActive: {
-    backgroundColor: colors.border,
-  },
-  toolButtonDisabled: {
-    opacity: 0.5,
-  },
-  toolButtonText: {
-    fontSize: fontSizes.xs,
-    color: colors.foreground,
-  },
-  pageLabel: {
-    fontSize: fontSizes.xs,
-    color: colors.mutedForeground,
-  },
-  // Height is applied at the call site from useWindowDimensions, so it
-  // tracks rotation instead of freezing at the value read on first import.
-  pdfBoxFree: {
-    width: "100%",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    overflow: "hidden",
-  },
-  // Locked (drawing) mode has no fixed height of its own -- it's sized by
-  // its children, the fit-width Pdf view and the ink overlay matched to it.
-  pdfBoxLocked: {
-    width: "100%",
-  },
-  pdf: {
-    width: "100%",
-  },
-  pdfFree: {
-    flex: 1,
-  },
-  inkOverlay: {
+  anchor: {
     position: "absolute",
-    top: 0,
-    left: 0,
+    borderWidth: 2,
+    borderColor: colors.accent,
+    borderRadius: 3,
   },
   hint: {
     fontSize: fontSizes.sm,

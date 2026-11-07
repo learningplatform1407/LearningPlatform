@@ -32,25 +32,29 @@ export function NotebookEntryList({
   return (
     <View style={styles.list}>
       {entries.length === 0 && <Text style={styles.hint}>No notes yet.</Text>}
-      {entries.map((entry) => (
-        <Pressable
-          key={entry.id}
-          style={[styles.row, selectedEntryId === entry.id && styles.rowActive]}
-          onPress={() => onSelect(entry.id)}
-          accessibilityRole="button"
-        >
-          {entry.type === "text" ? (
-            <Text style={styles.rowPreview} numberOfLines={2}>
-              {firstLine(entry.content ?? "")}
-            </Text>
-          ) : (
-            <View style={styles.drawingRow}>
-              <Text style={styles.rowTitle}>Drawing</Text>
-              <DrawingThumbnail strokes={entry.strokes ?? []} />
-            </View>
-          )}
-        </Pressable>
-      ))}
+      {entries.map((entry) => {
+        const active = selectedEntryId === entry.id;
+        return (
+          <Pressable
+            key={entry.id}
+            style={({ pressed }) => [styles.row, (active || pressed) && styles.rowActive]}
+            onPress={() => onSelect(entry.id)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+          >
+            {entry.type === "text" ? (
+              <Text style={[styles.rowTitle, active && styles.rowTitleActive]} numberOfLines={1}>
+                {firstLine(entry.content ?? "")}
+              </Text>
+            ) : (
+              <View style={styles.drawingRow}>
+                <Text style={[styles.rowTitle, active && styles.rowTitleActive]}>Drawing</Text>
+                <DrawingThumbnail strokes={entry.strokes ?? []} />
+              </View>
+            )}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -71,6 +75,31 @@ export function NewEntryButtons({
       <Pressable style={styles.newButton} onPress={onNewDrawing} accessibilityRole="button">
         <Text style={styles.newButtonText}>+ Drawing</Text>
       </Pressable>
+    </View>
+  );
+}
+
+// One rule per line of text, as in the web notebook and the lesson's
+// notebook panel (design.md §7): the body's line height, so the writing sits
+// on the rules.
+const LINE = 28;
+
+/** Ruled lines drawn behind whatever it wraps, as many as its height holds.
+ * React Native has no repeating background, so the rules are views. */
+function LinedPaper({ children }: { children: React.ReactNode }) {
+  const styles = useStyles();
+  const [height, setHeight] = useState(0);
+  const rules = Math.max(0, Math.floor(height / LINE));
+  return (
+    <View style={styles.paper} onLayout={(event) => setHeight(event.nativeEvent.layout.height)}>
+      {Array.from({ length: rules }, (_, index) => (
+        <View
+          key={index}
+          pointerEvents="none"
+          style={[styles.rule, { top: (index + 1) * LINE - 1 }]}
+        />
+      ))}
+      {children}
     </View>
   );
 }
@@ -165,6 +194,7 @@ export function NotebookEntryEditor({
       {resolvedType === "text" ? (
         <View style={styles.textBox}>
           <TextInput
+            accessibilityLabel="Title"
             style={styles.titleInput}
             value={titleValue}
             onChangeText={setTitle}
@@ -174,15 +204,19 @@ export function NotebookEntryEditor({
             onSubmitEditing={() => bodyInputRef.current?.focus()}
             blurOnSubmit={false}
           />
-          <TextInput
-            ref={bodyInputRef}
-            style={styles.bodyInput}
-            value={bodyValue}
-            onChangeText={setBody}
-            placeholder="Write a new note..."
-            placeholderTextColor={colors.mutedForeground}
-            multiline
-          />
+          <LinedPaper>
+            <TextInput
+              ref={bodyInputRef}
+              accessibilityLabel="Note"
+              style={styles.bodyInput}
+              value={bodyValue}
+              onChangeText={setBody}
+              placeholder="Write a new note..."
+              placeholderTextColor={colors.mutedForeground}
+              multiline
+              scrollEnabled={false}
+            />
+          </LinedPaper>
         </View>
       ) : (
         <DrawingCanvas
@@ -209,12 +243,12 @@ export function NotebookEntryEditor({
         </Pressable>
         {!isNew && (
           <Pressable
-            style={styles.button}
+            style={[styles.button, styles.buttonDanger]}
             onPress={() => deleteMutation.mutate()}
             disabled={deleteMutation.isPending}
             accessibilityRole="button"
           >
-            <Text style={styles.deleteText}>Delete</Text>
+            <Text style={styles.buttonDangerText}>Delete</Text>
           </Pressable>
         )}
         {saved && <Text style={styles.hint}>Saved.</Text>}
@@ -225,74 +259,82 @@ export function NotebookEntryEditor({
 
 const useStyles = makeStyles((colors) => ({
   list: {
-    gap: spacing.xs,
+    gap: 2,
   },
+  // The lesson contents list's rows (design.md §6), as on the web notebook.
   row: {
-    borderWidth: 0,
-    borderRadius: 0,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: 0,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
     gap: spacing.xs,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
   },
   rowActive: {
     backgroundColor: colors.muted,
-    borderColor: colors.primary,
   },
   rowTitle: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
+    fontSize: 14.5,
+    lineHeight: 19,
+    fontWeight: fontWeights.semibold,
     color: colors.foreground,
   },
-  rowPreview: {
-    fontSize: fontSizes.xs,
-    color: colors.mutedForeground,
+  rowTitleActive: {
+    fontWeight: fontWeights.extrabold,
   },
   drawingRow: {
     gap: spacing.xs,
   },
   newRow: {
     flexDirection: "row",
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   newButton: {
     flex: 1,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 999,
-    paddingVertical: spacing.sm,
+    backgroundColor: colors.background,
+    paddingVertical: 8,
     alignItems: "center",
   },
   newButtonText: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
+    fontSize: 13,
+    fontWeight: fontWeights.bold,
     color: colors.foreground,
   },
   editor: {
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   textBox: {
-    flex: 1,
-    minHeight: 160,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    minHeight: 320,
   },
   titleInput: {
-    paddingTop: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    fontSize: fontSizes.base,
-    fontWeight: fontWeights.semibold,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    paddingBottom: spacing.xs,
+    fontSize: 26,
+    lineHeight: 32,
+    fontWeight: fontWeights.extrabold,
     color: colors.foreground,
+  },
+  paper: {
+    flex: 1,
+    minHeight: LINE * 10,
+  },
+  rule: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: colors.border,
   },
   bodyInput: {
     flex: 1,
-    paddingBottom: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    fontSize: fontSizes.sm,
+    padding: 0,
+    fontSize: 17,
+    lineHeight: LINE,
     color: colors.foreground,
     textAlignVertical: "top",
+    includeFontPadding: false,
   },
   actions: {
     flexDirection: "row",
@@ -301,30 +343,32 @@ const useStyles = makeStyles((colors) => ({
   },
   button: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: "transparent",
     borderRadius: 10,
-    paddingVertical: spacing.xs,
+    paddingVertical: 9,
     paddingHorizontal: spacing.md,
+    minWidth: 96,
     alignItems: "center",
     justifyContent: "center",
   },
   buttonPrimary: {
     backgroundColor: colors.primary,
-    borderColor: colors.primary,
-    borderRadius: 10,
   },
   buttonPrimaryText: {
     color: colors.primaryForeground,
-    fontWeight: fontWeights.medium,
+    fontWeight: fontWeights.bold,
+    fontSize: fontSizes.sm,
+  },
+  buttonDanger: {
+    backgroundColor: colors.danger,
+  },
+  buttonDangerText: {
+    color: colors.dangerForeground,
+    fontWeight: fontWeights.bold,
     fontSize: fontSizes.sm,
   },
   buttonDisabled: {
     opacity: 0.5,
-  },
-  deleteText: {
-    color: colors.danger,
-    fontWeight: fontWeights.medium,
-    fontSize: fontSizes.sm,
   },
   hint: {
     fontSize: fontSizes.sm,

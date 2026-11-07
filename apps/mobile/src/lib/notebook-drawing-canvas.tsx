@@ -86,6 +86,16 @@ interface DrawingCanvasProps {
    * survive. Without it, pressing Undo after a page turn pushed the
    * *previous* page's strokes onto the page now showing. */
   pageKey?: string | number;
+  /** Set by a parent that owns the tools (the lesson's tool notch on a PDF
+   * page): pen or eraser and the pen colour come from it, and the canvas's
+   * own toolbar is hidden. */
+  tool?: "pen" | "eraser";
+  penColor?: string;
+  /** Each point the eraser passes over, for a parent that erases more than
+   * strokes there (a PDF page's highlights). */
+  onErasePoint?: (point: StrokePoint) => void;
+  /** After a finished draw or erase gesture, once `onChange` has run. */
+  onGestureEnd?: () => void;
 }
 
 export function DrawingCanvas({
@@ -95,13 +105,20 @@ export function DrawingCanvas({
   width,
   height,
   pageKey,
+  tool: toolProp,
+  penColor,
+  onErasePoint,
+  onGestureEnd,
 }: DrawingCanvasProps) {
   const styles = useStyles();
   const explicitSize = width !== undefined && height !== undefined;
   const [autoSize, setAutoSize] = useState({ width: 0, height: 0 });
   const size = explicitSize ? { width, height } : autoSize;
-  const [color, setColor] = useState<string>(NOTEBOOK_PEN_COLORS[0]!.hex);
-  const [tool, setTool] = useState<"pen" | "eraser">("pen");
+  const [ownColor, setColor] = useState<string>(NOTEBOOK_PEN_COLORS[0]!.hex);
+  const [ownTool, setTool] = useState<"pen" | "eraser">("pen");
+  const controlled = toolProp !== undefined;
+  const tool = toolProp ?? ownTool;
+  const color = penColor ?? ownColor;
   const [drawingStroke, setDrawingStroke] = useState<StrokePoint[] | null>(null);
   const [erasingPreview, setErasingPreview] = useState<Stroke[] | null>(null);
   const [eraseBase, setEraseBase] = useState<Stroke[] | null>(null);
@@ -162,19 +179,24 @@ export function DrawingCanvas({
   // The in-progress stroke lives in `drawingStroke` state rather than a ref —
   // every move already triggers a re-render for live feedback, so state adds
   // no extra re-renders here.
+  // Returns true: on Android that tells the native side to keep a parent
+  // ScrollView from taking the drag over as a scroll halfway through a line.
   function handleResponderGrant(event: GestureResponderEvent) {
     const point = pointFromEvent(event);
     if (tool === "eraser") {
+      onErasePoint?.(point);
       setEraseBase(strokes);
       setErasingPreview(eraseStrokesAtPoint(strokes, point, ERASER_RADIUS));
-      return;
+      return true;
     }
     setDrawingStroke([point]);
+    return true;
   }
 
   function handleResponderMove(event: GestureResponderEvent) {
     const point = pointFromEvent(event);
     if (tool === "eraser") {
+      onErasePoint?.(point);
       setErasingPreview((prev) => (prev ? eraseStrokesAtPoint(prev, point, ERASER_RADIUS) : prev));
       return;
     }
@@ -190,25 +212,29 @@ export function DrawingCanvas({
       if (base && result && JSON.stringify(base) !== JSON.stringify(result)) {
         commitChange(base, result);
       }
+      onGestureEnd?.();
       return;
     }
     const points = drawingStroke ?? [];
     setDrawingStroke(null);
-    if (points.length < 2) return;
-    commitChange(strokes, [...strokes, { color, width: STROKE_WIDTH, points }]);
+    if (points.length >= 2) {
+      commitChange(strokes, [...strokes, { color, width: STROKE_WIDTH, points }]);
+    }
+    onGestureEnd?.();
   }
 
   function handleResponderTerminate() {
     setDrawingStroke(null);
     setEraseBase(null);
     setErasingPreview(null);
+    onGestureEnd?.();
   }
 
   const displayStrokes = erasingPreview ?? strokes;
 
   return (
     <View style={explicitSize ? styles.containerOverlay : styles.container}>
-      {!readOnly && (
+      {!readOnly && !controlled && (
         <View
           style={[styles.toolbar, explicitSize && styles.toolbarOverlay]}
           accessibilityRole="toolbar"
@@ -275,6 +301,7 @@ export function DrawingCanvas({
               onResponderMove: handleResponderMove,
               onResponderRelease: handleResponderRelease,
               onResponderTerminate: handleResponderTerminate,
+              onResponderTerminationRequest: () => false,
             })}
       >
         {size.width > 0 && (

@@ -716,6 +716,13 @@ export function BookChaptersPage({
     queryFn: () => getBrowserApiClient().getQuestionBankTree(),
   });
   const bookNode = tree.data?.books.find((book) => book.id === bookId);
+  // The book's own name as the page title; the list it came from is usually
+  // cached already, so it's there on the first frame.
+  const books = useQuery({
+    queryKey: ["books"],
+    queryFn: () => getBrowserApiClient().listBooks(),
+  });
+  const bookTitle = books.data?.find((book) => book.id === bookId)?.title;
   const chapterProgress = new Map<string, BankTreeChapter>(
     bookNode?.chapters.map((chapter) => [chapter.id, chapter]),
   );
@@ -756,7 +763,7 @@ export function BookChaptersPage({
 
   return (
     <PageMain width="reading">
-      <PageHeader kicker="Library" title="Chapters" />
+      <PageHeader kicker="Library · Chapters" title={bookTitle ?? "Chapters"} />
       {bookNode && (
         <div className="mt-sm max-w-[24rem]">
           <ProgressBar
