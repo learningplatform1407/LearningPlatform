@@ -733,6 +733,10 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
     queryFn: () => getApiClient().getQuestionBankTree(),
   });
   const bookNode = tree.data?.books.find((book) => book.id === bookId);
+  // The book's own name as the screen title; the library list it was opened
+  // from is cached, so it's there on the first frame.
+  const books = useQuery({ queryKey: ["books"], queryFn: () => getApiClient().listBooks() });
+  const bookTitle = books.data?.find((book) => book.id === bookId)?.title;
   const chapterProgress = new Map<string, BankTreeChapter>(
     bookNode?.chapters.map((chapter) => [chapter.id, chapter]),
   );
@@ -781,7 +785,7 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
       keyExtractor={(chapter) => chapter.id}
       ListHeaderComponent={
         <>
-          <ScreenHeader kicker="Library" title="Chapters" />
+          <ScreenHeader kicker="Library · Chapters" title={bookTitle ?? "Chapters"} />
           {bookNode && (
             <View style={styles.overallProgress}>
               <ProgressBar

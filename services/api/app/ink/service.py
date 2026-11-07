@@ -1,13 +1,16 @@
 import uuid
+from functools import lru_cache
 
+import pymupdf
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.schemas import AuthenticatedUser
 from app.common.errors import ApiError
 from app.documents.models import LecturePdf
+from app.documents.storage import download_object
 from app.ink.models import LessonPageInk
-from app.ink.schemas import PageHighlight
+from app.ink.schemas import PageHighlight, PageWord
 from app.notebook.schemas import Stroke
 from app.users.service import get_or_create_profile
 
@@ -90,3 +93,44 @@ def upsert_ink(
         ink.highlights = [h.model_dump(mode="json") for h in highlights]
     db.commit()
     return strokes, [PageHighlight.model_validate(h) for h in ink.highlights]
+
+
+# A lecture PDF never changes under its storage path (a replacement is
+# uploaded under a new one), so its bytes can be kept between the page-by-page
+# word requests of one reading session instead of downloaded for each page.
+@lru_cache(maxsize=4)
+def _lecture_pdf_bytes(storage_path: str) -> bytes:
+    return download_object(storage_path)
+
+
+def get_page_words(db: Session, document_id: uuid.UUID, page_number: int) -> list[PageWord]:
+    """The words on one page of the lesson's lecture PDF, with boxes in page
+    units -- what the mobile app marks highlights against, since its native
+    PDF view exposes no text (the web reads the same from pdf.js). A page
+    past the end is empty, for the same reason a read of its ink is."""
+    lecture_pdf = _get_lecture_pdf(db, document_id)
+    if page_number > lecture_pdf.page_count:
+        return []
+    with pymupdf.open(stream=_lecture_pdf_bytes(lecture_pdf.storage_path), filetype="pdf") as doc:
+        if page_number > doc.page_count:
+            return []
+        page = doc[page_number - 1]
+        # Word boxes come in the unrotated page's space; the rotation matrix
+        # turns them into the page as displayed, which `page.rect` measures.
+        width, height = page.rect.width, page.rect.height
+        words: list[PageWord] = []
+        for x0, y0, x1, y1, text, block, line, _ in page.get_text("words", sort=True):
+            box = pymupdf.Rect(x0, y0, x1, y1) * page.rotation_matrix
+            words.append(
+                PageWord(
+                    text=text,
+                    box=(
+                        min(max(box.x0 / width, 0.0), 1.0),
+                        min(max(box.y0 / height, 0.0), 1.0),
+                        min(max(box.x1 / width, 0.0), 1.0),
+                        min(max(box.y1 / height, 0.0), 1.0),
+                    ),
+                    line=block * 1000 + line,
+                )
+            )
+        return words

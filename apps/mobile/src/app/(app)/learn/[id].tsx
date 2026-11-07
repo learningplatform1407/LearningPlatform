@@ -56,6 +56,7 @@ import {
   BulbOffIcon,
   CardsIcon,
   EraserIcon,
+  PenIcon,
   SparkleIcon,
 } from "@/lib/ui/icons";
 import { NotchTabs } from "@/lib/ui/notch-tabs";
@@ -221,6 +222,7 @@ type TabKey = (typeof TABS)[number]["key"];
 const HIGHLIGHT_COLORS = HIGHLIGHT_COLOR_NAMES.map((name, index) => ({
   name,
   swatch: pageColors.swatches[index]!,
+  pen: pageColors.pens[index]!,
 }));
 
 function highlightMarkColor(colors: ThemeColors, color: string | null): string {
@@ -238,18 +240,25 @@ function useScaledBody() {
   return { fontSize: size, lineHeight: Math.round(size * 1.6) };
 }
 
-type ActiveTool = { type: "highlight"; color: string } | { type: "eraser" } | null;
+type ActiveTool =
+  { type: "highlight"; color: string } | { type: "pen"; color: string } | { type: "eraser" } | null;
+
+// The pen starts in graphite; with the pen up, a swatch changes its colour
+// to that swatch's ink (design.md §5), as on the web.
+const PEN_GRAPHITE = "#1D1F23";
 
 /**
  * The tool notch glued to the left edge (design.md §5): contents toggle,
- * the five swatches, then Explain and the eraser. Tapping the active swatch
- * again puts the tool down. Marking tools only exist on the Lesson tab's
- * text view (`toolsEnabled`); the contents toggle is always there.
+ * the five swatches, then Explain, the pen and the eraser. Tapping the
+ * active swatch again puts the tool down. The marking tools are the same in
+ * the text and the PDF view (`toolsEnabled` is the Lesson tab); the pen
+ * draws on PDF pages only, so it's greyed out over the text, like the web.
  */
 function ToolNotch({
   activeTool,
   onToolChange,
   toolsEnabled,
+  penAvailable,
   onContents,
   onExplain,
   onTextScale,
@@ -257,6 +266,7 @@ function ToolNotch({
   activeTool: ActiveTool;
   onToolChange: (tool: ActiveTool) => void;
   toolsEnabled: boolean;
+  penAvailable: boolean;
   onContents: () => void;
   onExplain: () => void;
   /** Text size, on every tab: it sizes the Review text too. */
@@ -278,12 +288,21 @@ function ToolNotch({
       {toolsEnabled && (
         <>
           {HIGHLIGHT_COLORS.map((color) => {
-            const isActive = activeTool?.type === "highlight" && activeTool.color === color.name;
+            const isActive =
+              activeTool?.type === "pen"
+                ? activeTool.color === color.pen
+                : activeTool?.type === "highlight" && activeTool.color === color.name;
             return (
               <Pressable
                 key={color.name}
                 onPress={() =>
-                  onToolChange(isActive ? null : { type: "highlight", color: color.name })
+                  onToolChange(
+                    activeTool?.type === "pen"
+                      ? { type: "pen", color: isActive ? PEN_GRAPHITE : color.pen }
+                      : isActive
+                        ? null
+                        : { type: "highlight", color: color.name },
+                  )
                 }
                 accessibilityRole="button"
                 accessibilityLabel={`Highlight — ${color.name}`}
@@ -309,6 +328,22 @@ function ToolNotch({
             accessibilityLabel="Explain"
           >
             <BulbIcon color={colors.mutedForeground} />
+          </Pressable>
+          <Pressable
+            onPress={() =>
+              onToolChange(activeTool?.type === "pen" ? null : { type: "pen", color: PEN_GRAPHITE })
+            }
+            disabled={!penAvailable}
+            accessibilityRole="button"
+            accessibilityLabel={penAvailable ? "Pen" : "Pen — PDF view only"}
+            accessibilityState={{ selected: activeTool?.type === "pen", disabled: !penAvailable }}
+            style={[
+              styles.tool,
+              activeTool?.type === "pen" && styles.toolActive,
+              !penAvailable && styles.toolDisabled,
+            ]}
+          >
+            <PenIcon color={activeTool?.type === "pen" ? colors.background : colors.foreground} />
           </Pressable>
           <Pressable
             onPress={() => onToolChange(activeTool?.type === "eraser" ? null : { type: "eraser" })}
@@ -349,29 +384,51 @@ type WordSpan = { start: number; end: number };
 function TappableParagraph({
   text,
   blockIndex,
+  annotations,
   anchor,
   onTapWord,
 }: {
   text: string;
   blockIndex: number;
+  annotations: Annotation[];
   /** The first word of a range in progress, when it's in this block. */
   anchor: WordSpan | null;
   onTapWord: (blockIndex: number, word: WordSpan) => void;
 }) {
   const styles = useStyles();
+  const colors = useThemeColors();
   const body = useScaledBody();
+  // The paragraph's highlights stay painted while marking, so a new mark
+  // shows up the moment it's made -- not only once the tool is put down.
+  const marks = annotations.filter(
+    (a) =>
+      a.type === "highlight" &&
+      a.block_index === blockIndex &&
+      a.start_offset !== null &&
+      a.end_offset !== null,
+  );
+  function markAt(offset: number) {
+    const mark = marks.find((a) => a.start_offset! <= offset && offset < a.end_offset!);
+    return mark ? { backgroundColor: highlightMarkColor(colors, mark.color) } : undefined;
+  }
   const pieces: React.ReactNode[] = [];
   let at = 0;
   for (const match of text.matchAll(/\S+/g)) {
     const word = { start: match.index, end: match.index + match[0].length };
-    if (word.start > at) pieces.push(text.slice(at, word.start));
+    if (word.start > at) {
+      pieces.push(
+        <Text key={`gap-${at}`} style={markAt(at)}>
+          {text.slice(at, word.start)}
+        </Text>,
+      );
+    }
     const isAnchor = anchor?.start === word.start;
     pieces.push(
       <Text
         key={word.start}
         testID={`word-${blockIndex}-${word.start}`}
         onPress={() => onTapWord(blockIndex, word)}
-        style={isAnchor ? styles.wordAnchor : undefined}
+        style={[markAt(word.start), isAnchor && styles.wordAnchor]}
         accessibilityRole="button"
       >
         {match[0]}
@@ -1389,9 +1446,17 @@ export default function LectureScreen() {
   const [activeTool, setActiveToolState] = useState<ActiveTool>(null);
   // The first tapped word of a range being marked (see TappableParagraph).
   const [markAnchor, setMarkAnchor] = useState<(WordSpan & { blockIndex: number }) | null>(null);
+  // The PDF view keeps its own first-tapped word; this only says whether
+  // there is one, for the hint.
+  const [pdfAnchorSet, setPdfAnchorSet] = useState(false);
   function setActiveTool(tool: ActiveTool) {
     setActiveToolState(tool);
     setMarkAnchor(null);
+    setPdfAnchorSet(false);
+  }
+
+  function saveFailed() {
+    Alert.alert("Not saved", "That change couldn't be saved. Check your connection and try again.");
   }
 
   function tapWord(blockIndex: number, word: WordSpan) {
@@ -1428,6 +1493,9 @@ export default function LectureScreen() {
   const pendingSourceBlock = useRef<number | null>(null);
   const { height: windowHeight } = useWindowDimensions();
   const [titleHidden, setTitleHidden] = useState(false);
+  // Where the lesson is scrolled to, for the PDF view's lazy pages: kept
+  // coarse, so a scroll re-renders the screen every few hundred pixels.
+  const [pdfScrollTop, setPdfScrollTop] = useState(0);
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["documents", id],
@@ -1496,6 +1564,7 @@ export default function LectureScreen() {
   const createAnnotationMutation = useMutation({
     mutationFn: (body: AnnotationCreateRequest) => getApiClient().createAnnotation(id, body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["annotations", id] }),
+    onError: saveFailed,
   });
 
   function handleSelectionSettled(blockIndex: number, start: number, end: number) {
@@ -1614,8 +1683,35 @@ export default function LectureScreen() {
   }
 
   const subChapter = data.sub_chapter;
+
+  // Back to where the lesson was opened from; opened straight from a link
+  // (nothing to go back to), to the lesson's book. The mobile library has no
+  // chapter page -- pushing `/learn/library/{book}/{chapter}` used to land
+  // on a route that doesn't exist, so the back button did nothing useful.
+  function goBack() {
+    if (router.canGoBack()) router.back();
+    else if (subChapter) router.navigate(`/learn/library/${subChapter.chapter.book_id}`);
+    else router.navigate("/learn");
+  }
+
   const tabLabel = TABS.find((tab) => tab.key === activeTab)!.label;
-  const textTools = activeTab === "lesson" && lessonViewMode === "text";
+  // The same marking tools in both views of the lesson.
+  const lessonTools =
+    activeTab === "lesson" &&
+    (lessonViewMode === "pdf" ? readyLecturePdf !== null : version?.status === "ready");
+  const anchorSet = lessonViewMode === "pdf" ? pdfAnchorSet : markAnchor !== null;
+  const markingHint = !lessonTools
+    ? null
+    : activeTool?.type === "highlight" ||
+        (activeTool?.type === "eraser" && lessonViewMode === "text")
+      ? anchorSet
+        ? "Now tap the last word — or the same word again for just that one."
+        : "Tap the first word, then the last."
+      : activeTool?.type === "pen"
+        ? "Draw on the page. Put the pen down to scroll."
+        : activeTool?.type === "eraser"
+          ? "Rub over ink or a highlight. Put the eraser down to scroll."
+          : null;
 
   return (
     <TextScaleContext.Provider value={textScale}>
@@ -1627,7 +1723,18 @@ export default function LectureScreen() {
             activeTab === "review" && styles.contentWithReviewBar,
           ]}
           scrollEventThrottle={32}
+          // With the pen or eraser up on a PDF page, a drag draws or erases;
+          // put the tool down to scroll.
+          scrollEnabled={
+            !(
+              activeTab === "lesson" &&
+              lessonViewMode === "pdf" &&
+              (activeTool?.type === "pen" || activeTool?.type === "eraser")
+            )
+          }
           onScroll={(event) => {
+            const y = event.nativeEvent.contentOffset.y;
+            if (lessonViewMode === "pdf" && Math.abs(y - pdfScrollTop) > 200) setPdfScrollTop(y);
             if (titleBottom === null) return;
             // 64 = the top notch's height: the h1 is "away" once it's under it.
             const hidden = event.nativeEvent.contentOffset.y > titleBottom - 64;
@@ -1637,11 +1744,7 @@ export default function LectureScreen() {
           <View style={styles.lessonHeader}>
             <Pressable
               onPress={() =>
-                subChapter
-                  ? router.push(
-                      `/learn/library/${subChapter.chapter.book_id}/${subChapter.chapter.id}`,
-                    )
-                  : undefined
+                subChapter && router.navigate(`/learn/library/${subChapter.chapter.book_id}`)
               }
               disabled={!subChapter}
               accessibilityRole={subChapter ? "link" : undefined}
@@ -1664,16 +1767,7 @@ export default function LectureScreen() {
 
           {/* The design's mobile dots: under the title on a phone. */}
           <View style={styles.dots}>
-            <Dot
-              label="Back to the library"
-              onPress={() =>
-                subChapter
-                  ? router.push(
-                      `/learn/library/${subChapter.chapter.book_id}/${subChapter.chapter.id}`,
-                    )
-                  : router.back()
-              }
-            >
+            <Dot label="Back to the library" onPress={goBack}>
               <ArrowLeftIcon color={colors.foreground} />
             </Dot>
             {activeTab === "lesson" && readyLecturePdf && (
@@ -1681,7 +1775,11 @@ export default function LectureScreen() {
                 label="Lesson view mode"
                 options={VIEW_MODES}
                 value={lessonViewMode}
-                onChange={setLessonViewMode}
+                onChange={(mode) => {
+                  setLessonViewMode(mode);
+                  // The pen only draws on PDF pages.
+                  if (activeTool?.type === "pen") setActiveTool(null);
+                }}
               />
             )}
           </View>
@@ -1708,18 +1806,16 @@ export default function LectureScreen() {
               documentId={id}
               storagePath={readyLecturePdf.storage_path}
               pageCount={readyLecturePdf.page_count}
+              tool={activeTool}
+              viewportTop={pdfScrollTop}
+              viewportHeight={windowHeight}
+              onAnchorChange={setPdfAnchorSet}
+              onSaveError={saveFailed}
             />
           )}
 
           {activeTab === "lesson" && lessonViewMode === "text" && (
             <>
-              {activeTool && (
-                <Text style={styles.markHint}>
-                  {markAnchor
-                    ? "Now tap the last word — or the same word again for just that one."
-                    : "Tap the first word, then the last."}
-                </Text>
-              )}
               {!version && <Text style={styles.hint}>Not processed yet.</Text>}
               {version?.status === "processing" && <Text style={styles.hint}>Processing...</Text>}
               {version?.status === "failed" && (
@@ -1748,6 +1844,7 @@ export default function LectureScreen() {
                         key={index}
                         text={block.text ?? ""}
                         blockIndex={index}
+                        annotations={annotations}
                         anchor={markAnchor?.blockIndex === index ? markAnchor : null}
                         onTapWord={tapWord}
                       />
@@ -1798,6 +1895,15 @@ export default function LectureScreen() {
           />
         </View>
 
+        {/* Pinned under the top notch rather than at the top of the text:
+            the reader is usually scrolled well past that when picking a
+            colour, and a hint they can't see is no hint. */}
+        {markingHint && (
+          <View style={styles.markHint} pointerEvents="none">
+            <Text style={styles.markHintText}>{markingHint}</Text>
+          </View>
+        )}
+
         {seeInLesson && activeTab === "lesson" && (
           <Pressable style={styles.backBar} onPress={backToQuizzes} accessibilityRole="button">
             <Text style={styles.backBarText}>← Back to quizzes</Text>
@@ -1807,7 +1913,8 @@ export default function LectureScreen() {
         <ToolNotch
           activeTool={activeTool}
           onToolChange={setActiveTool}
-          toolsEnabled={textTools && version?.status === "ready"}
+          toolsEnabled={lessonTools}
+          penAvailable={activeTab === "lesson" && lessonViewMode === "pdf"}
           onContents={() => setTocOpen(true)}
           onExplain={() => setExplainComingSoonVisible(true)}
           onTextScale={() =>
@@ -2061,10 +2168,24 @@ const useStyles = makeStyles((colors) => ({
     fontWeight: fontWeights.bold,
     color: colors.accent,
   },
+  // The web toast's place and shape: a pill under the top notch.
   markHint: {
+    position: "absolute",
+    top: 76,
+    left: 56,
+    right: 16,
+    alignItems: "center",
+  },
+  markHintText: {
+    backgroundColor: colors.foreground,
+    color: colors.background,
     fontSize: 13,
-    fontWeight: fontWeights.semibold,
-    color: colors.mutedForeground,
+    fontWeight: fontWeights.bold,
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    overflow: "hidden",
+    textAlign: "center",
   },
   wordAnchor: {
     backgroundColor: colors.clozeBg,
@@ -2153,6 +2274,9 @@ const useStyles = makeStyles((colors) => ({
   },
   toolActive: {
     backgroundColor: colors.foreground,
+  },
+  toolDisabled: {
+    opacity: 0.35,
   },
   toolChevron: {
     fontSize: 22,

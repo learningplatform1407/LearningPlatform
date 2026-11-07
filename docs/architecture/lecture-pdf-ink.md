@@ -108,7 +108,7 @@ offered a page they could draw on but not save.
 
 ## 6. Clients
 
-Read and draw are **one mode on web and two on mobile**, and the split is forced by the libraries.
+Read and draw are **one mode on both platforms**.
 
 On web, pdf.js renders into a `<canvas>` the app owns, so the app knows the page's exact pixel
 geometry at all times and can position a transparent ink overlay on top of it. Zoom is the app's own
@@ -117,18 +117,20 @@ state, so the overlay follows it.
 On mobile, react-native-pdf is a native view that owns its own pan and zoom. Its public API exposes
 the current scale (`onScaleChanged`) but **no pan-offset callback at all** — verified against the
 installed `index.d.ts`, not assumed. A separately-rendered overlay therefore cannot be kept aligned
-while the user pans a zoomed page. So:
+while the user pans a zoomed page.
 
-- **Read mode** — the native view owns pinch-zoom and pan, exactly like any PDF viewer. Ink is
-  hidden.
-- **Draw mode** — the page locks to a fit-width scale with `scrollEnabled={false}`. The geometry is
-  now pinned and known, so the overlay can match it exactly.
+So mobile does not use one zoomable viewer. Like the web, it shows a **column of page cards**, each
+its own `singlePage` native view at a fixed fit-width size with touches off. A page that never pans
+or zooms has known geometry, so its highlights and ink sit exactly on it and are always visible, and
+the tools in the lesson's tool notch (markers, pen, eraser) work on it directly. Only pages within a
+screen of the visible area are rendered; the first page loads before the rest, because its download
+fills react-native-pdf's file cache (`source.cache`, keyed by the storage path, which a replacement
+never reuses) that the other pages then read from.
 
-The consequence worth stating plainly: on mobile, **ink is not visible while reading**. Seeing your
-own annotations means entering draw mode. That is a real cost of the no-pan-offset constraint, not a
-preference.
+The cost: no pinch-zoom on mobile. While the pen or eraser is up, a drag draws or erases, so the
+lesson stops scrolling until the tool is put down.
 
-### 6.2 Highlights on PDF pages (web only)
+### 6.2 Highlights on PDF pages
 
 Web PDF mode also has the reader's word-level marker. pdf.js's `getTextContent()` gives runs of text
 with positions; `pdf-geometry.ts` splits them into word boxes, and a drag snaps to whole words.
@@ -141,10 +143,16 @@ with no text layer at all), and stable across a pdf.js upgrade that segments tex
 Two rules keep the clients from treading on each other:
 
 - **`highlights` is optional on the PUT.** Omitted, the stored highlights are left alone; a list,
-  even an empty one, replaces them. Mobile cannot make highlights and only sends `strokes`, so its
-  saves never wipe the web's.
-- **Creating highlights needs a text layer**, so it is web-only, and a scanned page (no text) says
-  so instead of failing silently.
+  even an empty one, replaces them. A strokes-only save (an older mobile build) never wipes them.
+- **Creating highlights needs the page's words**, and a scanned page (no text) says so instead of
+  failing silently.
+
+react-native-pdf exposes no text, so mobile gets the words from the server:
+`GET /v1/documents/{id}/pages/{n}/words` returns each word with its box in the same page units and a
+`line` id, read with pymupdf (`page.get_text("words")`, turned by the page's rotation matrix into the
+page as displayed). Mobile marks by two taps, the first word and the last, and joins the words of
+each line into one rectangle, the same shape the web stores. The PDF's bytes are kept in a small
+in-process cache by storage path, so reading page after page doesn't download the file each time.
 
 Nothing new is needed on PDF replace: the highlights are in the same row as the ink, and §3's
 cascade takes both.
@@ -232,9 +240,9 @@ every lesson fails", which points away from the real cause.
 
 ### 8.2 Overlay geometry
 
-The overlay size in draw mode comes from `onLoadComplete`'s reported page size and the container's
-own **measured** width (`onLayout`), because react-native-pdf does not expose the native view's
-rendered page bounds to JS. Deriving it from window width minus an assumed parent padding looks
+Each page card's size comes from the first page's `onLoadComplete` size (its aspect ratio) and the
+column's own **measured** width (`onLayout`), because react-native-pdf does not expose the native
+view's rendered page bounds to JS. Deriving it from window width minus an assumed parent padding looks
 equivalent and silently misaligns the ink as soon as that padding changes or the device rotates.
 
 Verified on an Android emulator: ink drawn on web renders in the right place inside the native view,

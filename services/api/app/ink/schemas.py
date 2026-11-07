@@ -27,3 +27,17 @@ class LessonPageInkUpdateRequest(BaseModel):
     # saving its strokes without wiping highlights made on the web: `None`
     # leaves them as they are; a list (even empty) replaces them.
     highlights: list[PageHighlight] | None = Field(default=None, max_length=500)
+
+
+class PageWord(BaseModel):
+    """One word on a PDF page and its box, `[x0, y0, x1, y1]` in page units.
+    `line` groups the words of one printed line, so a client can join a run
+    of them into a single highlight rectangle."""
+
+    text: str
+    box: tuple[float, float, float, float]
+    line: int
+
+
+class PageWordsResponse(BaseModel):
+    words: list[PageWord]

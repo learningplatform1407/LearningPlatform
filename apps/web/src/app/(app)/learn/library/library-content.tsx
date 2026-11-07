@@ -1,5 +1,6 @@
 "use client";
 
+import { coverColorForTitle } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
@@ -9,28 +10,6 @@ import { Card } from "@/components/card";
 import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
-
-// A deep, "leather-bound" palette rather than the app's bright UI colors —
-// picked deterministically from the title so the same book always gets the
-// same cover, with no cover-image field to actually render.
-const BOOK_COVER_COLORS = [
-  "#1e3a8a", // indigo
-  "#7f1d1d", // maroon
-  "#14532d", // forest green
-  "#581c87", // purple
-  "#854d0e", // mustard
-  "#164e63", // deep cyan
-  "#7c2d12", // rust
-  "#0f766e", // teal
-];
-
-function coverColorForTitle(title: string): string {
-  let hash = 0;
-  for (let i = 0; i < title.length; i++) {
-    hash = (hash * 31 + title.charCodeAt(i)) | 0;
-  }
-  return BOOK_COVER_COLORS[Math.abs(hash) % BOOK_COVER_COLORS.length] ?? BOOK_COVER_COLORS[0]!;
-}
 
 /** The book grid and (for admins, from `/admin/library`) the "New book" form.
  * Shared by the regular `/learn/library` route (`showAdminTools` always

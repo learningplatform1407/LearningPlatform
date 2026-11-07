@@ -32,6 +32,7 @@ import type {
   QuestionImportResult,
   LessonPageInk,
   LessonPageInkUpdateRequest,
+  PageWords,
   MeResponse,
   NotebookEntry,
   NotebookEntryCreateRequest,
@@ -521,6 +522,8 @@ export function createApiClient(config: ApiClientConfig) {
         method: "PUT",
         body: JSON.stringify(data),
       }),
+    getPageWords: (documentId: string, pageNumber: number) =>
+      request<PageWords>(`/v1/documents/${documentId}/pages/${pageNumber}/words`),
     getPageInk: (documentId: string, pageNumber: number) =>
       request<LessonPageInk>(`/v1/documents/${documentId}/pages/${pageNumber}/ink`),
     updatePageInk: (documentId: string, pageNumber: number, data: LessonPageInkUpdateRequest) =>

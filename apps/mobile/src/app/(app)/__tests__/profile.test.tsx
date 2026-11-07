@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 import ProfileScreen from "../profile";
 
@@ -11,7 +11,16 @@ jest.mock("@/lib/api-client", () => ({
   getApiClient: () => ({ getMe: mockGetMe, getMyStats: mockGetMyStats }),
 }));
 
-jest.mock("expo-router", () => ({ router: { push: (...args: unknown[]) => mockPush(...args) } }));
+// Each focus of the tab runs the effect again; `mockFocus` replays it.
+let mockFocus: (() => void) | null = null;
+jest.mock("expo-router", () => ({
+  router: { push: (...args: unknown[]) => mockPush(...args) },
+  useFocusEffect: (effect: () => void) => {
+    mockFocus = effect;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("react").useEffect(effect, [effect]);
+  },
+}));
 
 function renderScreen() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -126,4 +135,15 @@ test("renders a realistic fixture: hero trio, chart percentages, and all badges 
   expect(screen.getByLabelText("First lesson: earned")).toBeTruthy();
   expect(screen.getByLabelText("First exam: earned")).toBeTruthy();
   expect(screen.getByLabelText("On a roll: earned")).toBeTruthy();
+});
+
+test("coming back to the tab re-reads the stats", async () => {
+  renderScreen();
+  await screen.findByText("Ada");
+  await waitFor(() => expect(mockGetMyStats).toHaveBeenCalled());
+  const calls = mockGetMyStats.mock.calls.length;
+
+  await act(async () => mockFocus?.());
+
+  expect(mockGetMyStats.mock.calls.length).toBeGreaterThan(calls);
 });

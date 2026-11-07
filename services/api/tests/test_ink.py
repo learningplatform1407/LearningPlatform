@@ -1,4 +1,5 @@
 import uuid
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -232,3 +233,50 @@ def test_highlight_rects_must_be_on_the_page(
         url, json={"strokes": [], "highlights": [{"color": "yellow", "rects": rects}]}
     )
     assert response.status_code == 422
+
+
+def _two_line_pdf() -> bytes:
+    import pymupdf
+
+    doc = pymupdf.open()
+    page = doc.new_page(width=200, height=100)
+    page.insert_text((20, 30), "Hello world", fontsize=12)
+    page.insert_text((20, 60), "Second line", fontsize=12)
+    return doc.tobytes()
+
+
+def test_page_words_come_with_boxes_in_page_units(
+    authed_client: TestClient, lesson_with_pdf: uuid.UUID
+) -> None:
+    from app.ink import service
+
+    service._lecture_pdf_bytes.cache_clear()
+    with patch("app.ink.service.download_object", return_value=_two_line_pdf()):
+        response = authed_client.get(f"/v1/documents/{lesson_with_pdf}/pages/1/words")
+
+    assert response.status_code == 200
+    words = response.json()["words"]
+    assert [w["text"] for w in words] == ["Hello", "world", "Second", "line"]
+    assert all(0 <= v <= 1 for w in words for v in w["box"])
+    hello, world, second, _ = words
+    # Same printed line, left to right; the next line starts lower down.
+    assert hello["line"] == world["line"] != second["line"]
+    assert hello["box"][0] < world["box"][0]
+    assert second["box"][1] > hello["box"][3]
+    # 20pt in on a 200pt page.
+    assert hello["box"][0] == pytest.approx(0.1, abs=0.01)
+
+
+def test_page_words_past_the_page_count_are_empty(
+    authed_client: TestClient, lesson_with_pdf: uuid.UUID
+) -> None:
+    response = authed_client.get(f"/v1/documents/{lesson_with_pdf}/pages/6/words")
+    assert response.status_code == 200
+    assert response.json() == {"words": []}
+
+
+def test_page_words_404_without_a_lecture_pdf(
+    authed_client: TestClient, lesson_without_pdf: uuid.UUID
+) -> None:
+    response = authed_client.get(f"/v1/documents/{lesson_without_pdf}/pages/1/words")
+    assert response.status_code == 404

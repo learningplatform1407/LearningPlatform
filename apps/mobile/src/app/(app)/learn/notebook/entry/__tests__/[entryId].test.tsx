@@ -51,7 +51,7 @@ test("new-text sentinel shows an empty text editor with Save disabled until type
 
   renderScreen();
 
-  expect(await screen.findByText("New note")).toBeTruthy();
+  expect(await screen.findByText("‹ All notes")).toBeTruthy();
   const saveButton = screen.getByRole("button", { name: "Save" });
   expect(saveButton.props.accessibilityState?.disabled).toBe(true);
 
@@ -118,7 +118,16 @@ test("new-drawing sentinel shows the drawing canvas instead of a text editor", a
 
   renderScreen();
 
-  expect(await screen.findByText("New note")).toBeTruthy();
+  expect(await screen.findByText("‹ All notes")).toBeTruthy();
   expect(screen.getByLabelText("Drawing canvas")).toBeTruthy();
   expect(screen.queryByPlaceholderText("Write a new note...")).toBeNull();
+});
+
+test("‹ All notes goes back to the list", async () => {
+  (useLocalSearchParams as jest.Mock).mockReturnValue({ entryId: "new-text" });
+  renderScreen();
+
+  fireEvent.press(await screen.findByText("‹ All notes"));
+
+  expect(router.back).toHaveBeenCalled();
 });

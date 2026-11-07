@@ -98,3 +98,14 @@ if (typeof window !== "undefined" && typeof window.matchMedia === "undefined") {
       dispatchEvent: () => false,
     }) as MediaQueryList;
 }
+
+// jsdom does no layout, so it leaves scrolling out: `scrollIntoView` is
+// missing and `window.scrollTo` only logs "Not implemented". The lesson page
+// scrolls in an animation frame (See in lesson, back to quizzes), which can
+// fire after its test has finished, and an uncaught TypeError there fails the
+// whole vitest run even with every test green. No-ops are enough: no test
+// asserts a scroll position, and none could under jsdom.
+if (typeof window !== "undefined") {
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
+  window.scrollTo = (() => {}) as typeof window.scrollTo;
+}

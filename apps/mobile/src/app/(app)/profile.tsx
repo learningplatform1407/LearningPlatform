@@ -1,17 +1,21 @@
 import { computeProfileBadges } from "@lp/api-client";
 import { formatMonthYear } from "@lp/ui";
 import { useQuery } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { MetricBarChart } from "@/lib/metric-bar-chart";
 import { StatTile } from "@/lib/stat-tile";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
-import { makeStyles } from "@/lib/theme-context";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { SettingsIcon } from "@/lib/ui/icons";
+import { Dot } from "@/lib/ui/primitives";
 
 export default function ProfileScreen() {
   const styles = useStyles();
+  const colors = useThemeColors();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
     queryFn: () => getApiClient().getMe(),
@@ -25,6 +29,16 @@ export default function ProfileScreen() {
     queryKey: ["me-stats"],
     queryFn: () => getApiClient().getMyStats(),
   });
+  // A tab stays mounted once visited, so without this the numbers stayed as
+  // they were the first time Profile was opened -- an exam finished since
+  // then only showed after restarting the app. Re-read whenever the tab
+  // comes back into view.
+  const { refetch: refetchStats } = statsQuery;
+  useFocusEffect(
+    useCallback(() => {
+      refetchStats();
+    }, [refetchStats]),
+  );
 
   if (isPending) {
     return (
@@ -65,14 +79,11 @@ export default function ProfileScreen() {
             <Text style={styles.joined}>Joined {formatMonthYear(data.created_at)}</Text>
           </View>
         </View>
-        <Pressable
-          style={styles.settingsButton}
-          onPress={() => router.push("/settings")}
-          accessibilityRole="button"
-          accessibilityLabel="Settings"
-        >
-          <Text style={styles.settingsIcon}>⚙</Text>
-        </Pressable>
+        {/* The design's round dot with the line-icon gear, as on the web --
+            not the ⚙ text glyph, which each Android font draws differently. */}
+        <Dot label="Settings" onPress={() => router.push("/settings")}>
+          <SettingsIcon color={colors.foreground} size={20} strokeWidth={1.8} />
+        </Dot>
       </View>
 
       <Pressable
@@ -176,17 +187,6 @@ const useStyles = makeStyles((colors) => ({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: spacing.md,
-  },
-  settingsButton: {
-    height: 32,
-    width: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 8,
-  },
-  settingsIcon: {
-    fontSize: fontSizes.lg,
-    color: colors.mutedForeground,
   },
   avatar: {
     width: AVATAR_SIZE,

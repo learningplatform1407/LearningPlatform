@@ -21,6 +21,7 @@ from app.feed.router import router as feed_router
 from app.flashcards.router import document_router as flashcards_document_router
 from app.flashcards.router import router as flashcards_router
 from app.ink.router import router as ink_router
+from app.ink.router import words_router as page_words_router
 from app.notebook.router import router as notebook_router
 from app.plans.router import router as plans_router
 from app.questions.router import bank_router, tags_router
@@ -51,6 +52,7 @@ app.include_router(sub_chapters_router)
 app.include_router(documents_router)
 app.include_router(annotations_router)
 app.include_router(ink_router)
+app.include_router(page_words_router)
 app.include_router(notebook_router)
 app.include_router(cloze_router)
 app.include_router(flashcards_document_router)

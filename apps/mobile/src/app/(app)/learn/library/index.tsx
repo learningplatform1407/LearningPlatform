@@ -1,10 +1,19 @@
+import { coverColorForTitle } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, shadows, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
 
@@ -19,6 +28,10 @@ export default function LibraryScreen() {
   const styles = useStyles();
   const colors = useThemeColors();
   const queryClient = useQueryClient();
+  // Half the row each, computed: with `flex: 1` a book alone on the last
+  // shelf came out wider than the pair above it.
+  const { width: screenWidth } = useWindowDimensions();
+  const coverWidth = (screenWidth - spacing.xl * 2 - spacing.md) / 2;
   const me = useQuery({ queryKey: ["me"], queryFn: () => getApiClient().getMe() });
   const books = useQuery({
     queryKey: ["books"],
@@ -84,20 +97,47 @@ export default function LibraryScreen() {
       contentContainerStyle={styles.listContent}
       data={rows}
       keyExtractor={(book) => book.id}
+      // Two covers to a shelf, as on the web's narrowest grid.
+      numColumns={2}
+      columnWrapperStyle={styles.shelf}
       ListHeaderComponent={<ScreenHeader kicker="Learn" title="Library" />}
       ListEmptyComponent={<Text style={styles.empty}>No books yet.</Text>}
-      renderItem={({ item }) => (
-        <Pressable
-          style={styles.row}
-          onPress={() => router.push(`/learn/library/${item.id}`)}
-          accessibilityRole="button"
-        >
-          <Text style={styles.rowTitle}>{item.title}</Text>
-          <Text style={styles.rowStatus}>
-            {item.count} {item.countLabel}
-          </Text>
-        </Pressable>
-      )}
+      renderItem={({ item }) => {
+        const uncategorizedBook = item.id === "uncategorized";
+        return (
+          <Pressable
+            style={({ pressed }) => [
+              styles.book,
+              { width: coverWidth },
+              pressed && styles.bookPressed,
+            ]}
+            onPress={() => router.push(`/learn/library/${item.id}`)}
+            accessibilityRole="button"
+            accessibilityLabel={`${item.title}, ${item.count} ${item.countLabel}`}
+          >
+            <View
+              style={[
+                styles.cover,
+                uncategorizedBook
+                  ? styles.coverPlain
+                  : { backgroundColor: coverColorForTitle(item.title) },
+              ]}
+            >
+              {/* The spine: a darker strip down the left edge. */}
+              <View style={[styles.spine, uncategorizedBook && styles.spinePlain]} />
+              <Text style={[styles.count, uncategorizedBook && styles.countPlain]}>
+                {item.count} {item.countLabel}
+              </Text>
+              <Text
+                style={[styles.bookTitle, uncategorizedBook && styles.bookTitlePlain]}
+                numberOfLines={5}
+              >
+                {item.title}
+              </Text>
+            </View>
+          </Pressable>
+        );
+      }}
       ListFooterComponent={
         isAdmin ? (
           <View style={styles.uploadForm}>
@@ -133,30 +173,71 @@ const useStyles = makeStyles((colors) => ({
   },
   listContent: {
     padding: spacing.xl,
-    gap: spacing.xs,
+    gap: spacing.md,
+  },
+  shelf: {
+    gap: spacing.md,
+  },
+  book: {
+    borderRadius: 12,
+    backgroundColor: colors.paper,
+    ...shadows.card,
+  },
+  bookPressed: {
+    opacity: 0.85,
+  },
+  cover: {
+    aspectRatio: 2 / 3,
+    borderRadius: 12,
+    overflow: "hidden",
+    padding: spacing.md,
+    paddingLeft: spacing.md + 6,
+    justifyContent: "space-between",
+  },
+  coverPlain: {
+    backgroundColor: colors.muted,
+  },
+  spine: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: 8,
+    backgroundColor: "rgba(0, 0, 0, 0.35)",
+  },
+  spinePlain: {
+    backgroundColor: colors.border,
+  },
+  count: {
+    alignSelf: "flex-start",
+    overflow: "hidden",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    backgroundColor: "rgba(0, 0, 0, 0.25)",
+    color: "#FFFFFF",
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.bold,
+  },
+  countPlain: {
+    backgroundColor: colors.background,
+    color: colors.mutedForeground,
+  },
+  bookTitle: {
+    color: "#FFFFFF",
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: fontWeights.extrabold,
+    textShadowColor: "rgba(0, 0, 0, 0.3)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  bookTitlePlain: {
+    color: colors.mutedForeground,
+    textShadowColor: "transparent",
   },
   empty: {
     fontSize: fontSizes.sm,
-    color: colors.mutedForeground,
-  },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderWidth: 0,
-    borderRadius: 0,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: 0,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  rowTitle: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
-    color: colors.foreground,
-  },
-  rowStatus: {
-    fontSize: fontSizes.xs,
     color: colors.mutedForeground,
   },
   uploadForm: {

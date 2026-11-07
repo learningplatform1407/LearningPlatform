@@ -4,7 +4,7 @@ import { ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { NewEntryButtons, NotebookEntryList } from "@/lib/notebook-entry-editor";
-import { fontSizes, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
 
@@ -31,20 +31,25 @@ export default function NotebookScreen() {
     );
   }
 
+  // The web notebook's phone layout: the list of notes, with the two "new"
+  // buttons pinned under it.
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <ScreenHeader kicker="Learn" title="Notebook" />
-
-      <NotebookEntryList
-        entries={entries.data}
-        onSelect={(entryId) => router.push(`/learn/notebook/entry/${entryId}`)}
-      />
-
-      <NewEntryButtons
-        onNewText={() => router.push("/learn/notebook/entry/new-text")}
-        onNewDrawing={() => router.push("/learn/notebook/entry/new-drawing")}
-      />
-    </ScrollView>
+    <View style={styles.container}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <ScreenHeader kicker="Learn" title="Notebook" />
+        <Text style={styles.sectionLabel}>Notes</Text>
+        <NotebookEntryList
+          entries={entries.data}
+          onSelect={(entryId) => router.push(`/learn/notebook/entry/${entryId}`)}
+        />
+      </ScrollView>
+      <View style={styles.footer}>
+        <NewEntryButtons
+          onNewText={() => router.push("/learn/notebook/entry/new-text")}
+          onNewDrawing={() => router.push("/learn/notebook/entry/new-drawing")}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -55,7 +60,23 @@ const useStyles = makeStyles((colors) => ({
   },
   content: {
     padding: spacing.xl,
-    gap: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+  },
+  sectionLabel: {
+    marginTop: spacing.sm,
+    paddingHorizontal: 10,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    color: colors.mutedForeground,
+  },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    padding: spacing.sm,
+    backgroundColor: colors.background,
   },
   error: {
     color: colors.danger,

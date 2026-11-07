@@ -72,10 +72,21 @@ jest.mock("@/lib/pdf-lesson-view", () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { Text } = require("react-native");
   return {
-    PdfLessonView: ({ documentId, storagePath }: { documentId: string; storagePath: string }) => (
-      <Text testID="pdf-lesson-view">
-        {documentId}:{storagePath}
-      </Text>
+    PdfLessonView: ({
+      documentId,
+      storagePath,
+      tool,
+    }: {
+      documentId: string;
+      storagePath: string;
+      tool: { type: string; color?: string } | null;
+    }) => (
+      <>
+        <Text testID="pdf-lesson-view">
+          {documentId}:{storagePath}
+        </Text>
+        <Text testID="pdf-tool">{tool ? `${tool.type}:${tool.color ?? ""}` : "none"}</Text>
+      </>
     ),
   };
 });
@@ -83,7 +94,7 @@ jest.mock("@/lib/pdf-lesson-view", () => {
 let mockTabParam: string | undefined;
 
 jest.mock("expo-router", () => ({
-  router: { push: jest.fn() },
+  router: { push: jest.fn(), back: jest.fn(), navigate: jest.fn(), canGoBack: jest.fn() },
   useLocalSearchParams: () => ({ id: "d1", tab: mockTabParam }),
 }));
 
@@ -1447,4 +1458,93 @@ test("the cards view shows only the sentence holding the gap, on a card", async 
 
   fireEvent.press(screen.getByText("Back to the text"));
   expect(screen.queryByLabelText("Review card")).toBeNull();
+});
+
+function documentWithPdf() {
+  return {
+    ...readyDocumentWithParagraph("Hello world"),
+    sub_chapter: {
+      id: "s1",
+      title: "Basics",
+      chapter: { id: "c1", title: "Chapter one", book_id: "b1" },
+    },
+    lecture_pdf: {
+      status: "ready",
+      error_message: null,
+      storage_path: "lectures/book.pdf",
+      page_count: 3,
+    },
+  };
+}
+
+test("the back dot goes back to where the lesson was opened from", async () => {
+  jest.mocked(router.canGoBack).mockReturnValue(true);
+  mockGetDocument.mockResolvedValue(documentWithPdf());
+
+  renderScreen();
+  fireEvent.press(await screen.findByLabelText("Back to the library"));
+
+  expect(router.back).toHaveBeenCalled();
+  expect(router.push).not.toHaveBeenCalled();
+});
+
+test("opened from a link, the back dot goes to the lesson's book", async () => {
+  jest.mocked(router.canGoBack).mockReturnValue(false);
+  mockGetDocument.mockResolvedValue(documentWithPdf());
+
+  renderScreen();
+  fireEvent.press(await screen.findByLabelText("Back to the library"));
+
+  // The book page: the mobile library has no chapter route.
+  expect(router.navigate).toHaveBeenCalledWith("/learn/library/b1");
+});
+
+test("highlights stay painted while a marker is picked up", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListAnnotations.mockResolvedValue([
+    {
+      id: "a1",
+      document_version_id: "v1",
+      type: "highlight",
+      block_index: 0,
+      start_offset: 0,
+      end_offset: 5,
+      note_text: null,
+      color: "yellow",
+      created_at: "2026-01-01",
+    },
+  ]);
+
+  renderScreen();
+  await screen.findByText("Hello");
+  fireEvent.press(screen.getByLabelText("Highlight — blue"));
+
+  const word = screen.getByTestId("word-0-0");
+  expect(word.props.style).toEqual(
+    expect.arrayContaining([{ backgroundColor: lightColors.highlight0 }]),
+  );
+  // And the hint is pinned on screen, not at the top of the text.
+  expect(screen.getByText("Tap the first word, then the last.")).toBeTruthy();
+});
+
+test("in the PDF view the same tools are in the tool notch, plus the pen", async () => {
+  mockGetDocument.mockResolvedValue(documentWithPdf());
+
+  renderScreen();
+  await screen.findByText("Hello world");
+  // Over the text the pen is greyed out: it draws on PDF pages only.
+  expect(screen.getByLabelText("Pen — PDF view only")).toBeTruthy();
+
+  fireEvent.press(screen.getByText("PDF"));
+  fireEvent.press(await screen.findByLabelText("Highlight — green"));
+  expect(screen.getByTestId("pdf-tool").props.children).toBe("highlight:green");
+
+  fireEvent.press(screen.getByLabelText("Pen"));
+  expect(screen.getByTestId("pdf-tool").props.children).toBe("pen:#1D1F23");
+  // With the pen up, a swatch changes the pen's colour instead.
+  fireEvent.press(screen.getByLabelText("Highlight — red"));
+  expect(screen.getByTestId("pdf-tool").props.children).toBe("pen:#D93636");
+
+  fireEvent.press(screen.getByLabelText("Eraser"));
+  expect(screen.getByTestId("pdf-tool").props.children).toBe("eraser:");
 });
