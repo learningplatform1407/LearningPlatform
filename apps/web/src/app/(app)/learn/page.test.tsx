@@ -370,7 +370,7 @@ describe("LearnPage question of the day", () => {
     );
 
     await screen.findByRole("dialog");
-    expect(screen.getByText("correct — 2/2 points")).toBeInTheDocument();
+    expect(screen.getByText("Answers · correct — 2/2 points")).toBeInTheDocument();
     expect(screen.getByText("Divisible only by 1 and itself.")).toBeInTheDocument();
     expect(screen.getByText("Only 2 is prime here.")).toBeInTheDocument();
   });
@@ -406,7 +406,7 @@ describe("LearnPage question of the day", () => {
     await user.click(screen.getByRole("checkbox", { name: "2" }));
     await user.click(screen.getByRole("button", { name: "Check answer" }));
 
-    expect(await screen.findByText("correct — 2/2 points")).toBeInTheDocument();
+    expect(await screen.findByText("Answers · correct — 2/2 points")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("Divisible only by 1 and itself.")).toBeInTheDocument();
   });
@@ -482,7 +482,7 @@ describe("LearnPage question of the day", () => {
 
     await screen.findByRole("dialog");
     expect(getDailyQuestionForDate).toHaveBeenCalledWith("2026-09-29");
-    expect(screen.getByText("correct — 2/2 points")).toBeInTheDocument();
+    expect(screen.getByText("Answers · correct — 2/2 points")).toBeInTheDocument();
   });
 
   test("closing an empty-bank day does not silence a question published later", async () => {

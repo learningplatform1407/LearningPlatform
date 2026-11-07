@@ -246,7 +246,7 @@ test("answering a question reveals the outcome", async () => {
   fireEvent.press(screen.getByText("4"));
   fireEvent.press(screen.getByText("Check answer"));
 
-  expect(await screen.findByText("correct — 1/1 points")).toBeTruthy();
+  expect(await screen.findByText("Answers · correct — 1/1 points")).toBeTruthy();
   expect(mockAnswerBankQuestion).toHaveBeenCalledWith("q1", ["o2"]);
 });
 

@@ -2,7 +2,7 @@ import type { QuestionReveal, QuizOptionResult } from "@lp/api-client";
 import { Pressable, Text, View } from "react-native";
 
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
-import { makeStyles } from "@/lib/theme-context";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
 
 /** `tone` names a theme colour, read as `colors[mark.tone]` so the mark
  * follows the active theme. */
@@ -109,28 +109,40 @@ export function OptionChoice({
  */
 export function QuestionRevealPanel({ reveal }: { reveal: QuestionReveal }) {
   const styles = useStyles();
+  const colors = useThemeColors();
+  const tone = colors[OUTCOME_MARKS[reveal.outcome].tone];
+  // A framed block with its own heading, so the answers read as a separate
+  // part from the question above them and from the next question below.
   return (
-    <View style={styles.reveal}>
+    <View style={[styles.reveal, { borderLeftColor: tone }]}>
+      <Text style={[styles.revealTitle, { color: tone }]}>
+        Answers · {reveal.outcome} — {reveal.points_awarded}/{reveal.points_possible} points
+      </Text>
       <View>
         {reveal.options.map((option, index) => (
           <OptionResultRow key={option.id} option={option} index={index} />
         ))}
       </View>
       {reveal.explanation && <Text style={styles.rationale}>{reveal.explanation}</Text>}
-      <Text style={styles.revealTitle}>
-        {reveal.outcome} — {reveal.points_awarded}/{reveal.points_possible} points
-      </Text>
     </View>
   );
 }
 
 const useStyles = makeStyles((colors) => ({
   reveal: {
-    gap: spacing.sm,
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+    backgroundColor: colors.muted,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   revealTitle: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.bold,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.extrabold,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
     color: colors.foreground,
   },
   optionRow: {

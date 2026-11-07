@@ -1,9 +1,24 @@
 import type { QuestionReveal } from "@lp/api-client";
 
 export const OUTCOME_MARKS = {
-  correct: { icon: "✓", label: "Answered correctly", className: "text-good" },
-  partial: { icon: "◐", label: "Answered partially correctly", className: "text-hard" },
-  incorrect: { icon: "✗", label: "Answered incorrectly", className: "text-again" },
+  correct: {
+    icon: "✓",
+    label: "Answered correctly",
+    className: "text-good",
+    edge: "border-l-good",
+  },
+  partial: {
+    icon: "◐",
+    label: "Answered partially correctly",
+    className: "text-hard",
+    edge: "border-l-hard",
+  },
+  incorrect: {
+    icon: "✗",
+    label: "Answered incorrectly",
+    className: "text-again",
+    edge: "border-l-again",
+  },
 } as const;
 
 export type Outcome = keyof typeof OUTCOME_MARKS;
@@ -30,8 +45,14 @@ const OPTION_ROW = "flex w-full items-start gap-3 border-b border-border py-2.5 
  * type it renders.
  */
 export function QuestionRevealPanel({ reveal }: { reveal: QuestionReveal }) {
+  const mark = OUTCOME_MARKS[reveal.outcome];
+  // A framed block with its own heading, so the answers read as a separate
+  // part from the question above them and from the next question below.
   return (
-    <div className="mt-xs">
+    <div className={`mt-xs rounded-lg border-l-4 bg-muted px-md py-sm ${mark.edge}`}>
+      <p className={`text-xs font-extrabold tracking-[0.12em] uppercase ${mark.className}`}>
+        Answers · {reveal.outcome} — {reveal.points_awarded}/{reveal.points_possible} points
+      </p>
       <ul>
         {reveal.options.map((option, index) => {
           // Two independent axes: whether the option belongs in the answer
@@ -69,9 +90,6 @@ export function QuestionRevealPanel({ reveal }: { reveal: QuestionReveal }) {
       {reveal.explanation && (
         <p className="mt-sm text-toc text-muted-foreground">{reveal.explanation}</p>
       )}
-      <p className="mt-sm text-sm font-bold text-foreground">
-        {reveal.outcome} — {reveal.points_awarded}/{reveal.points_possible} points
-      </p>
     </div>
   );
 }
