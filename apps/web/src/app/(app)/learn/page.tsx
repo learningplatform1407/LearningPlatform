@@ -63,7 +63,11 @@ function LearnContent({
 
   return (
     <>
-      <PageHeader kicker={t("learn.kicker")} title={t("learn.title")} />
+      {/* No kicker: every other page's kicker names its parent section, and
+          this hub is the root of that nesting. "Your course" was a
+          placeholder -- there is no course entity, only Library -> Chapter ->
+          Sub-chapter -> Lesson -- so it read as "Your course: Learn". */}
+      <PageHeader title={t("learn.title")} />
 
       {continueLesson && (
         <Link

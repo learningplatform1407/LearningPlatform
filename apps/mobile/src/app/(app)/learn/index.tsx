@@ -58,7 +58,11 @@ function LearnContent({
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <ScreenHeader kicker={t("learn.kicker")} title={t("learn.title")} />
+      {/* No kicker: every other screen's kicker names its parent section, and
+          this hub is the root of that nesting. "Your course" was a
+          placeholder -- there is no course entity, only Library -> Chapter ->
+          Sub-chapter -> Lesson -- so it read as "Your course: Learn". */}
+      <ScreenHeader title={t("learn.title")} />
 
       {continueLesson && (
         <Pressable

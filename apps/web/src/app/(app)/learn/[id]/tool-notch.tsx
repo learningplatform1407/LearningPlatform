@@ -33,6 +33,7 @@ export function ToolNotch({
   onSwatch,
   onTool,
   onUndo,
+  textScaleAvailable,
   textScale,
   onTextScale,
 }: {
@@ -45,6 +46,8 @@ export function ToolNotch({
   onSwatch: (color: SwatchIndex) => void;
   onTool: (kind: "pen" | "eraser" | "note") => void;
   onUndo: () => void;
+  /** Whether this tab renders prose the scale applies to (Lesson, Review). */
+  textScaleAvailable: boolean;
   textScale: TextScale;
   onTextScale: () => void;
 }) {
@@ -155,16 +158,23 @@ export function ToolNotch({
           <UndoIcon />
         </ToolButton>
 
-        <span aria-hidden="true" className="my-[3px] h-px w-[22px] bg-border" />
-
-        {/* Text size works on every tab: it sizes the Review text too. */}
-        <ToolButton
-          label={t("lesson.tools.textSize")}
-          title={t("lesson.tools.textSizeValue", { percent: textScale })}
-          onClick={onTextScale}
-        >
-          <span className="text-[13px] leading-none font-extrabold">Aa</span>
-        </ToolButton>
+        {/* Only the Lesson and Review tabs render prose that reads the scale,
+            so the control is hidden elsewhere rather than offered and inert.
+            This used to claim it "works on every tab"; it never did --
+            nothing on Quizzes or Flashcards consumes textScale. design.md §6
+            scopes it to those two. */}
+        {textScaleAvailable && (
+          <>
+            <span aria-hidden="true" className="my-[3px] h-px w-[22px] bg-border" />
+            <ToolButton
+              label={t("lesson.tools.textSize")}
+              title={t("lesson.tools.textSizeValue", { percent: textScale })}
+              onClick={onTextScale}
+            >
+              <span className="text-[13px] leading-none font-extrabold">Aa</span>
+            </ToolButton>
+          </>
+        )}
       </div>
     </aside>
   );

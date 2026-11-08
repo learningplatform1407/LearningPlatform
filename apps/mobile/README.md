@@ -46,15 +46,45 @@ SDK 58's own modules require. See
 separate things sit between a successful `prebuild` and a rendered page, and that section lists all
 of them.
 
-### iOS has not been run
+### iOS runs, but needs four settings `prebuild` destroys
 
-`npx expo run:ios` has **never been executed** for this app. It needs **full Xcode** — if
-`xcode-select -p` prints `/Library/Developer/CommandLineTools`, then `xcodebuild` does not exist and
-the build cannot start, regardless of whether CocoaPods is installed.
+`npx expo run:ios --device` was first run successfully on **2026-11-08** (iPhone 16 Pro Max,
+iOS 27.0.1). Two things make that work, and neither survives a `prebuild`.
 
-Everything in the PDF reader was verified on Android only. §8.3 of the design doc lists the four
-things known to differ on iOS (networking, overlay geometry, safe-area insets, Keychain-backed
-session storage), none of which have been exercised.
+**Xcode 27 or newer is required**, not merely "full Xcode". `@expo/ui` calls SwiftUI's
+`glassEffect()` directly — an iOS 26 SDK symbol — so Xcode 16's iOS 18 SDK cannot compile this
+project at all, even though nothing in `apps/mobile/src` imports that package. `expo-glass-effect`
+is fine on older SDKs by comparison: it probes via `NSClassFromString("UIGlassEffect")`.
+
+Also check `xcode-select -p`. If it prints `/Library/Developer/CommandLineTools` then `xcodebuild`
+does not exist, whatever sits in `/Applications` — point it at the app bundle instead. And if a
+freshly updated Xcode refuses to launch, complaining about `/Library/Developer/PrivateFrameworks`,
+those are machine-level components left behind by the _previous_ Xcode; move them aside and run
+`sudo xcodebuild -runFirstLaunch` so the new version reinstalls its own.
+
+**`apps/mobile/ios/` is gitignored**, so these four build settings exist nowhere in the repo and
+every `npx expo prebuild` deletes them. Re-apply them in `ios/mobile.xcodeproj/project.pbxproj`
+(target `mobile`, both Debug and Release) before building for a device:
+
+| Setting                         | Value                             | Without it                                                                                                                                                                                                                                   |
+| ------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DEVELOPMENT_TEAM`              | `4SU84PFTBA` (free personal team) | `Signing for "mobile" requires a development team`                                                                                                                                                                                           |
+| `CODE_SIGN_STYLE`               | `Automatic`                       | no provisioning profile is ever issued                                                                                                                                                                                                       |
+| `PRODUCT_BUNDLE_IDENTIFIER`     | `com.mihneaghira.mobile`          | the `com.anonymous.mobile` default is already claimed by other personal teams, so Apple rejects the App ID and Xcode silently reverts the Team selection — leaving a certificate but no team, which then reads as an unrelated signing error |
+| `ENABLE_USER_SCRIPT_SANDBOXING` | `NO` (project level)              | `Sandbox: bash deny file-write-create .../mobile.app/ip.txt` — React Native's "Bundle React Native code and images" phase writes inside the built `.app`, which Xcode's template default forbids                                             |
+
+Verify with `xcodebuild -showBuildSettings`, which reports _effective_ values after xcconfig
+layering, rather than trusting the file. Note `app.json` still declares `com.anonymous.mobile`
+(TASKS_SPLIT HARDEN-10 is the open decision on permanent identifiers), and that is the main reason
+`prebuild` leaves the project unbuildable.
+
+The same trap applies on Android: `prebuild` also removes `android/local.properties`, whose single
+`sdk.dir=` line is what prevents `SDK location not found`.
+
+The PDF reader itself is still Android-verified only. §8.3 of the design doc lists four things known
+to differ on iOS (networking, overlay geometry, safe-area insets, Keychain-backed session storage);
+the device pass exercised overlay geometry and safe-area insets — see TASKS_SPLIT DESIGN-11 and
+DESIGN-12 — while the other two remain untested.
 
 ## Checks
 

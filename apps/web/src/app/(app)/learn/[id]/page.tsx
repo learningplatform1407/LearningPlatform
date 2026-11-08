@@ -512,6 +512,7 @@ export default function LecturePage() {
         tool={tool}
         viewMode={mode}
         onLessonTab={activeTab === "lesson"}
+        textScaleAvailable={activeTab === "lesson" || activeTab === "review"}
         canUndo={mode === "pdf" ? pdfCanUndo : undoDepth > 0}
         tocOpen={tocOpen}
         onToggleToc={() => setTocOpen((open) => !open)}

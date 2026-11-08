@@ -265,6 +265,7 @@ function ToolNotch({
   penAvailable,
   onContents,
   onExplain,
+  textScaleAvailable,
   onTextScale,
 }: {
   activeTool: ActiveTool;
@@ -273,7 +274,10 @@ function ToolNotch({
   penAvailable: boolean;
   onContents: () => void;
   onExplain: () => void;
-  /** Text size, on every tab: it sizes the Review text too. */
+  /** Text size. Only the Lesson and Review tabs render prose that reads the
+   * scale (`useScaledBody`), so the control is hidden elsewhere rather than
+   * offered and inert -- design.md §6 scopes it to those two. */
+  textScaleAvailable: boolean;
   onTextScale: () => void;
 }) {
   const { t } = useI18n();
@@ -371,15 +375,19 @@ function ToolNotch({
           </Pressable>
         </>
       )}
-      <View style={styles.toolSeparator} />
-      <Pressable
-        onPress={onTextScale}
-        style={styles.tool}
-        accessibilityRole="button"
-        accessibilityLabel={t("lesson.tools.textSize")}
-      >
-        <Text style={styles.toolAa}>Aa</Text>
-      </Pressable>
+      {textScaleAvailable && (
+        <>
+          <View style={styles.toolSeparator} />
+          <Pressable
+            onPress={onTextScale}
+            style={styles.tool}
+            accessibilityRole="button"
+            accessibilityLabel={t("lesson.tools.textSize")}
+          >
+            <Text style={styles.toolAa}>Aa</Text>
+          </Pressable>
+        </>
+      )}
     </View>
   );
 }
@@ -1379,12 +1387,24 @@ function TocModal({
     enabled: visible,
   });
 
+  // The lesson to open once the panel is gone. Closing and pushing in the
+  // same tick mounted the new lesson underneath a panel that was still on
+  // screen -- on iOS a Modal is its own native window, so the old drawer hung
+  // over the new screen until it finished dismissing. Overlay fires
+  // onDismissed after the panel has left the tree, which is the safe moment.
+  const [pendingLessonId, setPendingLessonId] = useState<string | null>(null);
+
   return (
     <Overlay
       visible={visible}
       title={t("lesson.toc.lessonsInChapter")}
       onClose={onClose}
       side="left"
+      onDismissed={() => {
+        if (!pendingLessonId) return;
+        setPendingLessonId(null);
+        router.push(`/learn/${pendingLessonId}`);
+      }}
     >
       {isPending && <Text style={styles.hint}>{t("common.loading")}</Text>}
       {!isPending && (!data || data.length === 0) && (
@@ -1395,8 +1415,8 @@ function TocModal({
           key={doc.id}
           style={[styles.tocRow, doc.id === currentDocumentId && styles.tocRowActive]}
           onPress={() => {
+            setPendingLessonId(doc.id);
             onClose();
-            router.push(`/learn/${doc.id}`);
           }}
           accessibilityRole="button"
         >
@@ -1501,8 +1521,11 @@ export default function LectureScreen() {
   const [activeTab, setActiveTab] = useState<TabKey>(() =>
     TABS.some((t) => t.key === tabParam) ? (tabParam as TabKey) : "lesson",
   );
-  const [tocOpen, setTocOpen] = useState(false);
-  const [notesOpen, setNotesOpen] = useState(false);
+  // One value rather than two booleans: it makes presenting the contents
+  // panel and the notebook at the same time unrepresentable. On iOS each is
+  // its own native window, and the stacking between two of those is
+  // undefined -- which is how they ended up overlapping.
+  const [activeDrawer, setActiveDrawer] = useState<"toc" | "notes" | null>(null);
   const [activeTool, setActiveToolState] = useState<ActiveTool>(null);
   // The first tapped word of a range being marked (see TappableParagraph).
   const [markAnchor, setMarkAnchor] = useState<(WordSpan & { blockIndex: number }) | null>(null);
@@ -1981,8 +2004,9 @@ export default function LectureScreen() {
           onToolChange={setActiveTool}
           toolsEnabled={lessonTools}
           penAvailable={activeTab === "lesson" && lessonViewMode === "pdf"}
-          onContents={() => setTocOpen(true)}
+          onContents={() => setActiveDrawer("toc")}
           onExplain={() => setExplainComingSoonVisible(true)}
+          textScaleAvailable={activeTab === "lesson" || activeTab === "review"}
           onTextScale={() =>
             setTextScale(
               (current) => TEXT_SCALES[(TEXT_SCALES.indexOf(current) + 1) % TEXT_SCALES.length]!,
@@ -1992,7 +2016,7 @@ export default function LectureScreen() {
 
         <Pressable
           style={[styles.edgeButton, activeTab === "review" && styles.edgeButtonRaised]}
-          onPress={() => setNotesOpen(true)}
+          onPress={() => setActiveDrawer("notes")}
           accessibilityRole="button"
           accessibilityLabel={t("lesson.panel.notes")}
         >
@@ -2157,12 +2181,16 @@ export default function LectureScreen() {
         </Modal>
 
         <TocModal
-          visible={tocOpen}
-          onClose={() => setTocOpen(false)}
+          visible={activeDrawer === "toc"}
+          onClose={() => setActiveDrawer(null)}
           scopeId={data.sub_chapter?.id ?? "none"}
           currentDocumentId={id}
         />
-        <NotesModal visible={notesOpen} onClose={() => setNotesOpen(false)} documentId={id} />
+        <NotesModal
+          visible={activeDrawer === "notes"}
+          onClose={() => setActiveDrawer(null)}
+          documentId={id}
+        />
       </View>
     </TextScaleContext.Provider>
   );

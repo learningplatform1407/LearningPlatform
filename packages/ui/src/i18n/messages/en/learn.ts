@@ -1,7 +1,10 @@
 import { plural } from "../../plural";
 
 export const learn = {
-  kicker: "Your course",
+  // No `kicker`: the Learn hub is the root of the Library -> Chapter ->
+  // Sub-chapter -> Lesson nesting, so it has no parent section to name, and
+  // there is no course entity for one to name either. It used to render
+  // "Your course" above the title, i.e. "Your course: Learn".
   title: "Learn",
   loadRecentFailed: "Failed to load your recent lessons.",
   continue: "Continue where you left off",
