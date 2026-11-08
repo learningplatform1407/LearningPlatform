@@ -1,5 +1,6 @@
 "use client";
 
+import type { Translator } from "@lp/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
@@ -10,14 +11,15 @@ import { Dot } from "@/components/dot";
 import { PlusIcon, SparkleIcon, TrashIcon } from "@/components/icons";
 import { NotchTabs } from "@/components/notch-tabs";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
 import { DrawingEntryEditor, firstLine, useNotebookEntries } from "../notebook/notebook-entries";
 
 export type SidePanelTab = "notebook" | "chat";
 
 const PANEL_TABS = [
-  { key: "notebook", label: "Notebook" },
-  { key: "chat", label: "Chat AI" },
+  { key: "notebook", label: "lesson.panel.notebook" },
+  { key: "chat", label: "lesson.panel.chat" },
 ] as const;
 
 const WIDTH_KEY = "lp-side-panel-width";
@@ -66,6 +68,7 @@ export function SidePanel({
   onDeleteNote: (annotation: Annotation) => void;
   onSaveNoteText: (annotation: Annotation, text: string) => void;
 }) {
+  const { t } = useI18n();
   // Only rendered into the page once the panel opens -- always after
   // hydration -- so reading storage in the initializer can't mismatch.
   const [width, setWidth] = useState(() =>
@@ -101,7 +104,7 @@ export function SidePanel({
     <>
       <button
         type="button"
-        aria-label="Notebook and AI chat"
+        aria-label={t("lesson.panel.label")}
         aria-expanded={open}
         onClick={() => onOpenChange(!open)}
         style={{ right: open ? panelWidth : 0 }}
@@ -115,7 +118,7 @@ export function SidePanel({
       {open && (
         <aside
           data-no-swipe
-          aria-label="Notebook and AI chat"
+          aria-label={t("lesson.panel.label")}
           style={{ width: panelWidth }}
           className="fixed top-0 right-0 bottom-0 z-[57] flex animate-[drawer-in-right_0.25s_ease] motion-reduce:animate-none flex-col border-l border-border bg-background pt-[env(safe-area-inset-top,0px)]"
         >
@@ -129,10 +132,10 @@ export function SidePanel({
           />
           <div className="flex justify-center px-3.5">
             <NotchTabs
-              tabs={PANEL_TABS}
+              tabs={PANEL_TABS.map((entry) => ({ ...entry, label: t(entry.label) }))}
               active={tab}
               onChange={onTabChange}
-              label="Panel"
+              label={t("lesson.panel.tabs")}
               variant="panel"
             />
           </div>
@@ -167,10 +170,10 @@ function quoteOf(blocks: ExtractedContent["blocks"], annotation: Annotation): st
   return text.slice(annotation.start_offset, annotation.end_offset);
 }
 
-function formatWhen(iso: string): string {
+function formatWhen(iso: string, locale: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString(undefined, {
+  return date.toLocaleString(locale, {
     day: "numeric",
     month: "short",
     hour: "2-digit",
@@ -189,7 +192,7 @@ const LINED_PAPER: React.CSSProperties = {
 
 /**
  * This lesson's notes, one at a time: notes anchored to a passage (made with
- * the note tool) and notebook entries written from this lesson. "All notes"
+ * the note tool) and notebook entries written from this lesson. t("lesson.panel.allNotes")
  * lists the whole notebook inside the panel, so any note -- this lesson's or
  * another's -- opens here without leaving the lesson.
  */
@@ -212,11 +215,12 @@ function NotebookPane({
   onDeleteNote: (annotation: Annotation) => void;
   onSaveNoteText: (annotation: Annotation, text: string) => void;
 }) {
+  const { t, locale } = useI18n();
   const queryClient = useQueryClient();
   const entries = useNotebookEntries();
   const [currentKey, setCurrentKey] = useState<string | null>(focusNoteId);
   const [hasDraft, setHasDraft] = useState(false);
-  // The "All notes" list, and a note from elsewhere in the notebook opened
+  // The t("lesson.panel.allNotes") list, and a note from elsewhere in the notebook opened
   // from it (it isn't one of this lesson's, so ‹ › don't step through it).
   const [listing, setListing] = useState(false);
   const [outsideId, setOutsideId] = useState<string | null>(null);
@@ -353,16 +357,18 @@ function NotebookPane({
   const quote = current?.kind === "anchored" ? quoteOf(blocks, current.annotation) : null;
   const kindLabel =
     current?.kind === "anchored"
-      ? "Note on a passage"
+      ? t("lesson.panel.noteOnPassage")
       : current?.kind === "entry" && current.entry.type === "drawing"
-        ? "Drawing"
-        : "Note";
+        ? t("lesson.panel.drawing")
+        : t("lesson.panel.note");
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-1.5 px-[18px] pt-4 pb-1.5">
         {listing ? (
-          <span className="flex-1 text-center text-sm font-extrabold">All notes</span>
+          <span className="flex-1 text-center text-sm font-extrabold">
+            {t("lesson.panel.allNotes")}
+          </span>
         ) : outside ? (
           <>
             <button
@@ -370,76 +376,93 @@ function NotebookPane({
               onClick={backToLesson}
               className="text-sm font-bold text-accent hover:underline"
             >
-              ‹ This lesson
+              {t("lesson.panel.backToLesson")}
             </button>
-            <span className="flex-1 text-center text-sm font-extrabold">From your notebook</span>
+            <span className="flex-1 text-center text-sm font-extrabold">
+              {t("lesson.panel.fromNotebook")}
+            </span>
           </>
         ) : (
           <>
-            <NavButton label="Previous note" disabled={index <= 0} onClick={() => go(-1)}>
+            <NavButton
+              label={t("lesson.panel.previousNote")}
+              disabled={index <= 0}
+              onClick={() => go(-1)}
+            >
               ‹
             </NavButton>
             <span className="flex-1 text-center text-sm font-extrabold">
-              {items.length === 0 ? "Notebook" : `Note ${index + 1} of ${items.length}`}
+              {items.length === 0
+                ? t("lesson.panel.notebook")
+                : t("lesson.panel.noteOf", { index: index + 1, total: items.length })}
             </span>
-            <NavButton label="Next note" disabled={index >= items.length - 1} onClick={() => go(1)}>
+            <NavButton
+              label={t("lesson.panel.nextNote")}
+              disabled={index >= items.length - 1}
+              onClick={() => go(1)}
+            >
               ›
             </NavButton>
           </>
         )}
         {!listing && (
-          <NavButton label="Delete note" disabled={!current} onClick={remove}>
+          <NavButton label={t("lesson.panel.deleteNote")} disabled={!current} onClick={remove}>
             <TrashIcon size={17} />
           </NavButton>
         )}
       </div>
 
       {listing && (
-        <nav aria-label="All notes" className="min-h-0 flex-1 overflow-y-auto px-[18px] pb-[80px]">
+        <nav
+          aria-label={t("lesson.panel.allNotes")}
+          className="min-h-0 flex-1 overflow-y-auto px-[18px] pb-[80px]"
+        >
           <NoteList
-            heading="This lesson"
+            heading={t("lesson.panel.thisLesson")}
             rows={items
               .filter((item) => item.kind !== "draft")
               .map((item) => ({
                 key: item.key,
-                title: noteTitle(item, blocks),
+                title: noteTitle(t, item, blocks),
                 current: !outside && item.key === current?.key,
                 onOpen: () => openFromList(item.key, true),
               }))}
-            empty="No notes for this lesson yet."
+            empty={t("lesson.panel.noLessonNotes")}
           />
           <NoteList
-            heading="Other notes"
+            heading={t("lesson.panel.otherNotes")}
             rows={otherEntries.map((entry) => ({
               key: entry.id,
               title:
-                entry.type === "drawing" ? "Drawing" : firstLine(entry.content ?? "") || "Untitled",
+                entry.type === "drawing"
+                  ? t("lesson.panel.drawing")
+                  : firstLine(entry.content ?? "") || t("lesson.panel.untitled"),
               current: entry.id === outsideId,
               onOpen: () => openFromList(entry.id, false),
             }))}
-            empty="Nothing else in your notebook yet."
+            empty={t("lesson.panel.nothingElse")}
           />
           <Link
             href="/learn/notebook"
             className="mt-md inline-block text-sm font-bold text-accent hover:underline"
           >
-            Open the full notebook →
+            {t("lesson.panel.openNotebook")}
           </Link>
         </nav>
       )}
 
       {!listing && !current && (
         <p className="px-[18px] pt-sm text-sm text-muted-foreground">
-          No notes for this lesson yet. Drag over a passage with the note tool (W), or start one
-          with +.
+          {t("lesson.panel.emptyHint")}
         </p>
       )}
 
       {!listing && current && (
         <>
           <p className="px-[18px] text-caption font-semibold text-muted-foreground">
-            <b className="text-foreground">{outside ? "Notebook" : lessonTitle}</b> · {kindLabel}
-            {current.createdAt && <> · {formatWhen(current.createdAt)}</>}
+            <b className="text-foreground">{outside ? t("lesson.panel.notebook") : lessonTitle}</b>{" "}
+            · {kindLabel}
+            {current.createdAt && <> · {formatWhen(current.createdAt, locale)}</>}
           </p>
           {current.kind === "anchored" && quote && (
             <button
@@ -458,8 +481,8 @@ function NotebookPane({
             <textarea
               key={current.key}
               ref={textareaRef}
-              aria-label="Note"
-              placeholder="Write your note here..."
+              aria-label={t("lesson.panel.note")}
+              placeholder={t("lesson.panel.placeholder")}
               defaultValue={
                 current.kind === "anchored"
                   ? (current.annotation.note_text ?? "")
@@ -477,8 +500,8 @@ function NotebookPane({
       )}
 
       <Dot
-        aria-label="New note"
-        title="New note"
+        aria-label={t("lesson.panel.newNote")}
+        title={t("lesson.panel.newNote")}
         onClick={newNote}
         className="absolute bottom-[18px] left-[18px]"
       >
@@ -490,7 +513,7 @@ function NotebookPane({
         onClick={() => setListing((open) => !open)}
         className="absolute right-[18px] bottom-[26px] text-sm font-bold text-accent hover:underline"
       >
-        {listing ? "Back to the note" : "All notes"}
+        {listing ? t("lesson.panel.backToNote") : t("lesson.panel.allNotes")}
       </button>
     </div>
   );
@@ -498,18 +521,20 @@ function NotebookPane({
 
 /** What a note is called in the list: its passage, its first line, or
  * "Drawing". */
-function noteTitle(item: NoteItem, blocks: ExtractedContent["blocks"]): string {
+function noteTitle(t: Translator["t"], item: NoteItem, blocks: ExtractedContent["blocks"]): string {
   if (item.kind === "anchored") {
     return (
-      item.annotation.note_text?.trim() || quoteOf(blocks, item.annotation) || "Note on a passage"
+      item.annotation.note_text?.trim() ||
+      quoteOf(blocks, item.annotation) ||
+      t("lesson.panel.noteOnPassage")
     );
   }
   if (item.kind === "entry") {
     return item.entry.type === "drawing"
-      ? "Drawing"
-      : firstLine(item.entry.content ?? "") || "Untitled";
+      ? t("lesson.panel.drawing")
+      : firstLine(item.entry.content ?? "") || t("lesson.panel.untitled");
   }
-  return "New note";
+  return t("lesson.panel.newNote");
 }
 
 function NoteList({
@@ -573,13 +598,14 @@ function NavButton({
 /** No AI backend exists yet; the pane is the real design with an honest
  * empty state, so the panel's shape is settled when it does. */
 function ChatPane() {
+  const { t } = useI18n();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-[18px] text-ui">
         <div className="max-w-[92%] rounded-[14px] bg-muted px-[13px] py-2.5">
-          Ask questions about this lesson and get answers drawn from it.
+          {t("lesson.panel.chatIntro")}
           <span className="mt-1.5 block text-caption text-muted-foreground">
-            AI chat is coming soon.
+            {t("lesson.panel.chatSoon")}
           </span>
         </div>
       </div>
@@ -589,8 +615,8 @@ function ChatPane() {
       >
         <input
           disabled
-          aria-label="Ask about this lesson"
-          placeholder="Ask something about this lesson..."
+          aria-label={t("lesson.panel.askLabel")}
+          placeholder={t("lesson.panel.askPlaceholder")}
           className="field"
         />
         <button
@@ -598,7 +624,7 @@ function ChatPane() {
           disabled
           className="rounded-md bg-foreground px-3.5 font-bold text-background disabled:opacity-50"
         >
-          Send
+          {t("lesson.panel.send")}
         </button>
       </form>
     </div>

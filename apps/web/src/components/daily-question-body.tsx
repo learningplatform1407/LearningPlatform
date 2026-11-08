@@ -2,19 +2,21 @@
 
 import type { DailyQuestion } from "@lp/api-client";
 import { ApiClientError } from "@lp/api-client";
+import type { Translator } from "@lp/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Button } from "@/components/button";
 import { QuestionRevealPanel } from "@/components/question-reveal";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
-function describeError(err: unknown): string {
+function describeError(t: Translator["t"], err: unknown): string {
   if (err instanceof ApiClientError) {
     const body = err.body as { message?: string } | null;
-    return body?.message ?? `Request failed with status ${err.status}`;
+    return body?.message ?? t("questions.requestFailed", { status: err.status });
   }
-  return err instanceof Error ? err.message : "Could not save that answer.";
+  return err instanceof Error ? err.message : t("questions.answerFailed");
 }
 
 function errorCode(err: unknown): string | null {
@@ -39,6 +41,7 @@ export function DailyQuestionBody({
    * and `attempt` say and the host derives its open state from them. */
   onAnswered: () => void;
 }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +59,7 @@ export function DailyQuestionBody({
       queryClient.invalidateQueries({ queryKey: ["daily-question"] });
     },
     onError: (err) => {
-      setError(describeError(err));
+      setError(describeError(t, err));
       // The day rolled over between render and submit -- someone left the
       // form open across midnight. Refetch so the next attempt grades against
       // the question that is actually current, rather than failing forever
@@ -69,11 +72,7 @@ export function DailyQuestionBody({
   });
 
   if (!question) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        There is no question today. Check back tomorrow.
-      </p>
-    );
+    return <p className="text-sm text-muted-foreground">{t("daily.noneToday")}</p>;
   }
 
   if (day.attempt) {
@@ -100,9 +99,7 @@ export function DailyQuestionBody({
             </li>
           ))}
         </ul>
-        <p className="mt-md text-xs text-muted-foreground">
-          This day has closed, so it can no longer be answered.
-        </p>
+        <p className="mt-md text-xs text-muted-foreground">{t("daily.closed")}</p>
       </>
     );
   }
@@ -141,8 +138,9 @@ export function DailyQuestionBody({
       </ul>
 
       <p className="mt-sm text-xs text-muted-foreground">
-        {isSingle ? "Single answer" : "Multiple answers"} · {question.points_possible} points ·{" "}
-        {question.difficulty}
+        {isSingle ? t("questions.single") : t("questions.multiple")} ·{" "}
+        {t("questions.points", { count: question.points_possible })} ·{" "}
+        {t(`questions.difficulty.${question.difficulty}`)}
       </p>
 
       {error && (
@@ -157,7 +155,7 @@ export function DailyQuestionBody({
         disabled={selected.length === 0 || answer.isPending}
         onClick={() => answer.mutate(question.id)}
       >
-        {answer.isPending ? "Checking..." : "Check answer"}
+        {answer.isPending ? t("questions.checking") : t("questions.check")}
       </Button>
     </>
   );

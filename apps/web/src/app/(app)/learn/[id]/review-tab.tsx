@@ -11,6 +11,7 @@ import { BulbIcon, BulbOffIcon, CardsIcon, HistoryIcon } from "@/components/icon
 import { useToast } from "@/components/toast";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { spliceClozeSpans } from "@/lib/text-offset";
+import { useI18n } from "@/lib/i18n";
 import { clozeGap, lightColors, sentenceAround } from "@lp/ui";
 
 import { ExtractedImage } from "./extracted-image";
@@ -35,7 +36,7 @@ const CLOZE_BASE = "rounded-[5px] px-[3px] font-bold";
  * into in-place gaps, graded from a bar glued to the bottom edge.
  *
  * Grades stay visible for the session as tinted words, so you can see how a
- * pass went; "Only what you missed" re-queues the ones graded Again or Hard.
+ * pass went; t("lesson.review.onlyMissed") re-queues the ones graded Again or Hard.
  */
 export function ReviewTab({
   documentId,
@@ -44,6 +45,7 @@ export function ReviewTab({
   documentId: string;
   textScale?: number;
 }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const toast = useToast();
   const documentQuery = useQuery({
@@ -76,9 +78,9 @@ export function ReviewTab({
       void queryClient.invalidateQueries({ queryKey: ["cloze-cards", "due", documentId] });
       setGrades((previous) => new Map(previous).set(cardId, rating));
       setRevealedCardId(null);
-      toast(`Next review in ${state.interval_days} ${state.interval_days === 1 ? "day" : "days"}.`);
+      toast(t("lesson.flashcards.nextReview", { count: state.interval_days }));
     },
-    onError: () => toast("That grade couldn't be saved."),
+    onError: () => toast(t("lesson.review.gradeFailed")),
   });
 
   const dueCards = dueQuery.data ?? [];
@@ -112,12 +114,12 @@ export function ReviewTab({
   useGradeKeys(current !== undefined, { onShow: show, onGrade: grade });
 
   if (dueQuery.isPending || documentQuery.isPending) {
-    return <p className="text-sm text-muted-foreground">Loading...</p>;
+    return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
   }
   if (dueQuery.isError || documentQuery.isError) {
     return (
       <p role="alert" className="text-sm text-danger">
-        Failed to load review cards.
+        {t("lesson.review.loadFailed")}
       </p>
     );
   }
@@ -196,18 +198,20 @@ export function ReviewTab({
     <div style={{ fontSize: `${(17 * textScale) / 100}px` }} className="leading-[1.6]">
       <p className="mb-sm text-sm font-semibold text-muted-foreground">
         {pending === 0 && !onlyMissed
-          ? "You're all caught up — nothing to review right now."
+          ? t("lesson.review.allCaughtUp")
           : onlyMissed
-            ? `${queue.length} missed ${queue.length === 1 ? "word" : "words"} to go again`
-            : `${pending} ${pending === 1 ? "word" : "words"} left to review`}
+            ? t("lesson.review.missedLeft", { count: queue.length })
+            : t("lesson.review.wordsLeft", { count: pending })}
       </p>
 
       {version?.status === "processing" && (
-        <p className="text-sm text-muted-foreground">Processing...</p>
+        <p className="text-sm text-muted-foreground">{t("lesson.processing")}</p>
       )}
       {version?.status === "failed" && (
         <p role="alert" className="text-sm text-danger">
-          Processing failed: {version.error_message ?? "Unknown error"}
+          {t("lesson.processingFailed", {
+            message: version.error_message ?? t("lesson.unknownError"),
+          })}
         </p>
       )}
       {version?.status === "ready" && (
@@ -242,7 +246,7 @@ export function ReviewTab({
       {cardsView && current && (
         <CardsOverlay
           onClose={() => setCardsView(false)}
-          section={sectionOf(blocks, current.block_index)}
+          section={sectionOf(blocks, current.block_index) || t("lesson.tabs.review")}
           position={`${allCards.length - pending + 1} / ${allCards.length}`}
         >
           {renderSentence(blocks[current.block_index]?.text ?? "", current, (slice, base) =>
@@ -252,12 +256,12 @@ export function ReviewTab({
       )}
 
       {(current || onlyMissed || missedCount > 0) && (
-        <BottomNotch label="Review controls">
+        <BottomNotch label={t("lesson.review.controls")}>
           <div className="flex gap-1.5 self-center">
             <Dot
               size="sm"
-              aria-label="Cards, one at a time"
-              title="Cards, one at a time"
+              aria-label={t("lesson.review.cardsView")}
+              title={t("lesson.review.cardsView")}
               aria-pressed={cardsView}
               onClick={() => setCardsView((on) => !on)}
             >
@@ -265,8 +269,8 @@ export function ReviewTab({
             </Dot>
             <Dot
               size="sm"
-              aria-label="Only what you missed"
-              title="Only what you missed"
+              aria-label={t("lesson.review.onlyMissed")}
+              title={t("lesson.review.onlyMissed")}
               aria-pressed={onlyMissed}
               onClick={() => {
                 setOnlyMissed((on) => !on);
@@ -290,14 +294,14 @@ export function ReviewTab({
             )
           ) : (
             <p className="self-center px-md text-sm font-semibold text-muted-foreground">
-              Nothing missed left to go over.
+              {t("lesson.review.nothingMissed")}
             </p>
           )}
           <div className="flex gap-1.5 self-center">
             <Dot
               size="sm"
-              aria-label="Letter hints in the gaps"
-              title={hints ? "Hide hints" : "Show hints"}
+              aria-label={t("lesson.review.hints")}
+              title={hints ? t("lesson.review.hideHints") : t("lesson.review.showHints")}
               aria-pressed={hints}
               onClick={() => setHints((on) => !on)}
             >
@@ -305,8 +309,8 @@ export function ReviewTab({
             </Dot>
             <Dot
               size="sm"
-              aria-label="One gap at a time"
-              title="One gap at a time"
+              aria-label={t("lesson.review.oneGap")}
+              title={t("lesson.review.oneGap")}
               aria-pressed={oneAtATime}
               onClick={() => setOneAtATime((on) => !on)}
             >
@@ -323,7 +327,7 @@ function sectionOf(blocks: Block[], blockIndex: number): string {
   for (let i = blockIndex; i >= 0; i -= 1) {
     if (blocks[i]?.type === "heading") return blocks[i]!.text ?? "";
   }
-  return "Review";
+  return "";
 }
 
 /** The sentence holding the gap, for the cards view (design.md §11). */
@@ -365,6 +369,7 @@ function CardsOverlay({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const { t } = useI18n();
   return (
     <div
       data-no-swipe
@@ -375,7 +380,7 @@ function CardsOverlay({
     >
       <div
         role="dialog"
-        aria-label="Review card"
+        aria-label={t("lesson.review.card")}
         style={PAPER_VARS}
         className="w-[min(560px,100%)] rounded-sheet bg-paper px-[30px] pt-[30px] pb-lg text-card leading-[1.5] text-paper-foreground shadow-card"
       >

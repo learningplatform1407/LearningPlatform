@@ -6,6 +6,7 @@ import { HIGHLIGHT_COLOR_NAMES, pageColors } from "@lp/ui";
 
 import { BulbIcon, EraserIcon, NoteIcon, PenIcon, UndoIcon } from "@/components/icons";
 import { useToast } from "@/components/toast";
+import { useI18n } from "@/lib/i18n";
 
 import {
   toolAvailable,
@@ -47,11 +48,12 @@ export function ToolNotch({
   textScale: TextScale;
   onTextScale: () => void;
 }) {
+  const { t } = useI18n();
   const toast = useToast();
 
   function guard(available: boolean, reason: string, action: () => void) {
     return () => {
-      if (!onLessonTab) toast("The tools work in the Lesson tab.");
+      if (!onLessonTab) toast(t("lesson.tools.onlyInLesson"));
       else if (!available) toast(reason);
       else action();
     };
@@ -61,16 +63,16 @@ export function ToolNotch({
 
   return (
     // The landmark lets screen-reader users jump straight to the tools.
-    <aside aria-label="Lesson toolbar" data-no-swipe>
+    <aside aria-label={t("lesson.tools.toolbar")} data-no-swipe>
       <div
         role="toolbar"
-        aria-label="Lesson tools"
+        aria-label={t("lesson.tools.label")}
         aria-orientation="vertical"
         style={{ left: tocOpen ? 280 : 0 }}
         className="fixed top-1/2 z-[60] flex w-[42px] -translate-y-1/2 flex-col items-center gap-[3px] rounded-r-xl border border-l-0 border-border bg-background px-[5px] py-1.5 shadow-edge-left transition-[left] duration-[250ms] ease-in-out"
       >
         <ToolButton
-          label={tocOpen ? "Hide contents" : "Show contents"}
+          label={tocOpen ? t("lesson.tools.hideContents") : t("lesson.tools.showContents")}
           pressed={tocOpen}
           onClick={onToggleToc}
         >
@@ -84,8 +86,13 @@ export function ToolNotch({
           return (
             <ToolButton
               key={name}
-              label={penMode ? `Pen colour — ${name}` : `Highlight — ${name}`}
-              title={`${penMode ? "Pen colour" : "Marker"}: ${name} (${index + 1})`}
+              label={t(penMode ? "lesson.tools.penColour" : "lesson.tools.highlight", {
+                color: t(`colors.${name}`),
+              })}
+              title={t(penMode ? "lesson.tools.penColourTitle" : "lesson.tools.markerTitle", {
+                color: t(`colors.${name}`),
+                key: index + 1,
+              })}
               pressed={active}
               dimmed={!onLessonTab}
               onClick={guard(true, "", () => onSwatch(swatch))}
@@ -101,38 +108,38 @@ export function ToolNotch({
         <span aria-hidden="true" className="my-[3px] h-px w-[22px] bg-border" />
 
         <ToolButton
-          label="Explain"
-          title="Explain (Q) — coming soon"
+          label={t("lesson.tools.explain")}
+          title={t("lesson.tools.explainTitle")}
           dimmed
-          onClick={() => toast("AI explanations are coming soon.")}
+          onClick={() => toast(t("lesson.tools.explainSoon"))}
         >
           <BulbIcon />
         </ToolButton>
         <ToolButton
-          label="Note"
-          title={viewMode === "text" ? "Note (W)" : "Notes work in Text mode"}
+          label={t("lesson.tools.note")}
+          title={viewMode === "text" ? t("lesson.tools.noteTitle") : t("lesson.tools.noteTextOnly")}
           pressed={tool?.kind === "note"}
           dimmed={!onLessonTab || !toolAvailable("note", viewMode)}
-          onClick={guard(toolAvailable("note", viewMode), "Notes work in Text mode.", () =>
+          onClick={guard(toolAvailable("note", viewMode), t("lesson.tools.noteTextOnlyToast"), () =>
             onTool("note"),
           )}
         >
           <NoteIcon />
         </ToolButton>
         <ToolButton
-          label="Pen"
-          title={viewMode === "pdf" ? "Pen (P)" : "The pen draws on PDF pages"}
+          label={t("lesson.tools.pen")}
+          title={viewMode === "pdf" ? t("lesson.tools.penTitle") : t("lesson.tools.penPdfOnly")}
           pressed={penMode}
           dimmed={!onLessonTab || !toolAvailable("pen", viewMode)}
-          onClick={guard(toolAvailable("pen", viewMode), "The pen draws on PDF pages.", () =>
+          onClick={guard(toolAvailable("pen", viewMode), t("lesson.tools.penPdfOnlyToast"), () =>
             onTool("pen"),
           )}
         >
           <PenIcon />
         </ToolButton>
         <ToolButton
-          label="Eraser"
-          title="Eraser (R)"
+          label={t("lesson.tools.eraser")}
+          title={t("lesson.tools.eraserTitle")}
           pressed={tool?.kind === "eraser"}
           dimmed={!onLessonTab}
           onClick={guard(true, "", () => onTool("eraser"))}
@@ -140,10 +147,10 @@ export function ToolNotch({
           <EraserIcon />
         </ToolButton>
         <ToolButton
-          label="Undo"
-          title="Undo (Z)"
+          label={t("lesson.tools.undo")}
+          title={t("lesson.tools.undoTitle")}
           dimmed={!onLessonTab || !canUndo}
-          onClick={guard(canUndo, "Nothing to undo.", onUndo)}
+          onClick={guard(canUndo, t("lesson.nothingToUndo"), onUndo)}
         >
           <UndoIcon />
         </ToolButton>
@@ -151,7 +158,11 @@ export function ToolNotch({
         <span aria-hidden="true" className="my-[3px] h-px w-[22px] bg-border" />
 
         {/* Text size works on every tab: it sizes the Review text too. */}
-        <ToolButton label="Text size" title={`Text size: ${textScale}%`} onClick={onTextScale}>
+        <ToolButton
+          label={t("lesson.tools.textSize")}
+          title={t("lesson.tools.textSizeValue", { percent: textScale })}
+          onClick={onTextScale}
+        >
           <span className="text-[13px] leading-none font-extrabold">Aa</span>
         </ToolButton>
       </div>

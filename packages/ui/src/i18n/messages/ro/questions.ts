@@ -1,0 +1,82 @@
+import { plural } from "../../plural";
+import type { Messages } from "../en";
+
+export const questions: Messages["questions"] = {
+  outcome: {
+    correct: "corect",
+    partial: "parțial",
+    incorrect: "greșit",
+  },
+  answered: {
+    correct: "Răspuns corect",
+    partial: "Răspuns parțial corect",
+    incorrect: "Răspuns greșit",
+  },
+  answersHeading: "Răspunsuri · {outcome} — {awarded}/{possible} puncte",
+  yourChoice: ", alegerea ta",
+  inAnswer: ", face parte din răspuns",
+  gotRight: "ai răspuns corect aici",
+  missed: "ai greșit aici",
+  true: "Adevărat.",
+  false: "Fals.",
+  scoreLabel: "{outcome}, {awarded} din {possible} puncte",
+  attempts: plural({
+    one: ", {count} încercare",
+    few: ", {count} încercări",
+    other: ", {count} de încercări",
+  }),
+  tries: plural({
+    one: "· {count} încercare",
+    few: "· {count} încercări",
+    other: "· {count} de încercări",
+  }),
+  single: "Un singur răspuns",
+  multiple: "Mai multe răspunsuri",
+  points: plural({ one: "{count} punct", few: "{count} puncte", other: "{count} de puncte" }),
+  difficulty: {
+    easy: "ușoară",
+    medium: "medie",
+    hard: "grea",
+  },
+  favourite: "Favorită",
+  addFavourite: "Adaugă la favorite",
+  removeFavourite: "Scoate din favorite",
+  favouriteFailed: "Favorita nu s-a putut salva.",
+  answerFailed: "Răspunsul nu s-a putut salva.",
+  requestFailed: "Cererea a eșuat cu codul {status}",
+  tryAgain: "Încearcă din nou",
+  checking: "Se verifică...",
+  check: "Verifică răspunsul",
+  seeInLesson: "↗ Vezi în lecție",
+  empty: "Nicio grilă aici deocamdată.",
+  loading: "Se încarcă grilele...",
+  loadFailed: "Grilele nu s-au putut încărca.",
+  showing: "Se afișează {shown} din {total} grile",
+  count: plural({ one: "{count} grilă", few: "{count} grile", other: "{count} de grile" }),
+  waiting: plural({
+    one: "{count} grilă în așteptare — niciun răspuns încă.",
+    few: "{count} grile în așteptare — niciun răspuns încă.",
+    other: "{count} de grile în așteptare — niciun răspuns încă.",
+  }),
+  statsLine:
+    "{success} reușite · {failure} greșite · {pending} în așteptare · scor mediu {average}",
+};
+
+export const daily: Messages["daily"] = {
+  title: "Întrebarea zilei",
+  noneToday: "Azi nu există nicio întrebare. Revino mâine.",
+  closed: "Ziua s-a încheiat, așa că nu se mai poate răspunde.",
+  summaryAnswered: "{outcome}, {awarded}/{possible} puncte.",
+  noQuestion: "Nicio întrebare azi.",
+  answerToday: "Răspunde la întrebarea de azi.",
+  unavailable: "Întrebarea de azi nu este disponibilă.",
+  today: "Azi",
+  todayWithDate: "Azi, {date}",
+  dayNotAnswered: "{when}: fără răspuns",
+  dayOutcome: "{when}: {outcome}",
+  previousMonth: "Luna anterioară",
+  nextMonth: "Luna următoare",
+  calendarFailed: "Calendarul nu s-a putut încărca.",
+  dayFailed: "Ziua nu s-a putut încărca.",
+  loadFailed: "Întrebarea zilei nu s-a putut încărca.",
+};

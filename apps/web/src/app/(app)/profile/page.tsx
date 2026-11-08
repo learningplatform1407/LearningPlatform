@@ -2,15 +2,17 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { computeProfileBadges } from "@lp/api-client";
-import { formatMonthYear } from "@lp/ui";
+import { badgeText, formatMonthYear } from "@lp/ui";
 import Link from "next/link";
 
 import { MetricBarChart } from "@/components/metric-bar-chart";
 import { PageMain } from "@/components/page-main";
 import { StatTile } from "@/components/stat-tile";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
 export default function ProfilePage() {
+  const { t, language } = useI18n();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
     queryFn: () => getBrowserApiClient().getMe(),
@@ -28,7 +30,7 @@ export default function ProfilePage() {
   if (isPending) {
     return (
       <main className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </main>
     );
   }
@@ -37,13 +39,16 @@ export default function ProfilePage() {
     return (
       <main className="flex min-h-screen items-center justify-center">
         <p role="alert" className="text-sm text-danger">
-          Failed to load profile: {(error as Error).message}
+          {t("common.failedToLoadProfile", { message: (error as Error).message })}
         </p>
       </main>
     );
   }
 
-  const badges = statsQuery.data ? computeProfileBadges(statsQuery.data) : null;
+  // Derived with English text in api-client; shown in the reader's language.
+  const badges = statsQuery.data
+    ? computeProfileBadges(statsQuery.data).map((badge) => ({ ...badge, ...badgeText(t, badge) }))
+    : null;
 
   return (
     <PageMain width="reading">
@@ -58,19 +63,19 @@ export default function ProfilePage() {
             )}
           </div>
           <div className="flex min-w-0 flex-col">
-            <p className="label-caps m-0">Profile</p>
+            <p className="label-caps m-0">{t("profile.title")}</p>
             <h1 className="mt-1 text-[clamp(26px,4vw,34px)] leading-[1.15] font-extrabold break-words text-foreground">
-              {data.display_name ?? data.email ?? "Unnamed"}
+              {data.display_name ?? data.email ?? t("profile.unnamed")}
             </h1>
             <span className="text-toc font-semibold text-muted-foreground">
-              Joined {formatMonthYear(data.created_at)}
+              {t("profile.joined", { date: formatMonthYear(data.created_at, language) })}
             </span>
           </div>
         </div>
         <Link
           href="/settings"
-          aria-label="Settings"
-          title="Settings"
+          aria-label={t("nav.settings")}
+          title={t("nav.settings")}
           className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-dot hover:bg-muted"
         >
           <svg
@@ -100,42 +105,50 @@ export default function ProfilePage() {
         href="/settings/profile"
         className="mt-md inline-block w-fit rounded-md border border-border bg-background px-md py-[9px] text-ui font-bold text-foreground hover:bg-muted"
       >
-        Edit Profile
+        {t("profile.editProfile")}
       </Link>
 
       <section className="mt-xl">
-        {statsQuery.isPending && <p className="text-sm text-muted-foreground">Loading stats...</p>}
+        {statsQuery.isPending && (
+          <p className="text-sm text-muted-foreground">{t("profile.loadingStats")}</p>
+        )}
         {statsQuery.data && (
           <div className="flex flex-col gap-lg">
             <div className="grid grid-cols-2 gap-md sm:grid-cols-3">
               <StatTile
                 emphasis
-                label="Streak"
+                label={t("profile.streak")}
                 value={
                   statsQuery.data.current_streak_days > 0
-                    ? `🔥 ${statsQuery.data.current_streak_days} day streak`
-                    : "No streak yet"
+                    ? t("profile.streakDays", { count: statsQuery.data.current_streak_days })
+                    : t("profile.noStreak")
                 }
               />
               <StatTile
                 emphasis
-                label="Lessons completed"
-                value={`${statsQuery.data.lessons_completed} of ${statsQuery.data.lessons_eligible} lessons`}
+                label={t("profile.lessonsCompleted")}
+                value={t("profile.lessonsOf", {
+                  completed: statsQuery.data.lessons_completed,
+                  eligible: statsQuery.data.lessons_eligible,
+                })}
               />
               <StatTile
                 emphasis
-                label="Exams completed"
+                label={t("profile.examsCompleted")}
                 value={`${statsQuery.data.exams_completed}`}
               />
             </div>
 
             <div>
-              <h2 className="label-caps mb-sm">Accuracy &amp; averages</h2>
+              <h2 className="label-caps mb-sm">{t("profile.accuracy")}</h2>
               <MetricBarChart
                 metrics={[
-                  { label: "Exam average", percent: statsQuery.data.exam_average_score_percent },
                   {
-                    label: "Question accuracy",
+                    label: t("profile.examAverage"),
+                    percent: statsQuery.data.exam_average_score_percent,
+                  },
+                  {
+                    label: t("profile.questionAccuracy"),
                     percent: statsQuery.data.question_accuracy_percent,
                   },
                 ]}
@@ -144,13 +157,16 @@ export default function ProfilePage() {
 
             {badges && (
               <div>
-                <h2 className="label-caps mb-sm">Badges</h2>
+                <h2 className="label-caps mb-sm">{t("profile.badgesTitle")}</h2>
                 <div className="flex flex-wrap gap-lg border-t border-border pt-md">
                   {badges.map((badge) => (
                     <div
                       key={badge.id}
                       role="group"
-                      aria-label={`${badge.label}: ${badge.earned ? "earned" : "locked"}`}
+                      aria-label={t("profile.badgeState", {
+                        badge: badge.label,
+                        state: badge.earned ? t("profile.earned") : t("profile.locked"),
+                      })}
                       className="flex w-20 flex-col items-center gap-xs text-center"
                     >
                       <div

@@ -61,8 +61,10 @@ import {
 } from "@/lib/ui/icons";
 import { NotchTabs } from "@/lib/ui/notch-tabs";
 import { Dot, SegmentedSwitch } from "@/lib/ui/primitives";
+import { useI18n } from "@/lib/i18n";
 
 function ExtractedImage({ path }: { path: string }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const {
@@ -88,7 +90,7 @@ function ExtractedImage({ path }: { path: string }) {
   if (isError || !url) {
     return (
       <View style={styles.imagePlaceholder}>
-        <Text style={styles.error}>Failed to load image.</Text>
+        <Text style={styles.error}>{t("lesson.imageFailed")}</Text>
       </View>
     );
   }
@@ -152,6 +154,7 @@ function AnnotatedParagraph({
   /** Where the paragraph sits in the scroll content, for jumping to it. */
   onLayoutY?: (y: number) => void;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const body = useScaledBody();
@@ -194,7 +197,7 @@ function AnnotatedParagraph({
               style={styles.noteBadge}
               accessibilityRole="button"
             >
-              <Text style={styles.noteBadgeText}>note</Text>
+              <Text style={styles.noteBadgeText}>{t("lesson.panel.note").toLowerCase()}</Text>
             </Pressable>
           ))}
         </View>
@@ -203,16 +206,17 @@ function AnnotatedParagraph({
   );
 }
 
+/** `label`s are catalogue keys; translate them where they're shown. */
 const VIEW_MODES = [
-  { value: "text", label: "Text" },
-  { value: "pdf", label: "PDF" },
+  { value: "text", label: "lesson.text" },
+  { value: "pdf", label: "lesson.pdf" },
 ] as const;
 
 const TABS = [
-  { key: "lesson", label: "Lesson" },
-  { key: "review", label: "Review" },
-  { key: "quizzes", label: "Quizzes" },
-  { key: "flashcards", label: "Flashcards" },
+  { key: "lesson", label: "lesson.tabs.lesson" },
+  { key: "review", label: "lesson.tabs.review" },
+  { key: "quizzes", label: "lesson.tabs.quizzes" },
+  { key: "flashcards", label: "lesson.tabs.flashcards" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -272,15 +276,20 @@ function ToolNotch({
   /** Text size, on every tab: it sizes the Review text too. */
   onTextScale: () => void;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   return (
-    <View style={styles.toolNotch} accessibilityRole="toolbar" accessibilityLabel="Lesson tools">
+    <View
+      style={styles.toolNotch}
+      accessibilityRole="toolbar"
+      accessibilityLabel={t("lesson.tools.label")}
+    >
       <Pressable
         onPress={onContents}
         style={styles.tool}
         accessibilityRole="button"
-        accessibilityLabel="Contents"
+        accessibilityLabel={t("lesson.tools.contents")}
         hitSlop={4}
       >
         <Text style={styles.toolChevron}>›</Text>
@@ -305,7 +314,9 @@ function ToolNotch({
                   )
                 }
                 accessibilityRole="button"
-                accessibilityLabel={`Highlight — ${color.name}`}
+                accessibilityLabel={t("lesson.tools.highlight", {
+                  color: t(`colors.${color.name}`),
+                })}
                 accessibilityState={{ selected: isActive }}
                 style={styles.tool}
                 hitSlop={2}
@@ -325,7 +336,7 @@ function ToolNotch({
             onPress={onExplain}
             style={styles.tool}
             accessibilityRole="button"
-            accessibilityLabel="Explain"
+            accessibilityLabel={t("lesson.tools.explain")}
           >
             <BulbIcon color={colors.mutedForeground} />
           </Pressable>
@@ -335,7 +346,9 @@ function ToolNotch({
             }
             disabled={!penAvailable}
             accessibilityRole="button"
-            accessibilityLabel={penAvailable ? "Pen" : "Pen — PDF view only"}
+            accessibilityLabel={
+              penAvailable ? t("lesson.tools.pen") : t("lesson.tools.penPdfOnlyShort")
+            }
             accessibilityState={{ selected: activeTool?.type === "pen", disabled: !penAvailable }}
             style={[
               styles.tool,
@@ -348,7 +361,7 @@ function ToolNotch({
           <Pressable
             onPress={() => onToolChange(activeTool?.type === "eraser" ? null : { type: "eraser" })}
             accessibilityRole="button"
-            accessibilityLabel="Eraser"
+            accessibilityLabel={t("lesson.tools.eraser")}
             accessibilityState={{ selected: activeTool?.type === "eraser" }}
             style={[styles.tool, activeTool?.type === "eraser" && styles.toolActive]}
           >
@@ -363,7 +376,7 @@ function ToolNotch({
         onPress={onTextScale}
         style={styles.tool}
         accessibilityRole="button"
-        accessibilityLabel="Text size"
+        accessibilityLabel={t("lesson.tools.textSize")}
       >
         <Text style={styles.toolAa}>Aa</Text>
       </Pressable>
@@ -451,6 +464,7 @@ function QuizzesTab({
   documentId: string;
   onSeeInLesson: SeeInLesson;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   // Scoped by questions.document_id — a question's provenance, and the only
   // link between a lesson and a question. Lessons carry no tags of their
@@ -459,20 +473,20 @@ function QuizzesTab({
     <View style={styles.quizzesTab}>
       <QuestionBankList
         filter={{ documentIds: [documentId] }}
-        emptyMessage="No questions for this lesson yet."
+        emptyMessage={t("bank.noLessonQuestions")}
         onSeeInLesson={onSeeInLesson}
       />
       <Pressable onPress={() => router.push("/exams")}>
-        <Text style={styles.tabLink}>Practise in an exam →</Text>
+        <Text style={styles.tabLink}>{t("lesson.quizzes.practise")}</Text>
       </Pressable>
     </View>
   );
 }
 
 const SCOPE_FILTERS = [
-  { key: "all", label: "All" },
-  { key: "official", label: "Official" },
-  { key: "personal", label: "Mine" },
+  { key: "all", label: "lesson.flashcards.all" },
+  { key: "official", label: "lesson.flashcards.official" },
+  { key: "personal", label: "lesson.flashcards.mine" },
 ] as const;
 
 function ScopeToggle({
@@ -482,6 +496,7 @@ function ScopeToggle({
   scope: FlashcardScopeFilter;
   onChange: (scope: FlashcardScopeFilter) => void;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   return (
     <View style={styles.scopeToggle} accessibilityRole="radiogroup">
@@ -496,7 +511,7 @@ function ScopeToggle({
           <Text
             style={[styles.scopeButtonText, scope === filter.key && styles.scopeButtonTextActive]}
           >
-            {filter.label}
+            {t(filter.label)}
           </Text>
         </Pressable>
       ))}
@@ -506,15 +521,19 @@ function ScopeToggle({
 
 /** Official vs personal, always paired with a word rather than colour alone. */
 function ScopeBadge({ scope }: { scope: FlashcardScope }) {
+  const { t } = useI18n();
   const styles = useStyles();
   return (
     <View style={styles.scopeBadge}>
-      <Text style={styles.scopeBadgeText}>{scope === "official" ? "Official" : "Mine"}</Text>
+      <Text style={styles.scopeBadgeText}>
+        {scope === "official" ? t("lesson.flashcards.official") : t("lesson.flashcards.mine")}
+      </Text>
     </View>
   );
 }
 
 function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: () => void }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const [front, setFront] = useState("");
   const [back, setBack] = useState("");
@@ -524,21 +543,21 @@ function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: 
     mutationFn: () =>
       getApiClient().createFlashcard(documentId, { front_text: front, back_text: back }),
     onSuccess: onDone,
-    onError: () => setError("Could not save that card."),
+    onError: () => setError(t("lesson.flashcards.saveFailed")),
   });
 
   return (
     <View style={styles.cardForm}>
-      <Text style={styles.formLabel}>Front</Text>
+      <Text style={styles.formLabel}>{t("lesson.flashcards.front")}</Text>
       <TextInput
-        accessibilityLabel="Front"
+        accessibilityLabel={t("lesson.flashcards.front")}
         value={front}
         onChangeText={setFront}
         style={styles.formInput}
       />
-      <Text style={styles.formLabel}>Back</Text>
+      <Text style={styles.formLabel}>{t("lesson.flashcards.back")}</Text>
       <TextInput
-        accessibilityLabel="Back"
+        accessibilityLabel={t("lesson.flashcards.back")}
         value={back}
         onChangeText={setBack}
         multiline
@@ -552,10 +571,10 @@ function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: 
           accessibilityRole="button"
           style={styles.primaryButton}
         >
-          <Text style={styles.primaryButtonText}>Save card</Text>
+          <Text style={styles.primaryButtonText}>{t("lesson.flashcards.saveCard")}</Text>
         </Pressable>
         <Pressable onPress={onDone} accessibilityRole="button" style={styles.secondaryButton}>
-          <Text style={styles.secondaryButtonText}>Cancel</Text>
+          <Text style={styles.secondaryButtonText}>{t("common.cancel")}</Text>
         </Pressable>
       </View>
     </View>
@@ -563,6 +582,7 @@ function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: 
 }
 
 function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => void }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const [editing, setEditing] = useState(false);
   const [front, setFront] = useState(card.front_text);
@@ -588,12 +608,12 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
       setError(null);
       onChanged();
     },
-    onError: () => setError("Could not save that card."),
+    onError: () => setError(t("lesson.flashcards.saveFailed")),
   });
   const remove = useMutation({
     mutationFn: () => getApiClient().deleteFlashcard(card.id),
     onSuccess: onChanged,
-    onError: () => setError("Could not delete that card."),
+    onError: () => setError(t("lesson.flashcards.deleteFailed")),
   });
   const suspension = useMutation({
     mutationFn: () => getApiClient().setFlashcardSuspension(card.id, !card.suspended),
@@ -601,20 +621,24 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
     // This toggle is the only route back into the rotation, so a silent
     // failure would leave the learner unable to tell the card is still out.
     onError: () =>
-      setError(card.suspended ? "Could not include that card." : "Could not exclude that card."),
+      setError(
+        card.suspended
+          ? t("lesson.flashcards.includeFailed")
+          : t("lesson.flashcards.excludeFailed"),
+      ),
   });
 
   if (editing) {
     return (
       <View style={styles.cardForm}>
         <TextInput
-          accessibilityLabel="Front"
+          accessibilityLabel={t("lesson.flashcards.front")}
           value={front}
           onChangeText={setFront}
           style={styles.formInput}
         />
         <TextInput
-          accessibilityLabel="Back"
+          accessibilityLabel={t("lesson.flashcards.back")}
           value={back}
           onChangeText={setBack}
           multiline
@@ -628,14 +652,14 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
             accessibilityRole="button"
             style={styles.primaryButton}
           >
-            <Text style={styles.primaryButtonText}>Save</Text>
+            <Text style={styles.primaryButtonText}>{t("common.save")}</Text>
           </Pressable>
           <Pressable
             onPress={() => setEditing(false)}
             accessibilityRole="button"
             style={styles.secondaryButton}
           >
-            <Text style={styles.secondaryButtonText}>Cancel</Text>
+            <Text style={styles.secondaryButtonText}>{t("common.cancel")}</Text>
           </Pressable>
         </View>
       </View>
@@ -653,7 +677,7 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
         <ScopeBadge scope={card.scope} />
         {card.suspended && (
           <View style={styles.scopeBadge}>
-            <Text style={styles.scopeBadgeText}>Not in rotation</Text>
+            <Text style={styles.scopeBadgeText}>{t("lesson.flashcards.notInRotation")}</Text>
           </View>
         )}
         {/* Offered on every visible card, official included — suspension is
@@ -667,12 +691,12 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
           accessibilityState={{ selected: !card.suspended }}
         >
           <Text style={styles.linkText}>
-            {card.suspended ? "Include in reviews" : "Exclude from reviews"}
+            {card.suspended ? t("lesson.flashcards.include") : t("lesson.flashcards.exclude")}
           </Text>
         </Pressable>
         {card.can_edit && (
           <Pressable onPress={openEditor} accessibilityRole="button">
-            <Text style={styles.linkText}>Edit</Text>
+            <Text style={styles.linkText}>{t("lesson.flashcards.edit")}</Text>
           </Pressable>
         )}
         {card.can_delete && (
@@ -683,7 +707,9 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
           >
             {/* Retiring an official card archives it for everyone; deleting
                 your own personal card removes it. */}
-            <Text style={styles.deleteText}>{card.scope === "official" ? "Retire" : "Delete"}</Text>
+            <Text style={styles.deleteText}>
+              {card.scope === "official" ? t("lesson.flashcards.retire") : t("common.delete")}
+            </Text>
           </Pressable>
         )}
       </View>
@@ -692,16 +718,17 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
 }
 
 function FlashcardsTab({ documentId }: { documentId: string }) {
+  const { t, language } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const queryClient = useQueryClient();
   const [scope, setScope] = useState<FlashcardScopeFilter>("all");
   const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
   // Cards removed from the server-driven queue. Every graded card lands
-  // here, including "Again" ones — those are re-added to the tail via
+  // here, including t("lesson.grades.again") ones — those are re-added to the tail via
   // `againCards` instead.
   const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
-  // "Again" means show me again now. The scheduler's floor is one whole day,
+  // t("lesson.grades.again") means show me again now. The scheduler's floor is one whole day,
   // so the server will say tomorrow; holding the card locally is what keeps
   // the promise within this session. Kept as card objects rather than ids so
   // a background refetch (which no longer returns them, they are not due)
@@ -746,19 +773,17 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
           // nothing.
           return card ? [...withoutIt, card] : withoutIt;
         });
-        setFeedback("You'll see this one again before you finish.");
+        setFeedback(t("lesson.flashcards.seeAgain"));
       } else {
         setAgainCards((previous) => previous.filter((c) => c.id !== cardId));
-        setFeedback(
-          `Next review in ${state.interval_days} ${state.interval_days === 1 ? "day" : "days"}.`,
-        );
+        setFeedback(t("lesson.flashcards.nextReview", { count: state.interval_days }));
       }
       refresh();
     },
     // Without this a failed grade silently does nothing: the card stays
     // revealed, the buttons re-enable, and the learner has no idea the
     // rating never landed.
-    onError: () => setActionError("Could not save that rating."),
+    onError: () => setActionError(t("lesson.flashcards.rateFailed")),
   });
 
   const excludeMutation = useMutation({
@@ -771,10 +796,10 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
       setAgainCards((previous) => previous.filter((c) => c.id !== cardId));
       setRevealedCardId(null);
       setActionError(null);
-      setFeedback("Excluded from reviews. You can include it again below.");
+      setFeedback(t("lesson.flashcards.excluded"));
       refresh();
     },
-    onError: () => setActionError("Could not exclude that card."),
+    onError: () => setActionError(t("lesson.flashcards.excludeFailed")),
   });
 
   // Filtered client-side rather than trusting the refetched list to shrink,
@@ -790,10 +815,10 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
   const revealed = currentCard !== undefined && revealedCardId === currentCard.id;
 
   if (deckQuery.isPending) {
-    return <Text style={styles.hint}>Loading...</Text>;
+    return <Text style={styles.hint}>{t("common.loading")}</Text>;
   }
   if (deckQuery.isError) {
-    return <Text style={styles.errorText}>Failed to load flashcards.</Text>;
+    return <Text style={styles.errorText}>{t("lesson.flashcards.loadFailed")}</Text>;
   }
 
   const lessonCards = cardsQuery.data ?? [];
@@ -822,7 +847,7 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
             accessibilityRole="button"
             style={styles.secondaryButton}
           >
-            <Text style={styles.secondaryButtonText}>Add a card</Text>
+            <Text style={styles.secondaryButtonText}>{t("lesson.flashcards.addCard")}</Text>
           </Pressable>
         )}
       </View>
@@ -843,15 +868,18 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
               excluded the deck is empty while the lesson is not, and the
               "no flashcards yet" copy would contradict the list below. */}
           {lessonCards.length === 0 && cardsQuery.isSuccess && gradedIds.size === 0
-            ? "No flashcards for this lesson yet. Add your own, or check back for official ones."
-            : "You're all caught up — nothing to review right now."}
+            ? t("lesson.flashcards.none")
+            : t("lesson.review.allCaughtUp")}
         </Text>
       )}
 
       {currentCard && (
         <>
           <Text style={styles.hint}>
-            Card {completed + 1} of {completed + queue.length}
+            {t("lesson.flashcards.cardOf", {
+              current: completed + 1,
+              total: completed + queue.length,
+            })}
           </Text>
           <Pressable
             onPress={() => setRevealedCardId(currentCard.id)}
@@ -864,7 +892,7 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
             {revealed ? (
               <Text style={styles.flashcardBack}>{currentCard.back_text}</Text>
             ) : (
-              <Text style={styles.flashcardHint}>Tap to reveal</Text>
+              <Text style={styles.flashcardHint}>{t("lesson.flashcards.tapToReveal")}</Text>
             )}
           </Pressable>
 
@@ -876,9 +904,11 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
                 accessibilityRole="button"
                 style={styles.gradeButton}
               >
-                <Text style={[styles.gradeButtonText, { color: colors.again }]}>Again</Text>
+                <Text style={[styles.gradeButtonText, { color: colors.again }]}>
+                  {t("lesson.grades.again")}
+                </Text>
                 <Text style={styles.gradeInterval}>
-                  {formatInterval(currentCard.next_intervals.again)}
+                  {formatInterval(currentCard.next_intervals.again, language)}
                 </Text>
               </Pressable>
               <Pressable
@@ -887,9 +917,11 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
                 accessibilityRole="button"
                 style={styles.gradeButton}
               >
-                <Text style={[styles.gradeButtonText, { color: colors.hard }]}>Hard</Text>
+                <Text style={[styles.gradeButtonText, { color: colors.hard }]}>
+                  {t("lesson.grades.hard")}
+                </Text>
                 <Text style={styles.gradeInterval}>
-                  {formatInterval(currentCard.next_intervals.hard)}
+                  {formatInterval(currentCard.next_intervals.hard, language)}
                 </Text>
               </Pressable>
               <Pressable
@@ -898,9 +930,11 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
                 accessibilityRole="button"
                 style={styles.gradeButton}
               >
-                <Text style={[styles.gradeButtonText, { color: colors.good }]}>Good</Text>
+                <Text style={[styles.gradeButtonText, { color: colors.good }]}>
+                  {t("lesson.grades.good")}
+                </Text>
                 <Text style={styles.gradeInterval}>
-                  {formatInterval(currentCard.next_intervals.good)}
+                  {formatInterval(currentCard.next_intervals.good, language)}
                 </Text>
               </Pressable>
               <Pressable
@@ -909,9 +943,11 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
                 accessibilityRole="button"
                 style={styles.gradeButton}
               >
-                <Text style={[styles.gradeButtonText, { color: colors.easy }]}>Easy</Text>
+                <Text style={[styles.gradeButtonText, { color: colors.easy }]}>
+                  {t("lesson.grades.easy")}
+                </Text>
                 <Text style={styles.gradeInterval}>
-                  {formatInterval(currentCard.next_intervals.easy)}
+                  {formatInterval(currentCard.next_intervals.easy, language)}
                 </Text>
               </Pressable>
             </View>
@@ -926,7 +962,7 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
               onPress={() => excludeMutation.mutate(currentCard.id)}
               accessibilityRole="button"
             >
-              <Text style={styles.hint}>Exclude this card from reviews</Text>
+              <Text style={styles.hint}>{t("lesson.flashcards.excludeThis")}</Text>
             </Pressable>
           )}
         </>
@@ -936,16 +972,16 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
       {actionError && <Text style={styles.errorText}>{actionError}</Text>}
 
       {cardsQuery.isError && (
-        <Text style={styles.errorText}>
-          Failed to load this lesson&apos;s cards, so excluded ones can&apos;t be managed right now.
-        </Text>
+        <Text style={styles.errorText}>{t("lesson.flashcards.manageFailed")}</Text>
       )}
 
       {lessonCards.length > 0 && (
         <View style={styles.myCardsSection}>
           <Text style={styles.myCardsHeading}>
-            All cards in this lesson
-            {excludedCount > 0 ? ` · ${excludedCount} excluded` : ""}
+            {t("lesson.flashcards.allCards")}
+            {excludedCount > 0
+              ? t("lesson.flashcards.excludedCount", { count: excludedCount })
+              : ""}
           </Text>
           <View style={styles.tabList}>
             {lessonCards.map((card) => (
@@ -969,6 +1005,7 @@ type ClozeSpanState = { id: string; start_offset: number; end_offset: number; hi
  * below and their call sites in LectureScreen.
  */
 function useClozeReview(documentId: string, enabled: boolean) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const dueQuery = useQuery({
     queryKey: ["cloze-cards", "due", documentId],
@@ -994,9 +1031,7 @@ function useClozeReview(documentId: string, enabled: boolean) {
       queryClient.invalidateQueries({ queryKey: ["cloze-cards", "due", documentId] });
       setGradedIds((prev) => new Set(prev).add(variables.cardId));
       setRevealedCardId(null);
-      setFeedback(
-        `Next review in ${state.interval_days} ${state.interval_days === 1 ? "day" : "days"}.`,
-      );
+      setFeedback(t("lesson.flashcards.nextReview", { count: state.interval_days }));
     },
   });
 
@@ -1088,14 +1123,18 @@ function ReviewArticle({
   hints: boolean;
   currentCardId: string | undefined;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const body = useScaledBody();
-  if (!version) return <Text style={styles.hint}>Not processed yet.</Text>;
-  if (version.status === "processing") return <Text style={styles.hint}>Processing...</Text>;
+  if (!version) return <Text style={styles.hint}>{t("lesson.notProcessed")}</Text>;
+  if (version.status === "processing")
+    return <Text style={styles.hint}>{t("lesson.processing")}</Text>;
   if (version.status === "failed") {
     return (
       <Text style={styles.error}>
-        Processing failed: {version.error_message ?? "Unknown error"}
+        {t("lesson.processingFailed", {
+          message: version.error_message ?? t("lesson.unknownError"),
+        })}
       </Text>
     );
   }
@@ -1140,11 +1179,11 @@ function ReviewArticle({
   );
 }
 
-const GRADES: { rating: ClozeRating; label: string; tone: "again" | "hard" | "good" | "easy" }[] = [
-  { rating: "again", label: "Again", tone: "again" },
-  { rating: "hard", label: "Hard", tone: "hard" },
-  { rating: "good", label: "Good", tone: "good" },
-  { rating: "easy", label: "Easy", tone: "easy" },
+const GRADES: { rating: ClozeRating; tone: "again" | "hard" | "good" | "easy" }[] = [
+  { rating: "again", tone: "again" },
+  { rating: "hard", tone: "hard" },
+  { rating: "good", tone: "good" },
+  { rating: "easy", tone: "easy" },
 ];
 
 /** The review bar: a bottom notch with Show, then the four grades on light
@@ -1157,20 +1196,21 @@ function ReviewBar({
   /** Inside the cards view, where it sits under the card, not on the edge. */
   inline?: boolean;
 }) {
+  const { t, language } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const barStyle = inline ? styles.reviewBarInline : styles.reviewBar;
   if (review.isPending) {
     return (
       <View style={barStyle}>
-        <Text style={styles.hint}>Loading...</Text>
+        <Text style={styles.hint}>{t("common.loading")}</Text>
       </View>
     );
   }
   if (review.isError) {
     return (
       <View style={barStyle}>
-        <Text style={styles.error}>Failed to load review cards.</Text>
+        <Text style={styles.error}>{t("lesson.review.loadFailed")}</Text>
       </View>
     );
   }
@@ -1179,7 +1219,7 @@ function ReviewBar({
     <View style={barStyle}>
       {!review.currentCardId && (
         <>
-          <Text style={styles.hint}>You&apos;re all caught up — nothing to review right now.</Text>
+          <Text style={styles.hint}>{t("lesson.review.allCaughtUp")}</Text>
           {review.feedback && <Text style={styles.hint}>{review.feedback}</Text>}
         </>
       )}
@@ -1187,15 +1227,15 @@ function ReviewBar({
         <>
           <View style={styles.reviewCountRow}>
             <Text style={styles.reviewCount}>
-              {review.queueLength} {review.queueLength === 1 ? "word" : "words"} left to review
+              {t("lesson.review.wordsLeft", { count: review.queueLength })}
             </Text>
             {!inline && (
-              <Dot label="Cards, one at a time" onPress={() => review.setCardsView(true)}>
+              <Dot label={t("lesson.review.cardsView")} onPress={() => review.setCardsView(true)}>
                 <CardsIcon color={colors.foreground} />
               </Dot>
             )}
             <Dot
-              label="Letter hints in the gaps"
+              label={t("lesson.review.hints")}
               pressed={review.hints}
               onPress={review.toggleHints}
             >
@@ -1207,7 +1247,7 @@ function ReviewBar({
             </Dot>
           </View>
           <Pressable style={styles.showButton} onPress={review.reveal} accessibilityRole="button">
-            <Text style={styles.showButtonText}>Show</Text>
+            <Text style={styles.showButtonText}>{t("lesson.show")}</Text>
           </Pressable>
         </>
       )}
@@ -1222,16 +1262,19 @@ function ReviewBar({
               accessibilityRole="button"
               accessibilityLabel={
                 review.nextIntervals
-                  ? `${grade.label}, ${describeInterval(review.nextIntervals[grade.rating])}`
-                  : grade.label
+                  ? t("lesson.gradeWithInterval", {
+                      grade: t(`lesson.grades.${grade.rating}`),
+                      interval: describeInterval(review.nextIntervals[grade.rating], language),
+                    })
+                  : t(`lesson.grades.${grade.rating}`)
               }
             >
               <Text style={[styles.gradeButtonText, { color: colors[grade.tone] }]}>
-                {grade.label}
+                {t(`lesson.grades.${grade.rating}`)}
               </Text>
               {review.nextIntervals && (
                 <Text style={styles.gradeInterval}>
-                  {formatInterval(review.nextIntervals[grade.rating])}
+                  {formatInterval(review.nextIntervals[grade.rating], language)}
                 </Text>
               )}
             </Pressable>
@@ -1253,15 +1296,16 @@ function CardsOverlay({
   review: ReturnType<typeof useClozeReview>;
   blocks: { type: string; text?: string | null }[];
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const card = review.currentCard;
   const close = () => review.setCardsView(false);
   let sentence: React.ReactNode = null;
-  let section = "Review";
+  let section = t("lesson.tabs.review");
   if (card) {
     for (let i = card.block_index; i >= 0; i -= 1) {
       if (blocks[i]?.type === "heading") {
-        section = blocks[i]!.text ?? "Review";
+        section = blocks[i]!.text ?? t("lesson.tabs.review");
         break;
       }
     }
@@ -1285,19 +1329,25 @@ function CardsOverlay({
   return (
     <Modal visible={review.cardsView} transparent animationType="fade" onRequestClose={close}>
       <View style={styles.cardsScrim}>
-        <Pressable style={styles.cardsDismiss} onPress={close} accessibilityLabel="Close cards" />
-        <View style={styles.paperCard} accessibilityLabel="Review card">
+        <Pressable
+          style={styles.cardsDismiss}
+          onPress={close}
+          accessibilityLabel={t("lesson.review.closeCards")}
+        />
+        <View style={styles.paperCard} accessibilityLabel={t("lesson.review.card")}>
           <View style={styles.cardMeta}>
             <Text style={styles.cardMetaText} numberOfLines={1}>
               {section}
             </Text>
-            <Text style={styles.cardMetaText}>{review.queueLength} left</Text>
+            <Text style={styles.cardMetaText}>
+              {t("lesson.review.left", { count: review.queueLength })}
+            </Text>
           </View>
-          {sentence ?? <Text style={styles.cardSentence}>Nothing left to review.</Text>}
+          {sentence ?? <Text style={styles.cardSentence}>{t("lesson.review.nothingLeft")}</Text>}
         </View>
         <ReviewBar review={review} inline />
         <Pressable onPress={close} accessibilityRole="button">
-          <Text style={styles.cardsClose}>Back to the text</Text>
+          <Text style={styles.cardsClose}>{t("lesson.review.backToText")}</Text>
         </Pressable>
       </View>
     </Modal>
@@ -1321,6 +1371,7 @@ function TocModal({
   scopeId: string;
   currentDocumentId: string;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const { data, isPending } = useQuery({
     queryKey: ["documents", scopeId],
@@ -1329,9 +1380,16 @@ function TocModal({
   });
 
   return (
-    <Overlay visible={visible} title="Lessons in this chapter" onClose={onClose} side="left">
-      {isPending && <Text style={styles.hint}>Loading...</Text>}
-      {!isPending && (!data || data.length === 0) && <Text style={styles.hint}>No lessons.</Text>}
+    <Overlay
+      visible={visible}
+      title={t("lesson.toc.lessonsInChapter")}
+      onClose={onClose}
+      side="left"
+    >
+      {isPending && <Text style={styles.hint}>{t("common.loading")}</Text>}
+      {!isPending && (!data || data.length === 0) && (
+        <Text style={styles.hint}>{t("bank.noLessons")}</Text>
+      )}
       {data?.map((doc) => (
         <Pressable
           key={doc.id}
@@ -1360,6 +1418,7 @@ function NotesModal({
   onClose: () => void;
   documentId: string;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const [view, setView] = useState<NotesView>({ kind: "list" });
   const entries = useQuery({
@@ -1374,7 +1433,7 @@ function NotesModal({
   return (
     <Overlay
       visible={visible}
-      title="Notebook"
+      title={t("lesson.panel.notebook")}
       onClose={onClose}
       side="right"
       footer={
@@ -1387,13 +1446,13 @@ function NotesModal({
       }
     >
       <>
-        {entries.isPending && <Text style={styles.hint}>Loading...</Text>}
-        {entries.isError && <Text style={styles.error}>Failed to load notes.</Text>}
+        {entries.isPending && <Text style={styles.hint}>{t("common.loading")}</Text>}
+        {entries.isError && <Text style={styles.error}>{t("lesson.panel.notesLoadFailed")}</Text>}
         {entries.data && (
           <>
             {view.kind !== "list" && (
               <Pressable onPress={() => setView({ kind: "list" })} accessibilityRole="button">
-                <Text style={styles.backLink}>← Notes</Text>
+                <Text style={styles.backLink}>{t("lesson.panel.backToNotes")}</Text>
               </Pressable>
             )}
             {view.kind === "list" && (
@@ -1431,6 +1490,7 @@ function NotesModal({
 }
 
 export default function LectureScreen() {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const { id, tab: tabParam } = useLocalSearchParams<{ id: string; tab?: string }>();
@@ -1456,7 +1516,7 @@ export default function LectureScreen() {
   }
 
   function saveFailed() {
-    Alert.alert("Not saved", "That change couldn't be saved. Check your connection and try again.");
+    Alert.alert(t("lesson.saveFailedTitle"), t("lesson.saveFailedDetail"));
   }
 
   function tapWord(blockIndex: number, word: WordSpan) {
@@ -1636,7 +1696,7 @@ export default function LectureScreen() {
   if (isPending) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loading}>Loading...</Text>
+        <Text style={styles.loading}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -1644,7 +1704,9 @@ export default function LectureScreen() {
   if (isError) {
     return (
       <View style={styles.container}>
-        <Text style={styles.error}>Failed to load lecture: {(error as Error).message}</Text>
+        <Text style={styles.error}>
+          {t("lesson.loadLectureFailed", { message: (error as Error).message })}
+        </Text>
       </View>
     );
   }
@@ -1665,7 +1727,7 @@ export default function LectureScreen() {
     // react-native-pdf exposes no text, so the passage is shown in the text
     // view only.
     if (first < 0) {
-      Alert.alert("See in lesson", "That passage isn't in this lesson's text any more.");
+      Alert.alert(t("lesson.seeInLesson"), t("lesson.passageGoneText"));
       return;
     }
     setSeeInLesson({ questionId, quotes, returnY: scrollY.current });
@@ -1694,7 +1756,7 @@ export default function LectureScreen() {
     else router.navigate("/learn");
   }
 
-  const tabLabel = TABS.find((tab) => tab.key === activeTab)!.label;
+  const tabLabel = t(TABS.find((tab) => tab.key === activeTab)!.label);
   // The same marking tools in both views of the lesson.
   const lessonTools =
     activeTab === "lesson" &&
@@ -1705,12 +1767,12 @@ export default function LectureScreen() {
     : activeTool?.type === "highlight" ||
         (activeTool?.type === "eraser" && lessonViewMode === "text")
       ? anchorSet
-        ? "Now tap the last word — or the same word again for just that one."
-        : "Tap the first word, then the last."
+        ? t("lesson.tools.markLastWord")
+        : t("lesson.tools.markFirstWord")
       : activeTool?.type === "pen"
-        ? "Draw on the page. Put the pen down to scroll."
+        ? t("lesson.tools.penHint")
         : activeTool?.type === "eraser"
-          ? "Rub over ink or a highlight. Put the eraser down to scroll."
+          ? t("lesson.tools.eraserHint")
           : null;
 
   return (
@@ -1767,13 +1829,13 @@ export default function LectureScreen() {
 
           {/* The design's mobile dots: under the title on a phone. */}
           <View style={styles.dots}>
-            <Dot label="Back to the library" onPress={goBack}>
+            <Dot label={t("lesson.backToLibrary")} onPress={goBack}>
               <ArrowLeftIcon color={colors.foreground} />
             </Dot>
             {activeTab === "lesson" && readyLecturePdf && (
               <SegmentedSwitch
-                label="Lesson view mode"
-                options={VIEW_MODES}
+                label={t("lesson.viewMode")}
+                options={VIEW_MODES.map((option) => ({ ...option, label: t(option.label) }))}
                 value={lessonViewMode}
                 onChange={(mode) => {
                   setLessonViewMode(mode);
@@ -1816,11 +1878,15 @@ export default function LectureScreen() {
 
           {activeTab === "lesson" && lessonViewMode === "text" && (
             <>
-              {!version && <Text style={styles.hint}>Not processed yet.</Text>}
-              {version?.status === "processing" && <Text style={styles.hint}>Processing...</Text>}
+              {!version && <Text style={styles.hint}>{t("lesson.notProcessed")}</Text>}
+              {version?.status === "processing" && (
+                <Text style={styles.hint}>{t("lesson.processing")}</Text>
+              )}
               {version?.status === "failed" && (
                 <Text style={styles.error}>
-                  Processing failed: {version.error_message ?? "Unknown error"}
+                  {t("lesson.processingFailed", {
+                    message: version.error_message ?? t("lesson.unknownError"),
+                  })}
                 </Text>
               )}
               {version?.status === "ready" &&
@@ -1874,14 +1940,14 @@ export default function LectureScreen() {
 
         <View style={styles.topNotch} pointerEvents="box-none">
           <NotchTabs
-            tabs={TABS}
+            tabs={TABS.map((entry) => ({ ...entry, label: t(entry.label) }))}
             active={activeTab}
             onChange={(key) => {
               setActiveTab(key);
               setActiveTool(null);
               setSeeInLesson(null);
             }}
-            label="Lesson sections"
+            label={t("lesson.sections")}
             header={
               titleHidden ? (
                 <Text numberOfLines={1} style={styles.notchTitle}>
@@ -1906,7 +1972,7 @@ export default function LectureScreen() {
 
         {seeInLesson && activeTab === "lesson" && (
           <Pressable style={styles.backBar} onPress={backToQuizzes} accessibilityRole="button">
-            <Text style={styles.backBarText}>← Back to quizzes</Text>
+            <Text style={styles.backBarText}>{t("lesson.backToQuizzes")}</Text>
           </Pressable>
         )}
 
@@ -1928,7 +1994,7 @@ export default function LectureScreen() {
           style={[styles.edgeButton, activeTab === "review" && styles.edgeButtonRaised]}
           onPress={() => setNotesOpen(true)}
           accessibilityRole="button"
-          accessibilityLabel="Notes"
+          accessibilityLabel={t("lesson.panel.notes")}
         >
           <SparkleIcon color={colors.foreground} />
         </Pressable>
@@ -1951,13 +2017,13 @@ export default function LectureScreen() {
                 }}
                 style={styles.actionMenuItem}
                 accessibilityRole="button"
-                // The header's "Notes" button (whole-lesson notes panel) has the
+                // The header's t("lesson.panel.notes") button (whole-lesson notes panel) has the
                 // same visible label as this menu item (adds a margin note on
                 // the selected block) — distinct accessible names keep screen
                 // readers from announcing two identically-named buttons.
-                accessibilityLabel="Add note"
+                accessibilityLabel={t("lesson.panel.addNoteMenu")}
               >
-                <Text style={styles.actionMenuItemText}>Notes</Text>
+                <Text style={styles.actionMenuItemText}>{t("lesson.panel.notes")}</Text>
               </Pressable>
               <Pressable
                 onPress={() => {
@@ -1967,14 +2033,14 @@ export default function LectureScreen() {
                 style={styles.actionMenuItem}
                 accessibilityRole="button"
               >
-                <Text style={styles.actionMenuItemText}>Explain</Text>
+                <Text style={styles.actionMenuItemText}>{t("lesson.tools.explain")}</Text>
               </Pressable>
               <Pressable
                 onPress={() => setActionMenuBlockIndex(null)}
                 style={styles.modalButton}
                 accessibilityRole="button"
               >
-                <Text style={styles.modalButtonText}>Cancel</Text>
+                <Text style={styles.modalButtonText}>{t("common.cancel")}</Text>
               </Pressable>
             </View>
           </View>
@@ -1988,14 +2054,14 @@ export default function LectureScreen() {
         >
           <View style={styles.modalBackdrop}>
             <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Explain</Text>
-              <Text style={styles.hint}>AI explanations are coming soon.</Text>
+              <Text style={styles.modalTitle}>{t("lesson.tools.explain")}</Text>
+              <Text style={styles.hint}>{t("lesson.tools.explainSoon")}</Text>
               <Pressable
                 onPress={() => setExplainComingSoonVisible(false)}
                 style={[styles.modalButton, styles.modalButtonPrimary]}
                 accessibilityRole="button"
               >
-                <Text style={styles.modalButtonPrimaryText}>Got it</Text>
+                <Text style={styles.modalButtonPrimaryText}>{t("lesson.tools.gotIt")}</Text>
               </Pressable>
             </View>
           </View>
@@ -2009,12 +2075,12 @@ export default function LectureScreen() {
         >
           <View style={styles.modalBackdrop}>
             <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Add a note</Text>
+              <Text style={styles.modalTitle}>{t("lesson.panel.addNote")}</Text>
               <TextInput
                 style={styles.modalInput}
                 value={noteDraft}
                 onChangeText={setNoteDraft}
-                placeholder="Note..."
+                placeholder={t("lesson.panel.notePlaceholder")}
                 multiline
                 autoFocus
               />
@@ -2027,7 +2093,7 @@ export default function LectureScreen() {
                   style={styles.modalButton}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.modalButtonText}>Cancel</Text>
+                  <Text style={styles.modalButtonText}>{t("common.cancel")}</Text>
                 </Pressable>
                 <Pressable
                   onPress={() =>
@@ -2040,7 +2106,7 @@ export default function LectureScreen() {
                   {createNoteMutation.isPending ? (
                     <ActivityIndicator color={colors.primaryForeground} />
                   ) : (
-                    <Text style={styles.modalButtonPrimaryText}>Save</Text>
+                    <Text style={styles.modalButtonPrimaryText}>{t("common.save")}</Text>
                   )}
                 </Pressable>
               </View>
@@ -2056,7 +2122,7 @@ export default function LectureScreen() {
         >
           <View style={styles.modalBackdrop}>
             <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Note</Text>
+              <Text style={styles.modalTitle}>{t("lesson.panel.note")}</Text>
               {viewingNote && (
                 <TextInput
                   // Keyed by note so reopening another note starts from its text.
@@ -2067,7 +2133,7 @@ export default function LectureScreen() {
                     noteEdit.current = text;
                   }}
                   multiline
-                  accessibilityLabel="Note text"
+                  accessibilityLabel={t("lesson.panel.noteText")}
                 />
               )}
               <View style={styles.modalActions}>
@@ -2076,14 +2142,14 @@ export default function LectureScreen() {
                   style={styles.modalButton}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.modalButtonText}>Close</Text>
+                  <Text style={styles.modalButtonText}>{t("common.close")}</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => viewingNote && deleteAnnotationMutation.mutate(viewingNote.id)}
                   style={styles.modalButton}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.deleteText}>Delete</Text>
+                  <Text style={styles.deleteText}>{t("common.delete")}</Text>
                 </Pressable>
               </View>
             </View>

@@ -5,6 +5,8 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import type { Stroke, StrokePoint } from "@lp/contracts";
 import { HIGHLIGHT_COLOR_NAMES, pageColors } from "@lp/ui";
 
+import { useI18n } from "@/lib/i18n";
+
 // Every stroke's points are normalized to [0, 1] relative to this fixed
 // aspect ratio so a drawing looks the same regardless of what size box it's
 // rendered into (matches the 4:3 box already used for extracted lesson
@@ -12,7 +14,7 @@ import { HIGHLIGHT_COLOR_NAMES, pageColors } from "@lp/ui";
 export const NOTEBOOK_CANVAS_ASPECT_RATIO = 4 / 3;
 
 export const NOTEBOOK_PEN_COLORS = [
-  { name: "graphite", value: "#1D1F23" },
+  { name: "graphite" as const, value: "#1D1F23" },
   ...HIGHLIGHT_COLOR_NAMES.map((name, i) => ({ name, value: pageColors.pens[i]! })),
 ];
 
@@ -90,6 +92,7 @@ export function DrawingCanvas({
   height,
   pageKey,
 }: DrawingCanvasProps) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const explicitSize = width !== undefined && height !== undefined;
@@ -243,7 +246,7 @@ export function DrawingCanvas({
       {!readOnly && (
         <div
           role="toolbar"
-          aria-label="Drawing tools"
+          aria-label={t("notebook.drawingTools")}
           className={`flex items-center gap-xs ${
             // Overlay mode (explicit size, e.g. a PDF page) floats the
             // toolbar over the top-left corner of the canvas instead of
@@ -259,7 +262,7 @@ export function DrawingCanvas({
             <button
               key={swatch.name}
               type="button"
-              aria-label={`Pen color — ${swatch.name}`}
+              aria-label={t("notebook.penColor", { color: t(`colors.${swatch.name}`) })}
               aria-pressed={color === swatch.value}
               onClick={() => setColor(swatch.value)}
               style={{ backgroundColor: swatch.value }}
@@ -270,14 +273,18 @@ export function DrawingCanvas({
               }`}
             />
           ))}
-          <div role="group" aria-label="Tool" className="ml-md flex items-center gap-xs">
+          <div
+            role="group"
+            aria-label={t("notebook.tool")}
+            className="ml-md flex items-center gap-xs"
+          >
             <button
               type="button"
               aria-pressed={tool === "pen"}
               onClick={() => setTool("pen")}
               className="rounded-full border border-border bg-background px-3 py-1 text-caption font-bold text-foreground hover:bg-muted aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background"
             >
-              Pen
+              {t("notebook.pen")}
             </button>
             <button
               type="button"
@@ -285,7 +292,7 @@ export function DrawingCanvas({
               onClick={() => setTool("eraser")}
               className="rounded-full border border-border bg-background px-3 py-1 text-caption font-bold text-foreground hover:bg-muted aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background"
             >
-              Eraser
+              {t("notebook.eraser")}
             </button>
           </div>
           <button
@@ -294,7 +301,7 @@ export function DrawingCanvas({
             disabled={history.length === 0}
             className="ml-md rounded-full border border-border bg-background px-3 py-1 text-caption font-bold text-foreground hover:bg-muted disabled:opacity-50"
           >
-            Undo
+            {t("notebook.undo")}
           </button>
           <button
             type="button"
@@ -302,7 +309,7 @@ export function DrawingCanvas({
             disabled={strokes.length === 0}
             className="rounded-full border border-border bg-background px-3 py-1 text-caption font-bold text-foreground hover:bg-muted disabled:opacity-50"
           >
-            Clear
+            {t("notebook.clear")}
           </button>
         </div>
       )}
@@ -327,7 +334,7 @@ export function DrawingCanvas({
           onPointerLeave={handlePointerUp}
           className={`h-full w-full touch-none ${tool === "eraser" ? "cursor-cell" : "cursor-crosshair"}`}
           role="img"
-          aria-label="Drawing canvas"
+          aria-label={t("notebook.canvas")}
         />
       </div>
     </div>
@@ -335,6 +342,7 @@ export function DrawingCanvas({
 }
 
 export function DrawingThumbnail({ strokes }: { strokes: Stroke[] }) {
+  const { t } = useI18n();
   return (
     <svg
       viewBox="0 0 1 1"
@@ -342,7 +350,7 @@ export function DrawingThumbnail({ strokes }: { strokes: Stroke[] }) {
       style={{ aspectRatio: NOTEBOOK_CANVAS_ASPECT_RATIO }}
       className="w-full rounded-sm bg-paper shadow-page"
       role="img"
-      aria-label="Drawing preview"
+      aria-label={t("notebook.preview")}
     >
       {strokes.map((stroke, index) => (
         <polyline

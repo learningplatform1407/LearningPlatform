@@ -1,3 +1,4 @@
+import { lessonStatusLabel } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BankTreeChapter, BankTreeLesson, BankTreeSubChapter } from "@lp/api-client";
 import { computeLessonCompletionPercent } from "@lp/api-client";
@@ -13,16 +14,12 @@ import { supabase } from "@/lib/supabase";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
+import { useI18n } from "@/lib/i18n";
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
-const STATUS_LABEL: Record<string, string> = {
-  processing: "Processing...",
-  ready: "Ready",
-  failed: "Failed",
-};
-
 function UncategorizedLessonsScreen() {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const queryClient = useQueryClient();
@@ -45,12 +42,12 @@ function UncategorizedLessonsScreen() {
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
-      if (!pickedFile) throw new Error("Choose a PDF file first.");
+      if (!pickedFile) throw new Error(t("book.choosePdfFirst"));
       if (pickedFile.mimeType !== "application/pdf") {
-        throw new Error("Only PDF files are supported.");
+        throw new Error(t("book.onlyPdf"));
       }
       if (pickedFile.size && pickedFile.size > MAX_UPLOAD_BYTES) {
-        throw new Error("File must be under 50MB.");
+        throw new Error(t("book.fileTooLarge"));
       }
 
       const client = getApiClient();
@@ -83,7 +80,7 @@ function UncategorizedLessonsScreen() {
       queryClient.invalidateQueries({ queryKey: ["documents", "uncategorized"] });
     },
     onError: (err) => {
-      setUploadError(err instanceof Error ? err.message : "Failed to upload document.");
+      setUploadError(err instanceof Error ? err.message : t("book.uploadFailed"));
     },
   });
 
@@ -99,7 +96,7 @@ function UncategorizedLessonsScreen() {
   if (me.isPending || uncategorized.isPending) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loading}>Loading...</Text>
+        <Text style={styles.loading}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -113,8 +110,10 @@ function UncategorizedLessonsScreen() {
       contentContainerStyle={styles.listContent}
       data={lessons}
       keyExtractor={(doc) => doc.id}
-      ListHeaderComponent={<ScreenHeader kicker="Library" title="Uncategorized" />}
-      ListEmptyComponent={<Text style={styles.empty}>No lessons yet.</Text>}
+      ListHeaderComponent={
+        <ScreenHeader kicker={t("library.title")} title={t("library.uncategorized")} />
+      }
+      ListEmptyComponent={<Text style={styles.empty}>{t("book.noLessons")}</Text>}
       renderItem={({ item }) => (
         <View>
           <Pressable
@@ -123,9 +122,7 @@ function UncategorizedLessonsScreen() {
             accessibilityRole="button"
           >
             <Text style={styles.rowTitle}>{item.title}</Text>
-            <Text style={styles.rowStatus}>
-              {item.status ? (STATUS_LABEL[item.status] ?? item.status) : ""}
-            </Text>
+            <Text style={styles.rowStatus}>{lessonStatusLabel(t, item.status)}</Text>
           </Pressable>
           <ProgressBar
             percent={computeLessonCompletionPercent(
@@ -148,8 +145,8 @@ function UncategorizedLessonsScreen() {
       ListFooterComponent={
         isAdmin ? (
           <View style={styles.uploadForm}>
-            <Text style={styles.uploadHeading}>Upload a lesson</Text>
-            <Text style={styles.label}>Title</Text>
+            <Text style={styles.uploadHeading}>{t("book.uploadLesson")}</Text>
+            <Text style={styles.label}>{t("book.title")}</Text>
             <TextInput
               testID="lesson-title-input"
               style={styles.input}
@@ -164,7 +161,7 @@ function UncategorizedLessonsScreen() {
               accessibilityRole="button"
             >
               <Text style={styles.buttonText}>
-                {pickedFile ? pickedFile.name : "Choose PDF file"}
+                {pickedFile ? pickedFile.name : t("book.choosePdf")}
               </Text>
             </Pressable>
 
@@ -180,7 +177,7 @@ function UncategorizedLessonsScreen() {
               {uploadMutation.isPending ? (
                 <ActivityIndicator color={colors.primaryForeground} />
               ) : (
-                <Text style={styles.uploadButtonText}>Upload</Text>
+                <Text style={styles.uploadButtonText}>{t("book.upload")}</Text>
               )}
             </Pressable>
           </View>
@@ -196,6 +193,7 @@ function UncategorizedLessonsScreen() {
  * reference book -- a replace always wipes every learner's ink on this
  * lesson unconditionally, hence the two-step confirmation). */
 function LessonAdminControls({ documentId, onDone }: { documentId: string; onDone: () => void }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const [textFile, setTextFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
@@ -213,8 +211,8 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
   }
 
   async function uploadAndChecksum(asset: DocumentPicker.DocumentPickerAsset) {
-    if (asset.mimeType !== "application/pdf") throw new Error("Only PDF files are supported.");
-    if (asset.size && asset.size > MAX_UPLOAD_BYTES) throw new Error("File must be under 50MB.");
+    if (asset.mimeType !== "application/pdf") throw new Error(t("book.onlyPdf"));
+    if (asset.size && asset.size > MAX_UPLOAD_BYTES) throw new Error(t("book.fileTooLarge"));
 
     const client = getApiClient();
     const { storage_path, token } = await client.requestDocumentUploadUrl({
@@ -241,7 +239,7 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
 
   const replaceTextMutation = useMutation({
     mutationFn: async () => {
-      if (!textFile) throw new Error("Choose a PDF file first.");
+      if (!textFile) throw new Error(t("book.choosePdfFirst"));
       const payload = await uploadAndChecksum(textFile);
       return getApiClient().replaceLectureText(documentId, payload);
     },
@@ -250,13 +248,13 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
       onDone();
     },
     onError: (err) => {
-      setTextError(err instanceof Error ? err.message : "Failed to replace lecture text.");
+      setTextError(err instanceof Error ? err.message : t("book.replaceTextFailed"));
     },
   });
 
   const uploadPdfMutation = useMutation({
     mutationFn: async () => {
-      if (!pdfFile) throw new Error("Choose a PDF file first.");
+      if (!pdfFile) throw new Error(t("book.choosePdfFirst"));
       const payload = await uploadAndChecksum(pdfFile);
       return getApiClient().upsertLecturePdf(documentId, payload);
     },
@@ -267,7 +265,7 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
     // backend's own reason (e.g. a checksum mismatch).
     onSuccess: (lecturePdf) => {
       if (lecturePdf.status !== "ready") {
-        setPdfError(lecturePdf.error_message ?? "The PDF could not be processed.");
+        setPdfError(lecturePdf.error_message ?? t("book.pdfNotProcessed"));
         return;
       }
       setPdfFile(null);
@@ -275,13 +273,13 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
       onDone();
     },
     onError: (err) => {
-      setPdfError(err instanceof Error ? err.message : "Failed to upload lecture PDF.");
+      setPdfError(err instanceof Error ? err.message : t("book.uploadPdfFailed"));
     },
   });
 
   return (
     <View testID={`lesson-admin-controls-${documentId}`} style={styles.adminControls}>
-      <Text style={styles.uploadHeading}>Replace lecture text</Text>
+      <Text style={styles.uploadHeading}>{t("book.replaceText")}</Text>
       <Pressable
         testID={`lesson-text-file-picker-${documentId}`}
         style={styles.button}
@@ -293,7 +291,7 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
         }
         accessibilityRole="button"
       >
-        <Text style={styles.buttonText}>{textFile ? textFile.name : "Choose PDF file"}</Text>
+        <Text style={styles.buttonText}>{textFile ? textFile.name : t("book.choosePdf")}</Text>
       </Pressable>
       {textError && <Text style={styles.error}>{textError}</Text>}
       <Pressable
@@ -308,13 +306,11 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
         {replaceTextMutation.isPending ? (
           <ActivityIndicator color={colors.primaryForeground} />
         ) : (
-          <Text style={styles.uploadButtonText}>Replace</Text>
+          <Text style={styles.uploadButtonText}>{t("book.replace")}</Text>
         )}
       </Pressable>
 
-      <Text style={[styles.uploadHeading, styles.adminControlsSpaced]}>
-        Upload/replace lecture PDF
-      </Text>
+      <Text style={[styles.uploadHeading, styles.adminControlsSpaced]}>{t("book.replacePdf")}</Text>
       <Pressable
         testID={`lesson-pdf-file-picker-${documentId}`}
         style={styles.button}
@@ -327,7 +323,7 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
         }
         accessibilityRole="button"
       >
-        <Text style={styles.buttonText}>{pdfFile ? pdfFile.name : "Choose PDF file"}</Text>
+        <Text style={styles.buttonText}>{pdfFile ? pdfFile.name : t("book.choosePdf")}</Text>
       </Pressable>
       {pdfError && <Text style={styles.error}>{pdfError}</Text>}
       {!confirmingPdfReplace ? (
@@ -337,14 +333,11 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
           disabled={!pdfFile}
           accessibilityRole="button"
         >
-          <Text style={styles.uploadButtonText}>Upload</Text>
+          <Text style={styles.uploadButtonText}>{t("book.upload")}</Text>
         </Pressable>
       ) : (
         <>
-          <Text style={styles.error}>
-            This permanently wipes every learner&apos;s ink on this lesson&apos;s PDF — there is no
-            way to get it back.
-          </Text>
+          <Text style={styles.error}>{t("book.wipeInkWarning")}</Text>
           <Pressable
             style={[styles.button, styles.dangerButton]}
             onPress={() => {
@@ -357,11 +350,11 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
             {uploadPdfMutation.isPending ? (
               <ActivityIndicator color={colors.dangerForeground} />
             ) : (
-              <Text style={styles.uploadButtonText}>Yes, replace and wipe all ink</Text>
+              <Text style={styles.uploadButtonText}>{t("book.confirmWipe")}</Text>
             )}
           </Pressable>
           <Pressable onPress={() => setConfirmingPdfReplace(false)} accessibilityRole="button">
-            <Text style={styles.label}>Cancel</Text>
+            <Text style={styles.label}>{t("common.cancel")}</Text>
           </Pressable>
         </>
       )}
@@ -380,6 +373,7 @@ function LessonList({
   onUploaded?: () => void;
   lessonProgress: Map<string, BankTreeLesson>;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const queryClient = useQueryClient();
@@ -394,12 +388,12 @@ function LessonList({
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
-      if (!pickedFile) throw new Error("Choose a PDF file first.");
+      if (!pickedFile) throw new Error(t("book.choosePdfFirst"));
       if (pickedFile.mimeType !== "application/pdf") {
-        throw new Error("Only PDF files are supported.");
+        throw new Error(t("book.onlyPdf"));
       }
       if (pickedFile.size && pickedFile.size > MAX_UPLOAD_BYTES) {
-        throw new Error("File must be under 50MB.");
+        throw new Error(t("book.fileTooLarge"));
       }
 
       const client = getApiClient();
@@ -434,7 +428,7 @@ function LessonList({
       onUploaded?.();
     },
     onError: (err) => {
-      setUploadError(err instanceof Error ? err.message : "Failed to upload document.");
+      setUploadError(err instanceof Error ? err.message : t("book.uploadFailed"));
     },
   });
 
@@ -448,19 +442,21 @@ function LessonList({
   }
 
   if (documents.isPending) {
-    return <Text style={styles.loading}>Loading...</Text>;
+    return <Text style={styles.loading}>{t("common.loading")}</Text>;
   }
 
   if (documents.isError) {
     return (
-      <Text style={styles.error}>Failed to load lessons: {(documents.error as Error).message}</Text>
+      <Text style={styles.error}>
+        {t("book.loadLessonsFailed", { message: (documents.error as Error).message })}
+      </Text>
     );
   }
 
   return (
     <View style={styles.lessonListContent}>
       {documents.data.length === 0 ? (
-        <Text style={styles.empty}>No lessons yet.</Text>
+        <Text style={styles.empty}>{t("book.noLessons")}</Text>
       ) : (
         documents.data.map((item) => (
           <View key={item.id}>
@@ -470,9 +466,7 @@ function LessonList({
               accessibilityRole="button"
             >
               <Text style={styles.rowTitle}>{item.title}</Text>
-              <Text style={styles.rowStatus}>
-                {item.status ? (STATUS_LABEL[item.status] ?? item.status) : ""}
-              </Text>
+              <Text style={styles.rowStatus}>{lessonStatusLabel(t, item.status)}</Text>
             </Pressable>
             <ProgressBar
               percent={computeLessonCompletionPercent(
@@ -496,8 +490,8 @@ function LessonList({
 
       {isAdmin && (
         <View style={styles.uploadForm}>
-          <Text style={styles.uploadHeading}>Upload a lesson</Text>
-          <Text style={styles.label}>Title</Text>
+          <Text style={styles.uploadHeading}>{t("book.uploadLesson")}</Text>
+          <Text style={styles.label}>{t("book.title")}</Text>
           <TextInput
             testID="lesson-title-input"
             style={styles.input}
@@ -512,7 +506,7 @@ function LessonList({
             accessibilityRole="button"
           >
             <Text style={styles.buttonText}>
-              {pickedFile ? pickedFile.name : "Choose PDF file"}
+              {pickedFile ? pickedFile.name : t("book.choosePdf")}
             </Text>
           </Pressable>
 
@@ -528,7 +522,7 @@ function LessonList({
             {uploadMutation.isPending ? (
               <ActivityIndicator color={colors.primaryForeground} />
             ) : (
-              <Text style={styles.uploadButtonText}>Upload</Text>
+              <Text style={styles.uploadButtonText}>{t("book.upload")}</Text>
             )}
           </Pressable>
         </View>
@@ -552,6 +546,7 @@ function SubChapterRow({
   onToggle: () => void;
   onUploaded: () => void;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const lessonProgress = new Map<string, BankTreeLesson>(
     subChapterNode?.lessons.map((lesson) => [lesson.id, lesson]),
@@ -566,8 +561,7 @@ function SubChapterRow({
       >
         <Text style={styles.rowTitle}>{subChapter.title}</Text>
         <Text style={styles.rowStatus}>
-          {subChapter.lesson_count} {subChapter.lesson_count === 1 ? "lesson" : "lessons"}{" "}
-          {isExpanded ? "▲" : "▼"}
+          {t("library.lessons", { count: subChapter.lesson_count })} {isExpanded ? "▲" : "▼"}
         </Text>
       </Pressable>
       {subChapterNode && (
@@ -604,6 +598,7 @@ function ChapterRow({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const subChapterProgress = new Map<string, BankTreeSubChapter>(
@@ -628,7 +623,7 @@ function ChapterRow({
       queryClient.invalidateQueries({ queryKey: ["chapters", bookId] });
     },
     onError: (err) => {
-      setCreateError(err instanceof Error ? err.message : "Failed to create sub-chapter.");
+      setCreateError(err instanceof Error ? err.message : t("book.createSubChapterFailed"));
     },
   });
 
@@ -646,9 +641,7 @@ function ChapterRow({
       >
         <Text style={styles.rowTitle}>{chapter.title}</Text>
         <Text style={styles.rowStatus}>
-          {chapter.sub_chapter_count}{" "}
-          {chapter.sub_chapter_count === 1 ? "sub-chapter" : "sub-chapters"}{" "}
-          {isExpanded ? "▲" : "▼"}
+          {t("library.subChapters", { count: chapter.sub_chapter_count })} {isExpanded ? "▲" : "▼"}
         </Text>
       </Pressable>
       {chapterNode && (
@@ -659,13 +652,13 @@ function ChapterRow({
       {isExpanded && (
         <View style={styles.chapterBody}>
           {subChapters.isPending ? (
-            <Text style={styles.loading}>Loading...</Text>
+            <Text style={styles.loading}>{t("common.loading")}</Text>
           ) : subChapters.isError ? (
             <Text style={styles.error}>
-              Failed to load sub-chapters: {(subChapters.error as Error).message}
+              {t("book.loadSubChaptersFailed", { message: (subChapters.error as Error).message })}
             </Text>
           ) : subChapters.data.length === 0 ? (
-            <Text style={styles.empty}>No sub-chapters yet.</Text>
+            <Text style={styles.empty}>{t("book.noSubChapters")}</Text>
           ) : (
             <View style={styles.subChapterList}>
               {subChapters.data.map((subChapter) => (
@@ -688,8 +681,8 @@ function ChapterRow({
 
           {isAdmin && (
             <View style={styles.uploadForm}>
-              <Text style={styles.uploadHeading}>New sub-chapter</Text>
-              <Text style={styles.label}>Title</Text>
+              <Text style={styles.uploadHeading}>{t("book.newSubChapter")}</Text>
+              <Text style={styles.label}>{t("book.title")}</Text>
               <TextInput
                 testID="sub-chapter-title-input"
                 style={styles.input}
@@ -708,7 +701,7 @@ function ChapterRow({
                 {createSubChapterMutation.isPending ? (
                   <ActivityIndicator color={colors.primaryForeground} />
                 ) : (
-                  <Text style={styles.uploadButtonText}>Create sub-chapter</Text>
+                  <Text style={styles.uploadButtonText}>{t("book.createSubChapter")}</Text>
                 )}
               </Pressable>
             </View>
@@ -720,6 +713,7 @@ function ChapterRow({
 }
 
 function BookChaptersScreen({ bookId }: { bookId: string }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const queryClient = useQueryClient();
@@ -753,14 +747,14 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
       queryClient.invalidateQueries({ queryKey: ["books"] });
     },
     onError: (err) => {
-      setCreateError(err instanceof Error ? err.message : "Failed to create chapter.");
+      setCreateError(err instanceof Error ? err.message : t("book.createChapterFailed"));
     },
   });
 
   if (me.isPending || chapters.isPending) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loading}>Loading...</Text>
+        <Text style={styles.loading}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -769,7 +763,7 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
     return (
       <View style={styles.container}>
         <Text style={styles.error}>
-          Failed to load chapters: {(chapters.error as Error).message}
+          {t("book.loadChaptersFailed", { message: (chapters.error as Error).message })}
         </Text>
       </View>
     );
@@ -785,18 +779,18 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
       keyExtractor={(chapter) => chapter.id}
       ListHeaderComponent={
         <>
-          <ScreenHeader kicker="Library · Chapters" title={bookTitle ?? "Chapters"} />
+          <ScreenHeader kicker={t("book.kicker")} title={bookTitle ?? t("book.chapters")} />
           {bookNode && (
             <View style={styles.overallProgress}>
               <ProgressBar
                 percent={computeLessonCompletionPercent(bookNode)}
-                label="Overall progress"
+                label={t("book.overallProgress")}
               />
             </View>
           )}
         </>
       }
-      ListEmptyComponent={<Text style={styles.empty}>No chapters yet.</Text>}
+      ListEmptyComponent={<Text style={styles.empty}>{t("book.noChapters")}</Text>}
       renderItem={({ item }) => (
         <ChapterRow
           chapter={item}
@@ -810,8 +804,8 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
       ListFooterComponent={
         isAdmin ? (
           <View style={styles.uploadForm}>
-            <Text style={styles.uploadHeading}>New chapter</Text>
-            <Text style={styles.label}>Title</Text>
+            <Text style={styles.uploadHeading}>{t("book.newChapter")}</Text>
+            <Text style={styles.label}>{t("book.title")}</Text>
             <TextInput style={styles.input} value={title} onChangeText={setTitle} />
 
             {createError && <Text style={styles.error}>{createError}</Text>}
@@ -825,7 +819,7 @@ function BookChaptersScreen({ bookId }: { bookId: string }) {
               {createChapterMutation.isPending ? (
                 <ActivityIndicator color={colors.primaryForeground} />
               ) : (
-                <Text style={styles.uploadButtonText}>Create chapter</Text>
+                <Text style={styles.uploadButtonText}>{t("book.createChapter")}</Text>
               )}
             </Pressable>
           </View>

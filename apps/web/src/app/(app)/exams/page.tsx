@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QuizQuestionResult, QuizSession, QuizSessionQuestion } from "@lp/api-client";
 import { ApiClientError } from "@lp/api-client";
+import { outcomeLabel, quizStatusLabel, revealModeLabel, type Translator } from "@lp/ui";
 import { useEffect, useEffectEvent, useState } from "react";
 
 import { Button } from "@/components/button";
@@ -11,13 +12,14 @@ import { OptionChoice, QuestionRevealPanel } from "@/components/question-reveal"
 import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
-function describeError(err: unknown): string {
+function describeError(t: Translator["t"], err: unknown): string {
   if (err instanceof ApiClientError) {
     const body = err.body as { message?: string } | null;
-    return body?.message ?? `Request failed with status ${err.status}`;
+    return body?.message ?? t("questions.requestFailed", { status: err.status });
   }
-  return err instanceof Error ? err.message : "Something went wrong.";
+  return err instanceof Error ? err.message : t("admin.import.somethingWrong");
 }
 
 function formatSeconds(total: number): string {
@@ -73,6 +75,7 @@ function TopicPicker({
   topics: TopicSelection;
   onChange: (next: TopicSelection) => void;
 }) {
+  const { t } = useI18n();
   const tree = useQuery({
     queryKey: ["question-bank-tree"],
     queryFn: () => getBrowserApiClient().getQuestionBankTree(),
@@ -82,30 +85,34 @@ function TopicPicker({
 
   return (
     <fieldset className="flex flex-col gap-xs">
-      <legend className="text-toc font-semibold text-foreground">Topics</legend>
+      <legend className="text-toc font-semibold text-foreground">{t("exams.topics")}</legend>
       <div className="mt-xs flex items-center gap-sm">
         <Button
           type="button"
           variant={everything ? "primary" : "secondary"}
           onClick={() => onChange(EMPTY_TOPICS)}
         >
-          All topics
+          {t("exams.allTopics")}
         </Button>
         {!everything && (
           <span className="text-xs text-muted-foreground">
-            {topics.chapterIds.length + topics.subChapterIds.length + topics.documentIds.length}{" "}
-            selected
+            {t("exams.selected", {
+              count:
+                topics.chapterIds.length + topics.subChapterIds.length + topics.documentIds.length,
+            })}
           </span>
         )}
       </div>
 
-      {tree.isPending && <p className="text-xs text-muted-foreground">Loading topics...</p>}
+      {tree.isPending && (
+        <p className="text-xs text-muted-foreground">{t("exams.loadingTopics")}</p>
+      )}
       {tree.data && (
         <ul className="mt-xs border-y border-border">
           {tree.data.books.map((book) => (
             <ExpandableRow key={book.id} title={book.title}>
               {book.chapters.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No chapters.</p>
+                <p className="text-sm text-muted-foreground">{t("bank.noChapters")}</p>
               ) : (
                 <ul>
                   {book.chapters.map((chapter) => (
@@ -124,7 +131,7 @@ function TopicPicker({
                               })
                             }
                           />
-                          whole chapter
+                          {t("exams.wholeChapter")}
                         </label>
                       }
                     >
@@ -145,7 +152,7 @@ function TopicPicker({
                                     })
                                   }
                                 />
-                                all
+                                {t("exams.all")}
                               </label>
                             }
                           >
@@ -204,6 +211,7 @@ function TagPicker({
   selectedIds: string[];
   onToggle: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -222,8 +230,8 @@ function TagPicker({
     <div className="relative">
       <Button type="button" variant="secondary" onClick={() => setOpen((value) => !value)}>
         {selectedIds.length === 0
-          ? "Tags"
-          : `${selectedIds.length} tag${selectedIds.length === 1 ? "" : "s"} selected`}
+          ? t("exams.tags")
+          : t("exams.tagsSelected", { count: selectedIds.length })}
       </Button>
       {open && (
         <>
@@ -235,13 +243,15 @@ function TagPicker({
                 autoFocus
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search tags..."
+                placeholder={t("exams.searchTags")}
                 className="field text-sm!"
               />
             </div>
             <div className="flex max-h-64 flex-col gap-xs overflow-y-auto p-sm">
               {filtered.length === 0 ? (
-                <p className="px-sm py-xs text-sm text-muted-foreground">No matching tags.</p>
+                <p className="px-sm py-xs text-sm text-muted-foreground">
+                  {t("exams.noMatchingTags")}
+                </p>
               ) : (
                 filtered.map((tag) => (
                   <label
@@ -266,6 +276,7 @@ function TagPicker({
 }
 
 function StartForm({ onStarted }: { onStarted: () => void }) {
+  const { t } = useI18n();
   const api = getBrowserApiClient();
   const tags = useQuery({ queryKey: ["tags"], queryFn: () => api.listTags() });
   const [tagIds, setTagIds] = useState<string[]>([]);
@@ -313,7 +324,7 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
       }),
     onMutate: () => setError(null),
     onSuccess: onStarted,
-    onError: (err) => setError(describeError(err)),
+    onError: (err) => setError(describeError(t, err)),
   });
 
   // Bracket widths, not max-w-md/2xl — our --spacing-* tokens shadow
@@ -326,29 +337,27 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
       <TopicPicker topics={topics} onChange={setTopics} />
 
       <fieldset className="flex flex-col gap-xs">
-        <legend className="text-toc font-semibold text-foreground">
-          Tags — none selected means no tag filter
-        </legend>
+        <legend className="text-toc font-semibold text-foreground">{t("exams.tagsLegend")}</legend>
         <div className="mt-xs">
           <TagPicker tags={tags.data ?? []} selectedIds={tagIds} onToggle={toggleTag} />
         </div>
         {tagIds.length > 1 && (
-          <span className="text-xs text-muted-foreground">
-            Tags narrow the pool — a question must carry every tag you select.
-          </span>
+          <span className="text-xs text-muted-foreground">{t("exams.tagsNarrow")}</span>
         )}
         {availableCount !== undefined && (
           <span className="text-xs text-muted-foreground">
             {availableCount === 0
-              ? "No published questions match this filter."
-              : `${availableCount} question${availableCount === 1 ? "" : "s"} available` +
-                (questionCount > availableCount ? ` — you'll get all ${availableCount}` : "")}
+              ? t("exams.noneAvailable")
+              : t("exams.available", { count: availableCount }) +
+                (questionCount > availableCount
+                  ? t("exams.youGetAll", { count: availableCount })
+                  : "")}
           </span>
         )}
       </fieldset>
 
       <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-        Number of questions
+        {t("exams.questionCount")}
         <input
           type="number"
           min={1}
@@ -359,7 +368,7 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
         />
         {countInvalid && (
           <span className="text-xs font-normal text-danger">
-            Between {MIN_QUESTIONS} and {MAX_QUESTIONS} questions.
+            {t("exams.questionRange", { min: MIN_QUESTIONS, max: MAX_QUESTIONS })}
           </span>
         )}
       </label>
@@ -370,11 +379,11 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
           checked={timed}
           onChange={(event) => setTimed(event.target.checked)}
         />
-        Timed
+        {t("exams.timed")}
       </label>
       {timed && (
         <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-          Duration (minutes)
+          {t("exams.duration")}
           <input
             type="number"
             min={1}
@@ -385,21 +394,21 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
           />
           {durationInvalid && (
             <span className="text-xs font-normal text-danger">
-              Between {MIN_MINUTES} and {MAX_MINUTES} minutes.
+              {t("exams.minuteRange", { min: MIN_MINUTES, max: MAX_MINUTES })}
             </span>
           )}
         </label>
       )}
 
       <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-        Reveal mode
+        {t("exams.revealMode")}
         <select
           value={revealMode}
           onChange={(event) => setRevealMode(event.target.value as "immediate" | "on_finish")}
           className="field w-auto"
         >
-          <option value="immediate">Immediate — see the answer after each question</option>
-          <option value="on_finish">On finish — see results only at the end</option>
+          <option value="immediate">{t("exams.immediateOption")}</option>
+          <option value="on_finish">{t("exams.onFinishOption")}</option>
         </select>
       </label>
 
@@ -414,7 +423,7 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
         onClick={() => start.mutate()}
         disabled={start.isPending || availableCount === 0 || countInvalid || durationInvalid}
       >
-        {start.isPending ? "Starting..." : "Start quiz"}
+        {start.isPending ? t("exams.starting") : t("exams.start")}
       </Button>
     </div>
   );
@@ -435,6 +444,7 @@ function QuestionCard({
   onAnswer: (position: number, selected: string[]) => void;
   reveal: QuizQuestionResult | undefined;
 }) {
+  const { t } = useI18n();
   const [selected, setSelected] = useState<string[]>(question.selected_option_ids ?? []);
   const answered = question.answered_at !== null || reveal !== undefined;
   // Under `immediate` an answer is final server-side. `reveal` only covers
@@ -487,8 +497,11 @@ function QuestionCard({
         // rationales — those only come back from the answer call itself
         // and from /results once the quiz is over.
         <p className="mt-sm text-toc font-semibold text-muted-foreground">
-          Answered — {question.outcome} ({question.points_awarded}/{question.points_possible}{" "}
-          points)
+          {t("exams.answeredLine", {
+            outcome: outcomeLabel(t, question.outcome),
+            awarded: question.points_awarded ?? 0,
+            possible: question.points_possible ?? 0,
+          })}
         </p>
       ) : (
         <Button
@@ -497,7 +510,11 @@ function QuestionCard({
           disabled={disabled || selected.length === 0}
           onClick={() => onAnswer(question.position, selected)}
         >
-          {!answered ? "Save answer" : changed ? "Update answer" : "Answer saved ✓"}
+          {!answered
+            ? t("exams.saveAnswer")
+            : changed
+              ? t("exams.updateAnswer")
+              : t("exams.answerSaved")}
         </Button>
       )}
     </div>
@@ -505,6 +522,7 @@ function QuestionCard({
 }
 
 function Runner({ session, onFinished }: { session: QuizSession; onFinished: () => void }) {
+  const { t } = useI18n();
   const api = getBrowserApiClient();
   const queryClient = useQueryClient();
   // Seconds burned since the server snapshot we're rendering. Held as a
@@ -577,35 +595,35 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
       }
       refetchSession();
     },
-    onError: (err) => setError(describeError(err)),
+    onError: (err) => setError(describeError(t, err)),
   });
 
   const pause = useMutation({
     mutationFn: () => api.pauseQuizSession(session.id),
     onMutate: () => setError(null),
     onSuccess: refetchSession,
-    onError: (err) => setError(describeError(err)),
+    onError: (err) => setError(describeError(t, err)),
   });
 
   const resume = useMutation({
     mutationFn: () => api.resumeQuizSession(session.id),
     onMutate: () => setError(null),
     onSuccess: refetchSession,
-    onError: (err) => setError(describeError(err)),
+    onError: (err) => setError(describeError(t, err)),
   });
 
   const cancel = useMutation({
     mutationFn: () => api.cancelQuizSession(session.id),
     onMutate: () => setError(null),
     onSuccess: onFinished,
-    onError: (err) => setError(describeError(err)),
+    onError: (err) => setError(describeError(t, err)),
   });
 
   const submit = useMutation({
     mutationFn: () => api.submitQuizSession(session.id),
     onMutate: () => setError(null),
     onSuccess: onFinished,
-    onError: (err) => setError(describeError(err)),
+    onError: (err) => setError(describeError(t, err)),
   });
 
   const isPaused = session.status === "paused";
@@ -614,9 +632,7 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
   function confirmSubmit() {
     if (
       unanswered === 0 ||
-      confirm(
-        `${unanswered} question${unanswered === 1 ? " is" : "s are"} not answered and will score 0. Submit anyway?`,
-      )
+      confirm(`${t("exams.unansweredWarning", { count: unanswered })} ${t("exams.submitAnyway")}`)
     ) {
       submit.mutate();
     }
@@ -626,27 +642,27 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
     <div className="mt-lg flex w-full flex-col gap-md">
       <div className="sticky top-0 z-10 -mx-md flex items-center justify-between gap-sm rounded-b-xl border border-t-0 border-border bg-background px-md py-sm shadow-notch">
         <span className="text-ui font-bold text-foreground tabular-nums">
-          {remaining !== null ? formatSeconds(remaining) : "Untimed"}
-          {isPaused && " (paused)"} · {session.reveal_mode}
+          {remaining !== null ? formatSeconds(remaining) : t("exams.untimed")}
+          {isPaused && t("exams.paused")} · {revealModeLabel(t, session.reveal_mode)}
         </span>
         <div className="flex gap-xs">
           {isPaused ? (
             <Button type="button" variant="secondary" onClick={() => resume.mutate()}>
-              Resume
+              {t("exams.resume")}
             </Button>
           ) : (
             <Button type="button" variant="secondary" onClick={() => pause.mutate()}>
-              Pause
+              {t("exams.pause")}
             </Button>
           )}
           <Button
             type="button"
             variant="secondary"
             onClick={() => {
-              if (confirm("Cancel this attempt? It cannot be resumed.")) cancel.mutate();
+              if (confirm(t("exams.confirmCancel"))) cancel.mutate();
             }}
           >
-            Cancel
+            {t("common.cancel")}
           </Button>
         </div>
       </div>
@@ -657,9 +673,7 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
         </p>
       )}
 
-      {isPaused && (
-        <p className="text-sm text-muted-foreground">Paused — resume to see the questions again.</p>
-      )}
+      {isPaused && <p className="text-sm text-muted-foreground">{t("exams.pausedHint")}</p>}
       {/* Hidden, not unmounted, while paused: ticks not saved yet (on_finish)
           would otherwise be lost. The server still refuses answers then. */}
       <div className="flex flex-col gap-lg" hidden={isPaused}>
@@ -679,7 +693,7 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
           and forcing a resume first would restart the clock on a timed quiz
           the user has already decided they are done with. */}
       <Button type="button" onClick={confirmSubmit} disabled={submit.isPending}>
-        {submit.isPending ? "Submitting..." : "Submit quiz"}
+        {submit.isPending ? t("exams.submitting") : t("exams.submitQuiz")}
       </Button>
     </div>
   );
@@ -688,6 +702,7 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
 // --- results ---------------------------------------------------------------
 
 function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void }) {
+  const { t } = useI18n();
   const api = getBrowserApiClient();
   const results = useQuery({
     queryKey: ["quiz-results", sessionId],
@@ -695,10 +710,10 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
   });
 
   if (results.isPending) {
-    return <p className="mt-lg text-sm text-muted-foreground">Loading results...</p>;
+    return <p className="mt-lg text-sm text-muted-foreground">{t("exams.loadingResults")}</p>;
   }
   if (results.isError) {
-    return <p className="mt-lg text-sm text-danger">{describeError(results.error)}</p>;
+    return <p className="mt-lg text-sm text-danger">{describeError(t, results.error)}</p>;
   }
 
   const data = results.data;
@@ -706,8 +721,11 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
     <div className="mt-lg flex w-full flex-col gap-md">
       <h2 className="text-heading font-extrabold text-foreground">
         {data.status === "cancelled"
-          ? "Attempt cancelled"
-          : `${data.points_awarded ?? 0} / ${data.points_possible ?? 0} points`}
+          ? t("exams.attemptCancelled")
+          : t("exams.score", {
+              awarded: data.points_awarded ?? 0,
+              possible: data.points_possible ?? 0,
+            })}
       </h2>
       {data.questions.map((question) => (
         <div key={question.position} className="border-t border-border pt-md">
@@ -718,7 +736,7 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
         </div>
       ))}
       <Button type="button" onClick={onDone}>
-        Back to quizzes
+        {t("exams.backToQuizzes")}
       </Button>
     </div>
   );
@@ -727,6 +745,7 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
 // --- history -----------------------------------------------------------------
 
 function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
+  const { t } = useI18n();
   const api = getBrowserApiClient();
   const history = useQuery({
     queryKey: ["quiz-session-history"],
@@ -737,7 +756,7 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
 
   return (
     <div className="mt-xl">
-      <h2 className="label-caps">Recent attempts</h2>
+      <h2 className="label-caps">{t("exams.recentAttempts")}</h2>
       <ul className="mt-sm border-t border-border">
         {history.data.map((item) => (
           <li key={item.id} className="border-b border-border">
@@ -746,8 +765,12 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
               onClick={() => onOpen(item.id)}
               className="-mx-sm w-[calc(100%+16px)] rounded-sm px-sm py-2.5 text-left text-toc font-semibold text-foreground hover:bg-muted"
             >
-              {item.status} · {item.points_awarded ?? "—"}/{item.points_possible ?? "—"} points ·{" "}
-              {item.question_count} questions
+              {t("exams.historyRow", {
+                status: quizStatusLabel(t, item.status),
+                awarded: item.points_awarded ?? "—",
+                possible: item.points_possible ?? "—",
+                questions: t("questions.count", { count: item.question_count }),
+              })}
             </button>
           </li>
         ))}
@@ -759,6 +782,7 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
 // --- page ----------------------------------------------------------------
 
 export default function QuizzesPage() {
+  const { t } = useI18n();
   const api = getBrowserApiClient();
   const queryClient = useQueryClient();
 
@@ -776,10 +800,8 @@ export default function QuizzesPage() {
 
   return (
     <PageMain width="reading">
-      <PageHeader kicker="Practice" title="Exam Hub" />
-      <p className="text-toc text-muted-foreground">
-        Build a custom quiz from any topics and tags. Scheduled mock exams will appear here too.
-      </p>
+      <PageHeader kicker={t("exams.kicker")} title={t("exams.title")} />
+      <p className="text-toc text-muted-foreground">{t("exams.intro")}</p>
 
       {viewingResultsFor ? (
         <Results
@@ -790,7 +812,7 @@ export default function QuizzesPage() {
           }}
         />
       ) : current.isPending ? (
-        <p className="mt-lg text-sm text-muted-foreground">Loading...</p>
+        <p className="mt-lg text-sm text-muted-foreground">{t("common.loading")}</p>
       ) : current.data ? (
         (() => {
           const session = current.data;

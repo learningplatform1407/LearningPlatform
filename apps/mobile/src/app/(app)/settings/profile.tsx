@@ -15,6 +15,7 @@ import {
 
 import { getApiClient } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
+import { useI18n } from "@/lib/i18n";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
@@ -23,6 +24,7 @@ const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
 export default function ProfileSettingsScreen() {
   const styles = useStyles();
+  const { t } = useI18n();
   const colors = useThemeColors();
   const queryClient = useQueryClient();
   const { data, isPending, isError, error } = useQuery({
@@ -64,7 +66,7 @@ export default function ProfileSettingsScreen() {
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (permission.status !== "granted") {
-      setAvatarError("Photo library permission is required to change your picture.");
+      setAvatarError(t("settings.profile.photoPermission"));
       return;
     }
 
@@ -77,7 +79,7 @@ export default function ProfileSettingsScreen() {
     const asset = result.assets[0];
     if (!asset) return;
     if (asset.fileSize && asset.fileSize > MAX_AVATAR_BYTES) {
-      setAvatarError("Image must be under 5MB.");
+      setAvatarError(t("settings.profile.imageTooLarge"));
       return;
     }
 
@@ -94,7 +96,7 @@ export default function ProfileSettingsScreen() {
       const { data: publicUrlData } = supabase.storage.from("avatars").getPublicUrl(path);
       await avatarMutation.mutateAsync(publicUrlData.publicUrl);
     } catch (err) {
-      setAvatarError(err instanceof Error ? err.message : "Failed to upload image.");
+      setAvatarError(err instanceof Error ? err.message : t("settings.profile.uploadFailed"));
     } finally {
       setAvatarUploading(false);
     }
@@ -103,7 +105,7 @@ export default function ProfileSettingsScreen() {
   if (isPending) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text style={styles.loading}>Loading...</Text>
+        <Text style={styles.loading}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -111,21 +113,23 @@ export default function ProfileSettingsScreen() {
   if (isError) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text style={styles.error}>Failed to load profile: {(error as Error).message}</Text>
+        <Text style={styles.error}>
+          {t("common.failedToLoadProfile", { message: (error as Error).message })}
+        </Text>
       </View>
     );
   }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <ScreenHeader kicker="Settings" title="Profile Settings" />
+      <ScreenHeader kicker={t("settings.title")} title={t("settings.sections.profile")} />
 
       <View style={styles.avatarRow}>
         <Pressable
           style={styles.avatar}
           onPress={handlePickAvatar}
           accessibilityRole="button"
-          accessibilityLabel="Change profile picture"
+          accessibilityLabel={t("settings.profile.changePicture")}
         >
           {data.avatar_url ? (
             <Image source={{ uri: data.avatar_url }} style={styles.avatarImage} />
@@ -140,21 +144,23 @@ export default function ProfileSettingsScreen() {
             </View>
           )}
         </Pressable>
-        <Text style={styles.hint}>Tap the picture to change it.</Text>
+        <Text style={styles.hint}>{t("settings.profile.tapToChange")}</Text>
       </View>
       {avatarError && <Text style={styles.error}>{avatarError}</Text>}
 
-      <Text style={styles.label}>Email</Text>
+      <Text style={styles.label}>{t("settings.profile.email")}</Text>
       <Text style={styles.readOnlyValue}>{data.email ?? "—"}</Text>
 
-      <Text style={styles.label}>Display name</Text>
+      <Text style={styles.label}>{t("settings.profile.displayName")}</Text>
       <TextInput style={styles.input} value={displayName} onChangeText={setDisplayName} />
 
-      <Text style={styles.label}>University</Text>
+      <Text style={styles.label}>{t("settings.profile.university")}</Text>
       <TextInput style={styles.input} value={university} onChangeText={setUniversity} />
 
       {saveMutation.isError && (
-        <Text style={styles.error}>Failed to save: {(saveMutation.error as Error).message}</Text>
+        <Text style={styles.error}>
+          {t("common.failedToSave", { message: (saveMutation.error as Error).message })}
+        </Text>
       )}
       <Pressable
         style={styles.saveButton}
@@ -162,9 +168,11 @@ export default function ProfileSettingsScreen() {
         disabled={saveMutation.isPending}
         accessibilityRole="button"
       >
-        <Text style={styles.saveButtonText}>{saveMutation.isPending ? "Saving..." : "Save"}</Text>
+        <Text style={styles.saveButtonText}>
+          {saveMutation.isPending ? t("common.saving") : t("common.save")}
+        </Text>
       </Pressable>
-      {saveMutation.isSuccess && <Text style={styles.saved}>Saved.</Text>}
+      {saveMutation.isSuccess && <Text style={styles.saved}>{t("common.saved")}</Text>}
     </ScrollView>
   );
 }

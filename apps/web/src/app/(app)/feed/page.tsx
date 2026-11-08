@@ -3,12 +3,12 @@
 import type { FeedCategory, FeedPost } from "@lp/contracts";
 import {
   ALLOWED_FEED_IMAGE_TYPES,
-  FEED_CATEGORY_LABELS,
   isAllowedFeedImageType,
   FEED_IMAGES_BUCKET,
   FEED_PAGE_SIZE,
   MAX_FEED_IMAGE_BYTES,
   formatPostDate,
+  type Translator,
   splitLinkifiedBody,
 } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,6 +20,7 @@ import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { createClient } from "@/lib/supabase/client";
+import { useI18n } from "@/lib/i18n";
 
 /** Renders the body with bare URLs turned into links.
  *
@@ -56,14 +57,16 @@ function imageUrl(imagePath: string): string {
 }
 
 function CategoryChip({ category }: { category: FeedCategory }) {
+  const { t } = useI18n();
   return (
     <span className="rounded-full border border-border px-2.5 py-0.5 text-xs font-bold text-muted-foreground">
-      {FEED_CATEGORY_LABELS[category]}
+      {t(`feed.categories.${category}`)}
     </span>
   );
 }
 
 function Byline({ post }: { post: FeedPost }) {
+  const { t, language } = useI18n();
   return (
     <div className="flex flex-wrap items-center gap-sm text-caption font-semibold text-muted-foreground">
       {post.author?.avatar_url ? (
@@ -73,13 +76,15 @@ function Byline({ post }: { post: FeedPost }) {
       {/* `author` is null once the authoring admin's profile is deleted: the
           announcement outlives them by design, so this needs a fallback
           rather than a guard that hides the post. */}
-      <span className="font-bold text-foreground">{post.author?.display_name ?? "Staff"}</span>
+      <span className="font-bold text-foreground">
+        {post.author?.display_name ?? t("feed.staff")}
+      </span>
       <span>·</span>
-      <span>{formatPostDate(post.published_at)}</span>
+      <span>{formatPostDate(post.published_at, language)}</span>
       {post.updated_at !== post.created_at ? (
         <>
           <span>·</span>
-          <span>edited</span>
+          <span>{t("feed.edited")}</span>
         </>
       ) : null}
       <CategoryChip category={post.category} />
@@ -92,12 +97,12 @@ function Byline({ post }: { post: FeedPost }) {
  * Abandoning the composer then uploads nothing at all, which removes the
  * largest source of orphaned objects in a public bucket. The preview comes
  * from a local object URL so the UX doesn't suffer for it. */
-async function uploadImage(file: File): Promise<string> {
+async function uploadImage(t: Translator["t"], file: File): Promise<string> {
   // Checked rather than cast: ImageField already refuses anything else, but a
   // cast here would let a future caller past the endpoint's Literal and into
   // an opaque 422.
   if (!isAllowedFeedImageType(file.type)) {
-    throw new Error("Pick a JPEG, PNG or WebP image.");
+    throw new Error(t("feed.pickImageType"));
   }
   const { storage_path, token } = await getBrowserApiClient().requestFeedImageUploadUrl({
     mime_type: file.type,
@@ -128,7 +133,7 @@ function ImageField({
   file,
   onPick,
   disabled,
-  label = "Picture (optional)",
+  label,
   inputId = "feed-image",
 }: {
   file: File | null;
@@ -140,6 +145,7 @@ function ImageField({
   label?: string;
   inputId?: string;
 }) {
+  const { t } = useI18n();
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const previewUrl = usePreviewUrl(file);
@@ -156,7 +162,7 @@ function ImageField({
   return (
     <div>
       <label className="block text-toc font-semibold text-foreground" htmlFor={inputId}>
-        {label}
+        {label ?? t("feed.picture")}
       </label>
       <input
         ref={inputRef}
@@ -175,12 +181,12 @@ function ImageField({
           // Mirrors the server's checks so the admin hears about it before
           // waiting on an upload. The bucket enforces both for real.
           if (!isAllowedFeedImageType(picked.type)) {
-            setError("Pick a JPEG, PNG or WebP image.");
+            setError(t("feed.pickImageType"));
             onPick(null);
             return;
           }
           if (picked.size > MAX_FEED_IMAGE_BYTES) {
-            setError("Image must be under 5MB.");
+            setError(t("feed.imageTooLarge"));
             onPick(null);
             return;
           }
@@ -197,7 +203,7 @@ function ImageField({
           {/* eslint-disable-next-line @next/next/no-img-element -- local object URL for a pre-upload preview */}
           <img src={previewUrl} alt="" className="max-h-40 rounded-md object-cover" />
           <Button variant="secondary" onClick={clear} disabled={disabled}>
-            Remove picture
+            {t("feed.removePicture")}
           </Button>
         </div>
       ) : null}
@@ -206,6 +212,7 @@ function ImageField({
 }
 
 function Composer() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -228,7 +235,7 @@ function Composer() {
     mutationFn: async () => {
       let imagePath = uploadedPath;
       if (file && imagePath === null) {
-        imagePath = await uploadImage(file);
+        imagePath = await uploadImage(t, file);
         setUploadedPath(imagePath);
       }
       return getBrowserApiClient().createFeedPost({
@@ -249,7 +256,7 @@ function Composer() {
       queryClient.invalidateQueries({ queryKey: ["feed"] });
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "Failed to post.");
+      setError(err instanceof Error ? err.message : t("feed.postFailed"));
     },
   });
 
@@ -257,24 +264,24 @@ function Composer() {
 
   return (
     <Card className="mt-lg w-full p-md shadow-dot">
-      <h2 className="label-caps">New announcement</h2>
+      <h2 className="label-caps">{t("feed.newAnnouncement")}</h2>
       <div className="mt-md flex flex-col gap-md">
         <div>
           <label className="block text-toc font-semibold text-foreground" htmlFor="feed-title">
-            Title
+            {t("feed.postTitle")}
           </label>
           <input
             id="feed-title"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             disabled={createMutation.isPending}
-            placeholder="January timetable is up"
+            placeholder={t("feed.titlePlaceholder")}
             className="field mt-xs"
           />
         </div>
         <div>
           <label className="block text-toc font-semibold text-foreground" htmlFor="feed-body">
-            Body
+            {t("feed.body")}
           </label>
           <textarea
             id="feed-body"
@@ -282,13 +289,13 @@ function Composer() {
             onChange={(event) => setBody(event.target.value)}
             disabled={createMutation.isPending}
             rows={4}
-            placeholder="Share an announcement… paste a link and it becomes clickable."
+            placeholder={t("feed.bodyPlaceholderWeb")}
             className="field mt-xs"
           />
         </div>
         <div>
           <label className="block text-toc font-semibold text-foreground" htmlFor="feed-category">
-            Category
+            {t("feed.category")}
           </label>
           <select
             id="feed-category"
@@ -297,8 +304,8 @@ function Composer() {
             disabled={createMutation.isPending}
             className="field mt-xs"
           >
-            <option value="news">News</option>
-            <option value="media">Media — a livestream or social link</option>
+            <option value="news">{t("feed.categories.news")}</option>
+            <option value="media">{t("feed.mediaOption")}</option>
           </select>
         </div>
         <ImageField
@@ -320,7 +327,7 @@ function Composer() {
             onClick={() => createMutation.mutate()}
             disabled={!canPost || createMutation.isPending}
           >
-            {createMutation.isPending ? "Posting…" : "Post"}
+            {createMutation.isPending ? t("feed.posting") : t("feed.post")}
           </Button>
         </div>
       </div>
@@ -329,6 +336,7 @@ function Composer() {
 }
 
 function PostCard({ post }: { post: FeedPost }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(post.title);
@@ -372,7 +380,7 @@ function PostCard({ post }: { post: FeedPost }) {
       // present at all: a new file uploads and sends its path, an explicit
       // removal sends null, and anything else omits the field.
       let imagePatch: { image_path?: string | null } = {};
-      if (replacement) imagePatch = { image_path: await uploadImage(replacement) };
+      if (replacement) imagePatch = { image_path: await uploadImage(t, replacement) };
       else if (removeImage) imagePatch = { image_path: null };
 
       return getBrowserApiClient().updateFeedPost(post.id, {
@@ -388,7 +396,7 @@ function PostCard({ post }: { post: FeedPost }) {
       queryClient.invalidateQueries({ queryKey: ["feed"] });
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "Failed to save.");
+      setError(err instanceof Error ? err.message : t("feed.saveFailed"));
     },
   });
 
@@ -398,7 +406,7 @@ function PostCard({ post }: { post: FeedPost }) {
       queryClient.invalidateQueries({ queryKey: ["feed"] });
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "Failed to delete.");
+      setError(err instanceof Error ? err.message : t("feed.deleteFailed"));
     },
   });
 
@@ -409,7 +417,7 @@ function PostCard({ post }: { post: FeedPost }) {
       {isEditing ? (
         <div className="flex flex-col gap-sm">
           <label className="text-toc font-semibold text-foreground" htmlFor={`title-${post.id}`}>
-            Title
+            {t("feed.postTitle")}
           </label>
           <input
             id={`title-${post.id}`}
@@ -418,7 +426,7 @@ function PostCard({ post }: { post: FeedPost }) {
             className="field"
           />
           <label className="text-toc font-semibold text-foreground" htmlFor={`body-${post.id}`}>
-            Body
+            {t("feed.body")}
           </label>
           <textarea
             id={`body-${post.id}`}
@@ -432,19 +440,19 @@ function PostCard({ post }: { post: FeedPost }) {
               could only be fixed by deleting it and retyping. */}
           {post.image_path && !removeImage && !replacement ? (
             <div className="flex items-center gap-sm">
-              <span className="text-sm text-muted-foreground">Current picture</span>
+              <span className="text-sm text-muted-foreground">{t("feed.currentPicture")}</span>
               <Button variant="secondary" onClick={() => setRemoveImage(true)} disabled={isBusy}>
-                Remove picture
+                {t("feed.removePicture")}
               </Button>
             </div>
           ) : null}
           {removeImage ? (
             <div className="flex items-center gap-sm">
               <span className="text-sm text-muted-foreground">
-                The picture will be removed when you save.
+                {t("feed.pictureWillBeRemoved")}
               </span>
               <Button variant="secondary" onClick={resetImageEdits} disabled={isBusy}>
-                Keep it
+                {t("feed.keepIt")}
               </Button>
             </div>
           ) : null}
@@ -456,7 +464,7 @@ function PostCard({ post }: { post: FeedPost }) {
               if (picked) setRemoveImage(false);
             }}
             disabled={isBusy}
-            label={post.image_path ? "Replace the picture" : "Add a picture"}
+            label={post.image_path ? t("feed.replacePicture") : t("feed.addPicture")}
             inputId={`image-${post.id}`}
           />
           <div className="flex gap-sm">
@@ -464,7 +472,7 @@ function PostCard({ post }: { post: FeedPost }) {
               onClick={() => updateMutation.mutate()}
               disabled={isBusy || title.trim().length === 0 || body.trim().length === 0}
             >
-              {updateMutation.isPending ? "Saving…" : "Save"}
+              {updateMutation.isPending ? t("feed.saving") : t("common.save")}
             </Button>
             <Button
               variant="secondary"
@@ -477,7 +485,7 @@ function PostCard({ post }: { post: FeedPost }) {
               }}
               disabled={isBusy}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </div>
@@ -506,7 +514,7 @@ function PostCard({ post }: { post: FeedPost }) {
             <div className="mt-md flex gap-sm">
               {post.can_edit ? (
                 <Button variant="secondary" onClick={() => setIsEditing(true)} disabled={isBusy}>
-                  Edit
+                  {t("feed.edit")}
                 </Button>
               ) : null}
               {post.can_delete ? (
@@ -514,11 +522,11 @@ function PostCard({ post }: { post: FeedPost }) {
                   variant="danger"
                   disabled={isBusy}
                   onClick={() => {
-                    if (!window.confirm("Delete this announcement? This cannot be undone.")) return;
+                    if (!window.confirm(t("feed.confirmDelete"))) return;
                     deleteMutation.mutate();
                   }}
                 >
-                  {deleteMutation.isPending ? "Deleting…" : "Delete"}
+                  {deleteMutation.isPending ? t("feed.deleting") : t("common.delete")}
                 </Button>
               ) : null}
             </div>
@@ -535,6 +543,7 @@ function PostCard({ post }: { post: FeedPost }) {
 }
 
 export default function FeedPage() {
+  const { t } = useI18n();
   const me = useQuery({ queryKey: ["me"], queryFn: () => getBrowserApiClient().getMe() });
   const feed = useQuery({
     queryKey: ["feed"],
@@ -544,7 +553,7 @@ export default function FeedPage() {
   if (me.isPending || feed.isPending) {
     return (
       <PageMain width="reading">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </PageMain>
     );
   }
@@ -553,7 +562,7 @@ export default function FeedPage() {
     return (
       <PageMain width="reading">
         <p role="alert" className="text-sm text-danger">
-          Failed to load the feed: {(feed.error as Error).message}
+          {t("feed.loadFailed", { message: (feed.error as Error).message })}
         </p>
       </PageMain>
     );
@@ -567,7 +576,7 @@ export default function FeedPage() {
     return (
       <PageMain width="reading">
         <p role="alert" className="text-sm text-danger">
-          Failed to load your profile: {(me.error as Error).message}
+          {t("feed.profileFailed", { message: (me.error as Error).message })}
         </p>
       </PageMain>
     );
@@ -578,12 +587,12 @@ export default function FeedPage() {
 
   return (
     <PageMain width="reading">
-      <PageHeader kicker="Announcements" title="Feed" />
+      <PageHeader kicker={t("feed.kicker")} title={t("feed.title")} />
 
       {isAdmin ? <Composer /> : null}
 
       {posts.length === 0 ? (
-        <p className="mt-md text-sm text-muted-foreground">No announcements yet.</p>
+        <p className="mt-md text-sm text-muted-foreground">{t("feed.empty")}</p>
       ) : (
         <>
           <ul className="mt-lg flex flex-col gap-xl">
@@ -598,7 +607,7 @@ export default function FeedPage() {
               beats a list that simply ends and reads as the whole history. */}
           {posts.length >= FEED_PAGE_SIZE ? (
             <p className="mt-lg text-sm text-muted-foreground">
-              Showing the {FEED_PAGE_SIZE} most recent announcements.
+              {t("feed.showingRecent", { count: FEED_PAGE_SIZE })}
             </p>
           ) : null}
         </>

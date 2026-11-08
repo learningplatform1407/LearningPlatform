@@ -2,6 +2,7 @@ import { Text } from "react-native";
 
 import { fontSizes } from "@/lib/theme";
 import { useThemeColors } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 
 /**
  * The web build's stand-in for the native PDF reader. react-native-pdf
@@ -15,10 +16,11 @@ export function PdfLessonView(_props: {
   storagePath: string;
   pageCount: number;
 }) {
+  const { t } = useI18n();
   const colors = useThemeColors();
   return (
     <Text style={{ fontSize: fontSizes.sm, color: colors.mutedForeground }}>
-      The lecture PDF opens in the mobile app.
+      {t("lesson.pdfView.webOnly")}
     </Text>
   );
 }

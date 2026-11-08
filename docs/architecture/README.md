@@ -23,6 +23,10 @@ the system grows.
   model and why not per-user, why `attempt`-is-null-or-reveal is the whole
   privacy story, why the answer endpoint carries no date, and why a daily
   answer stays out of `question_progress`.
+- [`i18n.md`](./i18n.md) — the English and Romanian interface: one shared,
+  type-checked catalogue in `@lp/ui`, how each app picks the language (saved
+  setting, cookie / `Accept-Language` on web, device language on mobile), and
+  how to add a string.
 - [`lecture-pdf-ink.md`](./lecture-pdf-ink.md) — the official reference PDF a
   lesson carries alongside its lecture text, and per-learner freehand ink on
   it. Records why it is a separate table rather than a `DocumentVersion`

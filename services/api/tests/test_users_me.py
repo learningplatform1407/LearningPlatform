@@ -84,14 +84,23 @@ def test_me_patch_updates_settings_fields(authed_client: TestClient) -> None:
 
     response = authed_client.patch(
         "/v1/me",
-        json={"theme": "dark", "notifications_enabled": False, "language": "es"},
+        json={"theme": "dark", "notifications_enabled": False, "language": "ro"},
     )
     assert response.status_code == 200
     assert response.json()["settings"] == {
         "theme": "dark",
         "notifications_enabled": False,
-        "language": "es",
+        "language": "ro",
     }
+
+
+def test_me_patch_rejects_a_language_the_apps_do_not_ship(authed_client: TestClient) -> None:
+    authed_client.get("/v1/me")
+
+    response = authed_client.patch("/v1/me", json={"language": "es"})
+
+    assert response.status_code == 422
+    assert authed_client.get("/v1/me").json()["settings"]["language"] == "en"
 
 
 # --- /v1/me/stats -------------------------------------------------------------

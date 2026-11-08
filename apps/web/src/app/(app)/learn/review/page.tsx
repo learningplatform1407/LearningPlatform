@@ -15,9 +15,11 @@ import { Tag } from "@/components/chip";
 import { ExpandableRow } from "@/components/expandable-row";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
 function DueBadge({ count }: { count: number }) {
-  return <Tag active={count > 0}>{count} due</Tag>;
+  const { t } = useI18n();
+  return <Tag active={count > 0}>{t("study.due", { count })}</Tag>;
 }
 
 function LessonRow({ lesson }: { lesson: ReviewSummaryLesson }) {
@@ -35,10 +37,11 @@ function LessonRow({ lesson }: { lesson: ReviewSummaryLesson }) {
 }
 
 function SubChapterRow({ subChapter }: { subChapter: ReviewSummarySubChapter }) {
+  const { t } = useI18n();
   return (
     <ExpandableRow title={subChapter.title} badge={<DueBadge count={subChapter.due_count} />}>
       {subChapter.lessons.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No lessons.</p>
+        <p className="text-sm text-muted-foreground">{t("bank.noLessons")}</p>
       ) : (
         <ul>
           {subChapter.lessons.map((lesson) => (
@@ -51,10 +54,11 @@ function SubChapterRow({ subChapter }: { subChapter: ReviewSummarySubChapter }) 
 }
 
 function ChapterRow({ chapter }: { chapter: ReviewSummaryChapter }) {
+  const { t } = useI18n();
   return (
     <ExpandableRow title={chapter.title} badge={<DueBadge count={chapter.due_count} />}>
       {chapter.sub_chapters.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No sub-chapters.</p>
+        <p className="text-sm text-muted-foreground">{t("bank.noSubChapters")}</p>
       ) : (
         <ul>
           {chapter.sub_chapters.map((subChapter) => (
@@ -67,10 +71,11 @@ function ChapterRow({ chapter }: { chapter: ReviewSummaryChapter }) {
 }
 
 function BookRow({ book }: { book: ReviewSummaryBook }) {
+  const { t } = useI18n();
   return (
     <ExpandableRow title={book.title} badge={<DueBadge count={book.due_count} />}>
       {book.chapters.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No chapters.</p>
+        <p className="text-sm text-muted-foreground">{t("bank.noChapters")}</p>
       ) : (
         <ul>
           {book.chapters.map((chapter) => (
@@ -83,6 +88,7 @@ function BookRow({ book }: { book: ReviewSummaryBook }) {
 }
 
 export default function ReviewSummaryPage() {
+  const { t } = useI18n();
   const { data, isPending, isError } = useQuery({
     queryKey: ["review-summary"],
     queryFn: () => getBrowserApiClient().getReviewSummary(),
@@ -91,7 +97,7 @@ export default function ReviewSummaryPage() {
   if (isPending) {
     return (
       <PageMain width="reading">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </PageMain>
     );
   }
@@ -100,7 +106,7 @@ export default function ReviewSummaryPage() {
     return (
       <PageMain width="reading">
         <p role="alert" className="text-sm text-danger">
-          Failed to load your review summary.
+          {t("study.reviewLoadFailed")}
         </p>
       </PageMain>
     );
@@ -114,20 +120,23 @@ export default function ReviewSummaryPage() {
 
   return (
     <PageMain width="reading">
-      <PageHeader kicker="Learn" title="Review" />
+      <PageHeader kicker={t("nav.learn")} title={t("study.review")} />
       <p className="text-toc text-muted-foreground">
-        {totalDue} {totalDue === 1 ? "word" : "words"} due today across your course.
+        {t("study.wordsDueToday", { count: totalDue })}
       </p>
 
       {data.books.length === 0 && data.uncategorized_lessons.length === 0 ? (
-        <p className="mt-md text-sm text-muted-foreground">No lessons yet.</p>
+        <p className="mt-md text-sm text-muted-foreground">{t("book.noLessons")}</p>
       ) : (
         <ul className="mt-lg border-y border-border">
           {data.books.map((book) => (
             <BookRow key={book.id} book={book} />
           ))}
           {data.uncategorized_lessons.length > 0 && (
-            <ExpandableRow title="Uncategorized" badge={<DueBadge count={uncategorizedDue} />}>
+            <ExpandableRow
+              title={t("library.uncategorized")}
+              badge={<DueBadge count={uncategorizedDue} />}
+            >
               <ul>
                 {data.uncategorized_lessons.map((lesson) => (
                   <LessonRow key={lesson.id} lesson={lesson} />

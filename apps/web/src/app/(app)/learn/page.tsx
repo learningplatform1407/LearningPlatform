@@ -1,6 +1,7 @@
 "use client";
 
 import type { DailyQuestion } from "@lp/api-client";
+import { lessonStatusLabel } from "@lp/ui";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
@@ -8,37 +9,16 @@ import { Card } from "@/components/card";
 import { DailyQuestionOverlay, useDailyQuestion } from "@/components/daily-question-overlay";
 import { DailyQuestionCard, DailyQuestionRail } from "@/components/daily-question-panel";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 import { PageHeader } from "@/components/page-header";
 
 const TOOLS = [
-  { href: "/learn/library", title: "Library", description: "Browse books, chapters, and lessons." },
-  {
-    href: "/learn/review",
-    title: "Review",
-    description: "See how many words are due today, across every lesson.",
-  },
-  {
-    href: "/question-bank",
-    title: "Question Bank",
-    description: "Browse and answer questions, with stats on your progress.",
-  },
-  {
-    href: "/learn/flashcards",
-    title: "Flashcards",
-    description: "Spaced-repetition cards per lesson, official and your own.",
-  },
-  {
-    href: "/learn/notebook",
-    title: "Notebook",
-    description: "All your notes and drawings in one place.",
-  },
-];
-
-const STATUS_LABEL: Record<string, string> = {
-  processing: "Processing...",
-  ready: "Ready",
-  failed: "Failed",
-};
+  { href: "/learn/library", key: "library" },
+  { href: "/learn/review", key: "review" },
+  { href: "/question-bank", key: "questionBank" },
+  { href: "/learn/flashcards", key: "flashcards" },
+  { href: "/learn/notebook", key: "notebook" },
+] as const;
 
 /** The hub's own content: recent lessons and the nav grid.
  *
@@ -56,6 +36,7 @@ function LearnContent({
   today: DailyQuestion | undefined;
   onOpenToday: () => void;
 }) {
+  const { t } = useI18n();
   const {
     data: recentLessons,
     isPending,
@@ -66,13 +47,13 @@ function LearnContent({
   });
 
   if (isPending) {
-    return <p className="text-sm text-muted-foreground">Loading...</p>;
+    return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
   }
 
   if (isError) {
     return (
       <p role="alert" className="text-sm text-danger">
-        Failed to load your recent lessons.
+        {t("learn.loadRecentFailed")}
       </p>
     );
   }
@@ -82,24 +63,24 @@ function LearnContent({
 
   return (
     <>
-      <PageHeader kicker="Your course" title="Learn" />
+      <PageHeader kicker={t("learn.kicker")} title={t("learn.title")} />
 
       {continueLesson && (
         <Link
           href={`/learn/${continueLesson.id}`}
           className="group mt-lg block border-t border-border pt-md"
         >
-          <p className="label-caps">Continue where you left off</p>
+          <p className="label-caps">{t("learn.continue")}</p>
           <p className="mt-xs text-heading leading-tight font-extrabold text-foreground group-hover:underline">
             {continueLesson.title}
           </p>
-          <p className="mt-xs text-toc font-bold text-accent">Resume reading →</p>
+          <p className="mt-xs text-toc font-bold text-accent">{t("learn.resume")}</p>
         </Link>
       )}
 
       {recentlyOpened.length > 0 && (
         <section className="mt-xl">
-          <h2 className="label-caps">Recently opened</h2>
+          <h2 className="label-caps">{t("learn.recentlyOpened")}</h2>
           <ul className="mt-sm border-t border-border">
             {recentlyOpened.map((lesson) => (
               <li key={lesson.id} className="border-b border-border">
@@ -111,7 +92,7 @@ function LearnContent({
                     {lesson.title}
                   </span>
                   <span className="shrink-0 text-caption font-semibold text-muted-foreground">
-                    {lesson.status ? (STATUS_LABEL[lesson.status] ?? lesson.status) : ""}
+                    {lessonStatusLabel(t, lesson.status)}
                   </span>
                 </Link>
               </li>
@@ -120,7 +101,7 @@ function LearnContent({
         </section>
       )}
 
-      <h2 className="mt-xl label-caps">Study tools</h2>
+      <h2 className="mt-xl label-caps">{t("learn.studyTools")}</h2>
       <div className="mt-sm grid grid-cols-1 gap-sm sm:grid-cols-2 lg:grid-cols-3">
         {TOOLS.map((tool) => (
           <Card
@@ -130,8 +111,12 @@ function LearnContent({
             interactive
             className="block px-md py-3.5"
           >
-            <p className="text-card leading-snug font-extrabold text-foreground">{tool.title}</p>
-            <p className="mt-xs text-toc leading-snug text-muted-foreground">{tool.description}</p>
+            <p className="text-card leading-snug font-extrabold text-foreground">
+              {t(`learn.tools.${tool.key}`)}
+            </p>
+            <p className="mt-xs text-toc leading-snug text-muted-foreground">
+              {t(`learn.tools.${tool.key}Description`)}
+            </p>
           </Card>
         ))}
         {/* Below `lg` the rail is hidden, so the question gets a sixth card
@@ -143,6 +128,7 @@ function LearnContent({
 }
 
 export default function LearnPage() {
+  const { t } = useI18n();
   const { today, openDate, open, holdOpen, close } = useDailyQuestion();
   const day = today.data;
 
@@ -166,10 +152,10 @@ export default function LearnPage() {
           <DailyQuestionRail today={day} onOpenDay={open} />
         ) : today.isError ? (
           <p role="alert" className="text-xs text-danger">
-            Failed to load the question of the day.
+            {t("daily.loadFailed")}
           </p>
         ) : (
-          <p className="text-xs text-muted-foreground">Loading...</p>
+          <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
         )}
       </aside>
 

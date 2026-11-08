@@ -2,6 +2,7 @@ import { Text, View } from "react-native";
 
 import { fontSizes, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 
 // Threshold for the "done" color, matching the server's
 // LESSON_COMPLETION_THRESHOLD (services/api/app/progress/constants.py) —
@@ -17,6 +18,7 @@ const DONE_THRESHOLD = 80;
  * a zero-question node.
  */
 export function ProgressBar({ percent, label }: { percent: number | null; label?: string }) {
+  const { t } = useI18n();
   const styles = useStyles();
   if (percent === null) return null;
   const rounded = Math.round(percent);
@@ -28,7 +30,7 @@ export function ProgressBar({ percent, label }: { percent: number | null; label?
         style={styles.track}
         accessibilityRole="progressbar"
         accessibilityValue={{ min: 0, max: 100, now: rounded }}
-        accessibilityLabel={label ?? "Progress"}
+        accessibilityLabel={label ?? t("profile.progress")}
       >
         <View
           style={[

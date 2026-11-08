@@ -4,12 +4,14 @@ import { useState } from "react";
 import { Pressable, Switch, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
 
 export default function NotificationsSettingsScreen() {
   const styles = useStyles();
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
@@ -32,7 +34,7 @@ export default function NotificationsSettingsScreen() {
   if (isPending) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text style={styles.loading}>Loading...</Text>
+        <Text style={styles.loading}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -40,22 +42,26 @@ export default function NotificationsSettingsScreen() {
   if (isError) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text style={styles.error}>Failed to load settings: {(error as Error).message}</Text>
+        <Text style={styles.error}>
+          {t("common.failedToLoadSettings", { message: (error as Error).message })}
+        </Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <ScreenHeader kicker="Settings" title="Notifications" />
+      <ScreenHeader kicker={t("settings.title")} title={t("settings.sections.notifications")} />
 
       <View style={styles.row}>
-        <Text style={styles.rowLabel}>Enable notifications</Text>
+        <Text style={styles.rowLabel}>{t("settings.notifications.enable")}</Text>
         <Switch value={notificationsEnabled} onValueChange={setNotificationsEnabled} />
       </View>
 
       {saveMutation.isError && (
-        <Text style={styles.error}>Failed to save: {(saveMutation.error as Error).message}</Text>
+        <Text style={styles.error}>
+          {t("common.failedToSave", { message: (saveMutation.error as Error).message })}
+        </Text>
       )}
       <Pressable
         style={styles.saveButton}
@@ -63,9 +69,11 @@ export default function NotificationsSettingsScreen() {
         disabled={saveMutation.isPending}
         accessibilityRole="button"
       >
-        <Text style={styles.saveButtonText}>{saveMutation.isPending ? "Saving..." : "Save"}</Text>
+        <Text style={styles.saveButtonText}>
+          {saveMutation.isPending ? t("common.saving") : t("common.save")}
+        </Text>
       </Pressable>
-      {saveMutation.isSuccess && <Text style={styles.saved}>Saved.</Text>}
+      {saveMutation.isSuccess && <Text style={styles.saved}>{t("common.saved")}</Text>}
     </View>
   );
 }

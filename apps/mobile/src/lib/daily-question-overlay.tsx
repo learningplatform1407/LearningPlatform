@@ -1,5 +1,12 @@
 import type { DailyQuestion, DailyQuestionDay } from "@lp/api-client";
-import { WEEKDAY_LABELS, buildMonthGrid, formatCalendarDate, monthOf, shiftMonth } from "@lp/ui";
+import {
+  buildMonthGrid,
+  formatCalendarDate,
+  monthOf,
+  shiftMonth,
+  weekdayLabels,
+  type Translator,
+} from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -11,6 +18,7 @@ import { readDismissedDate, writeDismissedDate } from "@/lib/qotd-dismissal";
 import { OUTCOME_MARKS } from "@/lib/question-reveal";
 import { fontSizes, fontWeights, radii, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 
 /** Today's question, plus which day the sheet is showing.
  *
@@ -88,13 +96,17 @@ export function useDailyQuestion() {
 }
 
 function dayAccessibilityLabel(
+  { t, language }: Translator,
   date: string,
   row: DailyQuestionDay | undefined,
   isToday: boolean,
 ): string {
-  const when = isToday ? `Today, ${formatCalendarDate(date)}` : formatCalendarDate(date);
-  if (row?.answered && row.outcome) return `${when}: ${OUTCOME_MARKS[row.outcome].label}`;
-  return `${when}: not answered`;
+  const formatted = formatCalendarDate(date, language);
+  const when = isToday ? t("daily.todayWithDate", { date: formatted }) : formatted;
+  if (row?.answered && row.outcome) {
+    return t("daily.dayOutcome", { when, outcome: t(`questions.answered.${row.outcome}`) });
+  }
+  return t("daily.dayNotAnswered", { when });
 }
 
 /** A month of days, each openable if it has a question.
@@ -113,6 +125,8 @@ function MonthCalendar({
   onSelectDay: (forDate: string) => void;
 }) {
   const styles = useStyles();
+  const i18n = useI18n();
+  const { t } = i18n;
   const colors = useThemeColors();
   const currentMonth = monthOf(serverToday);
   const [month, setMonth] = useState(currentMonth);
@@ -124,7 +138,7 @@ function MonthCalendar({
   // matching no row -- inert and unmarked even for a day you answered. The
   // server clamps `end` to its own today, so a range running into next month
   // is safe.
-  const grid = buildMonthGrid(month, { today: serverToday });
+  const grid = buildMonthGrid(month, { today: serverToday, language: i18n.language });
 
   const calendar = useQuery({
     queryKey: ["daily-question", "calendar", month],
@@ -138,7 +152,7 @@ function MonthCalendar({
         <Pressable
           onPress={() => setMonth(shiftMonth(month, -1))}
           accessibilityRole="button"
-          accessibilityLabel="Previous month"
+          accessibilityLabel={t("daily.previousMonth")}
           style={styles.monthButton}
         >
           <Text style={styles.monthButtonText}>«</Text>
@@ -150,7 +164,7 @@ function MonthCalendar({
           onPress={() => setMonth(shiftMonth(month, 1))}
           disabled={atCurrentMonth}
           accessibilityRole="button"
-          accessibilityLabel="Next month"
+          accessibilityLabel={t("daily.nextMonth")}
           accessibilityState={{ disabled: atCurrentMonth }}
           style={[styles.monthButton, atCurrentMonth && styles.monthButtonDisabled]}
         >
@@ -159,7 +173,7 @@ function MonthCalendar({
       </View>
 
       <View style={styles.weekRow}>
-        {WEEKDAY_LABELS.map((label) => (
+        {weekdayLabels(i18n.language).map((label) => (
           <Text key={label} style={styles.weekdayLabel}>
             {label.slice(0, 1)}
           </Text>
@@ -197,7 +211,7 @@ function MonthCalendar({
               key={cell.date}
               onPress={() => onSelectDay(cell.date)}
               accessibilityRole="button"
-              accessibilityLabel={dayAccessibilityLabel(cell.date, row, cell.isToday)}
+              accessibilityLabel={dayAccessibilityLabel(i18n, cell.date, row, cell.isToday)}
               accessibilityState={{ selected: cell.date === selected }}
               style={[
                 styles.dayCellPressable,
@@ -232,7 +246,7 @@ function MonthCalendar({
         })}
       </View>
 
-      {calendar.isError && <Text style={styles.error}>Failed to load the calendar.</Text>}
+      {calendar.isError && <Text style={styles.error}>{t("daily.calendarFailed")}</Text>}
     </View>
   );
 }
@@ -253,6 +267,7 @@ export function DailyQuestionOverlay({
   onClose: () => void;
 }) {
   const styles = useStyles();
+  const { t, language } = useI18n();
   const isToday = forDate === today.server_today;
 
   // Only past days need a fetch; today is already in hand, and is the one day
@@ -266,21 +281,23 @@ export function DailyQuestionOverlay({
   const day: DailyQuestion | undefined = isToday ? today : past.data;
 
   return (
-    <Overlay visible={forDate !== null} title="Question of the day" onClose={onClose}>
+    <Overlay visible={forDate !== null} title={t("daily.title")} onClose={onClose}>
       <MonthCalendar
         serverToday={today.server_today}
         selected={forDate}
         onSelectDay={onSelectDay}
       />
       {forDate !== null && (
-        <Text style={styles.dayHeading}>{isToday ? "Today" : formatCalendarDate(forDate)}</Text>
+        <Text style={styles.dayHeading}>
+          {isToday ? t("daily.today") : formatCalendarDate(forDate, language)}
+        </Text>
       )}
       {day ? (
         <DailyQuestionBody day={day} onAnswered={onAnswered} />
       ) : past.isError ? (
-        <Text style={styles.error}>Failed to load that day.</Text>
+        <Text style={styles.error}>{t("daily.dayFailed")}</Text>
       ) : (
-        <Text style={styles.hint}>Loading...</Text>
+        <Text style={styles.hint}>{t("common.loading")}</Text>
       )}
     </Overlay>
   );

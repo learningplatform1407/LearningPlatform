@@ -8,8 +8,10 @@ import { Button } from "@/components/button";
 import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
 export default function NotificationsSettingsPage() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
@@ -34,7 +36,7 @@ export default function NotificationsSettingsPage() {
   if (isPending) {
     return (
       <PageMain width="reading">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </PageMain>
     );
   }
@@ -43,7 +45,7 @@ export default function NotificationsSettingsPage() {
     return (
       <PageMain width="reading">
         <p role="alert" className="text-sm text-danger">
-          Failed to load settings: {(error as Error).message}
+          {t("common.failedToLoadSettings", { message: (error as Error).message })}
         </p>
       </PageMain>
     );
@@ -51,7 +53,7 @@ export default function NotificationsSettingsPage() {
 
   return (
     <PageMain width="reading">
-      <PageHeader kicker="Settings" title="Notifications" />
+      <PageHeader kicker={t("settings.title")} title={t("settings.sections.notifications")} />
 
       <form
         className="mt-lg flex max-w-[32rem] flex-col gap-md"
@@ -67,19 +69,21 @@ export default function NotificationsSettingsPage() {
             onChange={(event) => setNotificationsEnabled(event.target.checked)}
             className="h-4 w-4 rounded border-border"
           />
-          Enable notifications
+          {t("settings.notifications.enable")}
         </label>
 
         {saveMutation.isError && (
           <p role="alert" className="text-sm text-danger">
-            Failed to save: {(saveMutation.error as Error).message}
+            {t("common.failedToSave", { message: (saveMutation.error as Error).message })}
           </p>
         )}
         <div className="flex items-center gap-md">
           <Button type="submit" disabled={saveMutation.isPending}>
-            {saveMutation.isPending ? "Saving..." : "Save"}
+            {saveMutation.isPending ? t("common.saving") : t("common.save")}
           </Button>
-          {saveMutation.isSuccess && <span className="text-sm text-success">Saved.</span>}
+          {saveMutation.isSuccess && (
+            <span className="text-sm text-success">{t("common.saved")}</span>
+          )}
         </div>
       </form>
     </PageMain>

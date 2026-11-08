@@ -1,21 +1,20 @@
 import type { QuestionReveal } from "@lp/api-client";
 
+import { useI18n } from "@/lib/i18n";
+
 export const OUTCOME_MARKS = {
   correct: {
     icon: "✓",
-    label: "Answered correctly",
     className: "text-good",
     edge: "border-l-good",
   },
   partial: {
     icon: "◐",
-    label: "Answered partially correctly",
     className: "text-hard",
     edge: "border-l-hard",
   },
   incorrect: {
     icon: "✗",
-    label: "Answered incorrectly",
     className: "text-again",
     edge: "border-l-again",
   },
@@ -45,13 +44,18 @@ const OPTION_ROW = "flex w-full items-start gap-3 border-b border-border py-2.5 
  * type it renders.
  */
 export function QuestionRevealPanel({ reveal }: { reveal: QuestionReveal }) {
+  const { t } = useI18n();
   const mark = OUTCOME_MARKS[reveal.outcome];
   // A framed block with its own heading, so the answers read as a separate
   // part from the question above them and from the next question below.
   return (
     <div className={`mt-xs rounded-lg border-l-4 bg-muted px-md py-sm ${mark.edge}`}>
       <p className={`text-xs font-extrabold tracking-[0.12em] uppercase ${mark.className}`}>
-        Answers · {reveal.outcome} — {reveal.points_awarded}/{reveal.points_possible} points
+        {t("questions.answersHeading", {
+          outcome: t(`questions.outcome.${reveal.outcome}`),
+          awarded: reveal.points_awarded,
+          possible: reveal.points_possible,
+        })}
       </p>
       <ul>
         {reveal.options.map((option, index) => {
@@ -64,7 +68,9 @@ export function QuestionRevealPanel({ reveal }: { reveal: QuestionReveal }) {
             : option.selected
               ? "border-again bg-again text-white"
               : "";
-          const earned = option.classified_correctly ? "you got this right" : "you missed this";
+          const earned = option.classified_correctly
+            ? t("questions.gotRight")
+            : t("questions.missed");
           return (
             <li key={option.id} className={OPTION_ROW}>
               <span className={`${LETTER_CIRCLE} ${circle}`}>{optionLetter(index)}</span>
@@ -72,13 +78,13 @@ export function QuestionRevealPanel({ reveal }: { reveal: QuestionReveal }) {
                 <span className="text-foreground">
                   {option.text}
                   <span className="sr-only">
-                    {option.selected ? ", your choice" : ""}
-                    {option.in_key ? ", in the answer" : ""}, {earned}
+                    {option.selected ? t("questions.yourChoice") : ""}
+                    {option.in_key ? t("questions.inAnswer") : ""}, {earned}
                   </span>
                 </span>
                 <span className="mt-1 block text-toc text-muted-foreground">
                   <b className={option.in_key ? "text-good" : "text-again"}>
-                    {option.in_key ? "True." : "False."}
+                    {option.in_key ? t("questions.true") : t("questions.false")}
                   </b>
                   {option.rationale && <> {option.rationale}</>}
                 </span>

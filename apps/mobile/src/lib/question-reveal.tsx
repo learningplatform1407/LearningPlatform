@@ -3,13 +3,14 @@ import { Pressable, Text, View } from "react-native";
 
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 
 /** `tone` names a theme colour, read as `colors[mark.tone]` so the mark
  * follows the active theme. */
 export const OUTCOME_MARKS = {
-  correct: { icon: "✓", label: "Answered correctly", tone: "good" },
-  partial: { icon: "◐", label: "Answered partially correctly", tone: "hard" },
-  incorrect: { icon: "✗", label: "Answered incorrectly", tone: "again" },
+  correct: { icon: "✓", tone: "good" },
+  partial: { icon: "◐", tone: "hard" },
+  incorrect: { icon: "✗", tone: "again" },
 } as const;
 
 export type Outcome = keyof typeof OUTCOME_MARKS;
@@ -23,18 +24,19 @@ export function optionLetter(index: number): string {
  * isn't. Exported because the quiz results screen lists options without the
  * surrounding panel. */
 export function OptionResultRow({ option, index }: { option: QuizOptionResult; index: number }) {
+  const { t } = useI18n();
   const styles = useStyles();
   // Two independent axes: whether the option belongs in the answer (in_key)
   // and whether the student earned its point (classified_correctly). Avoiding
   // a wrong option scores, so collapsing these would call a wrong option
   // "right".
-  const earned = option.classified_correctly ? "you got this right" : "you missed this";
+  const earned = option.classified_correctly ? t("questions.gotRight") : t("questions.missed");
   return (
     <View
       style={styles.optionRow}
       accessible
-      accessibilityLabel={`${optionLetter(index)}. ${option.text}${option.selected ? ", your choice" : ""}${
-        option.in_key ? ", in the answer" : ""
+      accessibilityLabel={`${optionLetter(index)}. ${option.text}${option.selected ? t("questions.yourChoice") : ""}${
+        option.in_key ? t("questions.inAnswer") : ""
       }, ${earned}`}
     >
       <View
@@ -53,7 +55,7 @@ export function OptionResultRow({ option, index }: { option: QuizOptionResult; i
         <Text style={styles.optionText}>{option.text}</Text>
         <Text style={styles.rationale}>
           <Text style={option.in_key ? styles.verdictTrue : styles.verdictFalse}>
-            {option.in_key ? "True." : "False."}
+            {option.in_key ? t("questions.true") : t("questions.false")}
           </Text>
           {option.rationale ? ` ${option.rationale}` : ""}
         </Text>
@@ -108,6 +110,7 @@ export function OptionChoice({
  * type it renders.
  */
 export function QuestionRevealPanel({ reveal }: { reveal: QuestionReveal }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const tone = colors[OUTCOME_MARKS[reveal.outcome].tone];
@@ -116,7 +119,11 @@ export function QuestionRevealPanel({ reveal }: { reveal: QuestionReveal }) {
   return (
     <View style={[styles.reveal, { borderLeftColor: tone }]}>
       <Text style={[styles.revealTitle, { color: tone }]}>
-        Answers · {reveal.outcome} — {reveal.points_awarded}/{reveal.points_possible} points
+        {t("questions.answersHeading", {
+          outcome: t(`questions.outcome.${reveal.outcome}`),
+          awarded: reveal.points_awarded,
+          possible: reveal.points_possible,
+        })}
       </Text>
       <View>
         {reveal.options.map((option, index) => (

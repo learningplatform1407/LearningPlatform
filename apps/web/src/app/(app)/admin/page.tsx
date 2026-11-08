@@ -6,6 +6,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
 /**
  * A directory of every admin content tool, each one linked out to where it
@@ -25,39 +26,20 @@ import { getBrowserApiClient } from "@/lib/api-client.browser";
  * library screens still show admin forms inline.
  */
 const TOOLS = [
-  {
-    href: "/admin/library",
-    title: "Books, chapters and lectures",
-    description:
-      "Create books, chapters and sub-chapters, and upload lecture PDFs — browse the same tree learners see, with the admin forms included.",
-  },
-  {
-    href: "/question-bank/manage",
-    title: "Import questions",
-    description:
-      "Bulk JSON import with a dry-run preview. Idempotent on external_id, so re-importing updates rather than duplicating.",
-  },
-  {
-    href: "/learn/flashcards/manage",
-    title: "Import flashcards",
-    description:
-      "Bulk JSON import of official cards, bound to a lesson. Same dry-run-then-commit flow as questions.",
-  },
-  {
-    href: "/admin/question-of-the-day",
-    title: "Question of the day",
-    description:
-      "Plan which question each of the coming days gets, or redraw one. Days left alone draw at random when a learner first opens them.",
-  },
+  { href: "/admin/library", key: "library" },
+  { href: "/question-bank/manage", key: "questions" },
+  { href: "/learn/flashcards/manage", key: "flashcards" },
+  { href: "/admin/question-of-the-day", key: "daily" },
 ] as const;
 
 export default function AdminPage() {
+  const { t } = useI18n();
   const me = useQuery({ queryKey: ["me"], queryFn: () => getBrowserApiClient().getMe() });
 
   if (me.isPending) {
     return (
       <PageMain width="reading">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </PageMain>
     );
   }
@@ -65,18 +47,18 @@ export default function AdminPage() {
   if (me.data?.role !== "admin") {
     return (
       <PageMain width="reading">
-        <PageHeader kicker="Content tools" title="Admin" />
-        <p className="mt-md text-sm font-medium text-muted-foreground">Admin access required.</p>
+        <PageHeader kicker={t("admin.kicker")} title={t("admin.title")} />
+        <p className="mt-md text-sm font-medium text-muted-foreground">
+          {t("admin.accessRequired")}
+        </p>
       </PageMain>
     );
   }
 
   return (
     <PageMain width="reading">
-      <PageHeader kicker="Content tools" title="Admin" />
-      <p className="text-toc text-muted-foreground">
-        Content tools. Each one opens where that content actually lives.
-      </p>
+      <PageHeader kicker={t("admin.kicker")} title={t("admin.title")} />
+      <p className="text-toc text-muted-foreground">{t("admin.intro")}</p>
 
       <ul className="mt-lg border-t border-border">
         {TOOLS.map((tool) => (
@@ -86,13 +68,13 @@ export default function AdminPage() {
               className="group -mx-sm block rounded-sm px-sm py-md hover:bg-muted"
             >
               <p className="text-card leading-snug font-extrabold text-foreground">
-                {tool.title}{" "}
+                {t(`admin.tools.${tool.key}`)}{" "}
                 <span aria-hidden="true" className="text-muted-foreground">
                   →
                 </span>
               </p>
               <p className="mt-xs text-toc leading-snug text-muted-foreground">
-                {tool.description}
+                {t(`admin.tools.${tool.key}Description`)}
               </p>
             </Link>
           </li>

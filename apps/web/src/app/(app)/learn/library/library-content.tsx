@@ -10,6 +10,7 @@ import { Card } from "@/components/card";
 import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
 /** The book grid and (for admins, from `/admin/library`) the "New book" form.
  * Shared by the regular `/learn/library` route (`showAdminTools` always
@@ -25,6 +26,7 @@ export function LibraryPageContent({
   showAdminTools: boolean;
   basePath: string;
 }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const books = useQuery({
     queryKey: ["books"],
@@ -45,14 +47,14 @@ export function LibraryPageContent({
       queryClient.invalidateQueries({ queryKey: ["books"] });
     },
     onError: (err) => {
-      setCreateError(err instanceof Error ? err.message : "Failed to create book.");
+      setCreateError(err instanceof Error ? err.message : t("library.createFailed"));
     },
   });
 
   if (books.isPending || uncategorized.isPending) {
     return (
       <PageMain>
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </PageMain>
     );
   }
@@ -61,7 +63,7 @@ export function LibraryPageContent({
     return (
       <PageMain>
         <p role="alert" className="text-sm text-danger">
-          Failed to load the library: {(books.error as Error).message}
+          {t("library.loadFailed", { message: (books.error as Error).message })}
         </p>
       </PageMain>
     );
@@ -72,10 +74,10 @@ export function LibraryPageContent({
 
   return (
     <PageMain>
-      <PageHeader kicker="Learn" title="Library" />
+      <PageHeader kicker={t("nav.learn")} title={t("library.title")} />
 
       {books.data.length === 0 && !hasUncategorized ? (
-        <p className="mt-md text-sm text-muted-foreground">No books yet.</p>
+        <p className="mt-md text-sm text-muted-foreground">{t("library.empty")}</p>
       ) : (
         <ul className="mt-lg grid grid-cols-2 gap-md sm:grid-cols-3 md:grid-cols-4">
           {books.data.map((book) => {
@@ -98,7 +100,7 @@ export function LibraryPageContent({
                       style={{ backgroundColor: coverColor, filter: "brightness(0.65)" }}
                     />
                     <span className="relative self-start rounded-full bg-black/25 px-2.5 py-0.5 text-xs font-bold">
-                      {book.chapter_count} {book.chapter_count === 1 ? "chapter" : "chapters"}
+                      {t("library.chapters", { count: book.chapter_count })}
                     </span>
                     <p className="relative text-card leading-snug font-extrabold drop-shadow-sm">
                       {book.title}
@@ -119,11 +121,10 @@ export function LibraryPageContent({
                 <div className="relative flex aspect-[2/3] flex-col justify-between bg-muted p-md">
                   <div aria-hidden="true" className="absolute inset-y-0 left-0 w-2 bg-border" />
                   <span className="relative self-start rounded-full bg-background/70 px-2.5 py-0.5 text-xs font-bold text-muted-foreground">
-                    {uncategorizedLessons.length}{" "}
-                    {uncategorizedLessons.length === 1 ? "lesson" : "lessons"}
+                    {t("library.lessons", { count: uncategorizedLessons.length })}
                   </span>
                   <p className="relative text-card leading-snug font-extrabold text-muted-foreground">
-                    Uncategorized
+                    {t("library.uncategorized")}
                   </p>
                 </div>
               </Card>
@@ -141,9 +142,9 @@ export function LibraryPageContent({
             createBookMutation.mutate();
           }}
         >
-          <h2 className="label-caps">New book</h2>
+          <h2 className="label-caps">{t("library.newBook")}</h2>
           <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-            Title
+            {t("library.bookTitle")}
             <input
               type="text"
               value={title}
@@ -158,7 +159,7 @@ export function LibraryPageContent({
             </p>
           )}
           <Button type="submit" disabled={createBookMutation.isPending} className="self-start">
-            {createBookMutation.isPending ? "Creating..." : "Create book"}
+            {createBookMutation.isPending ? t("library.creating") : t("library.createBook")}
           </Button>
         </form>
       )}

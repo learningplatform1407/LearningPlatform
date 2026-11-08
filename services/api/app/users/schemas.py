@@ -1,7 +1,13 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
+
+# The interface languages both apps ship catalogues for (@lp/ui i18n).
+# Read back as a plain string: a row written before this existed may hold
+# anything, and the apps already fall back to English for an unknown code.
+InterfaceLanguage = Literal["en", "ro"]
 
 
 class AccountSettingsResponse(BaseModel):
@@ -32,7 +38,7 @@ class ProfileUpdateRequest(BaseModel):
     university: str | None = None
     theme: str | None = None
     notifications_enabled: bool | None = None
-    language: str | None = None
+    language: InterfaceLanguage | None = None
 
 
 class ProfileStatsResponse(BaseModel):

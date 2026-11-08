@@ -1,10 +1,10 @@
 import type { FeedCategory, FeedPost } from "@lp/contracts";
 import {
-  FEED_CATEGORY_LABELS,
   FEED_IMAGES_BUCKET,
   FEED_PAGE_SIZE,
   MAX_FEED_IMAGE_BYTES,
   formatPostDate,
+  type Translator,
   isAllowedFeedImageType,
   splitLinkifiedBody,
 } from "@lp/ui";
@@ -20,6 +20,7 @@ import { supabase } from "@/lib/supabase";
 import { fontSizes, fontWeights, lineHeight, radii, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
+import { useI18n } from "@/lib/i18n";
 
 function imageUrl(imagePath: string): string {
   // A synchronous string concat against a public bucket -- no network call
@@ -61,14 +62,17 @@ function LinkifiedBody({ body }: { body: string }) {
 
 /** Upload-on-submit, not upload-on-pick: abandoning the composer uploads
  * nothing, which removes the largest source of orphaned objects. */
-async function uploadImage(asset: ImagePicker.ImagePickerAsset): Promise<string> {
+async function uploadImage(
+  t: Translator["t"],
+  asset: ImagePicker.ImagePickerAsset,
+): Promise<string> {
   // Checked, not cast. iOS commonly hands back image/heic, and a cast would
   // hide that from the type checker only for FastAPI's Literal to reject it --
   // surfacing as "API request failed with status 422" after the user has
   // already waited on the fetch below. The bucket's allowed_mime_types would
   // refuse it too.
   if (!isAllowedFeedImageType(asset.mimeType)) {
-    throw new Error("Pick a JPEG, PNG or WebP image.");
+    throw new Error(t("feed.pickImageType"));
   }
   const mimeType = asset.mimeType;
 
@@ -82,7 +86,7 @@ async function uploadImage(asset: ImagePicker.ImagePickerAsset): Promise<string>
   // pick-time guard a no-op. Measuring the bytes we are about to send is what
   // makes this error match the bucket's hard file_size_limit.
   if (blob.size > MAX_FEED_IMAGE_BYTES) {
-    throw new Error("Image must be under 5MB.");
+    throw new Error(t("feed.imageTooLarge"));
   }
 
   const { storage_path, token } = await getApiClient().requestFeedImageUploadUrl({
@@ -97,6 +101,7 @@ async function uploadImage(asset: ImagePicker.ImagePickerAsset): Promise<string>
 }
 
 function Composer() {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const queryClient = useQueryClient();
@@ -115,7 +120,7 @@ function Composer() {
     mutationFn: async () => {
       let imagePath = uploadedPath;
       if (asset && imagePath === null) {
-        imagePath = await uploadImage(asset);
+        imagePath = await uploadImage(t, asset);
         setUploadedPath(imagePath);
       }
       return getApiClient().createFeedPost({
@@ -135,7 +140,7 @@ function Composer() {
       queryClient.invalidateQueries({ queryKey: ["feed"] });
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "Failed to post.");
+      setError(err instanceof Error ? err.message : t("feed.postFailed"));
     },
   });
 
@@ -145,7 +150,7 @@ function Composer() {
     // nothing on a device that has not been asked yet.
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (permission.status !== "granted") {
-      setError("Photo library permission is required to attach a picture.");
+      setError(t("feed.photoPermission"));
       return;
     }
 
@@ -162,11 +167,11 @@ function Composer() {
     // which is the number that actually matters -- this just saves the user a
     // round trip when the picker does tell us.
     if (picked.fileSize && picked.fileSize > MAX_FEED_IMAGE_BYTES) {
-      setError("Image must be under 5MB.");
+      setError(t("feed.imageTooLarge"));
       return;
     }
     if (!isAllowedFeedImageType(picked.mimeType)) {
-      setError("Pick a JPEG, PNG or WebP image.");
+      setError(t("feed.pickImageType"));
       return;
     }
     setAsset(picked);
@@ -178,32 +183,32 @@ function Composer() {
 
   return (
     <View style={styles.composer}>
-      <Text style={styles.composerTitle}>New announcement</Text>
+      <Text style={styles.composerTitle}>{t("feed.newAnnouncement")}</Text>
 
-      <Text style={styles.label}>Title</Text>
+      <Text style={styles.label}>{t("feed.postTitle")}</Text>
       <TextInput
         style={styles.input}
         value={title}
         onChangeText={setTitle}
         editable={!isPending}
-        placeholder="January timetable is up"
+        placeholder={t("feed.titlePlaceholder")}
         placeholderTextColor={colors.mutedForeground}
-        accessibilityLabel="Title"
+        accessibilityLabel={t("feed.postTitle")}
       />
 
-      <Text style={styles.label}>Body</Text>
+      <Text style={styles.label}>{t("feed.body")}</Text>
       <TextInput
         style={[styles.input, styles.bodyInput]}
         value={body}
         onChangeText={setBody}
         editable={!isPending}
         multiline
-        placeholder="Share an announcement… paste a link and it becomes tappable."
+        placeholder={t("feed.bodyPlaceholderMobile")}
         placeholderTextColor={colors.mutedForeground}
-        accessibilityLabel="Body"
+        accessibilityLabel={t("feed.body")}
       />
 
-      <Text style={styles.label}>Category</Text>
+      <Text style={styles.label}>{t("feed.category")}</Text>
       <View style={styles.segmented}>
         {(["news", "media"] as const).map((value) => {
           const selected = category === value;
@@ -217,7 +222,7 @@ function Composer() {
               style={[styles.segment, selected && styles.segmentSelected]}
             >
               <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>
-                {FEED_CATEGORY_LABELS[value]}
+                {t(`feed.categories.${value}`)}
               </Text>
             </Pressable>
           );
@@ -230,7 +235,9 @@ function Composer() {
         accessibilityRole="button"
         style={styles.secondaryButton}
       >
-        <Text style={styles.secondaryButtonText}>{asset ? "Change picture" : "Add a picture"}</Text>
+        <Text style={styles.secondaryButtonText}>
+          {asset ? t("feed.changePicture") : t("feed.addPicture")}
+        </Text>
       </Pressable>
 
       {asset ? (
@@ -245,7 +252,7 @@ function Composer() {
             accessibilityRole="button"
             style={styles.secondaryButton}
           >
-            <Text style={styles.secondaryButtonText}>Remove picture</Text>
+            <Text style={styles.secondaryButtonText}>{t("feed.removePicture")}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -265,7 +272,7 @@ function Composer() {
         {isPending ? (
           <ActivityIndicator color={colors.primaryForeground} />
         ) : (
-          <Text style={styles.primaryButtonText}>Post</Text>
+          <Text style={styles.primaryButtonText}>{t("feed.post")}</Text>
         )}
       </Pressable>
     </View>
@@ -273,6 +280,7 @@ function Composer() {
 }
 
 function PostCard({ post }: { post: FeedPost }) {
+  const { t, language } = useI18n();
   const styles = useStyles();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
@@ -310,7 +318,7 @@ function PostCard({ post }: { post: FeedPost }) {
       // present at all: a new pick uploads and sends its path, an explicit
       // removal sends null, and anything else omits the field.
       let imagePatch: { image_path?: string | null } = {};
-      if (replacement) imagePatch = { image_path: await uploadImage(replacement) };
+      if (replacement) imagePatch = { image_path: await uploadImage(t, replacement) };
       else if (removeImage) imagePatch = { image_path: null };
 
       return getApiClient().updateFeedPost(post.id, {
@@ -326,7 +334,7 @@ function PostCard({ post }: { post: FeedPost }) {
       queryClient.invalidateQueries({ queryKey: ["feed"] });
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "Failed to save.");
+      setError(err instanceof Error ? err.message : t("feed.saveFailed"));
     },
   });
 
@@ -334,7 +342,7 @@ function PostCard({ post }: { post: FeedPost }) {
     setError(null);
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (permission.status !== "granted") {
-      setError("Photo library permission is required to attach a picture.");
+      setError(t("feed.photoPermission"));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -345,7 +353,7 @@ function PostCard({ post }: { post: FeedPost }) {
     const picked = result.assets[0];
     if (!picked) return;
     if (!isAllowedFeedImageType(picked.mimeType)) {
-      setError("Pick a JPEG, PNG or WebP image.");
+      setError(t("feed.pickImageType"));
       return;
     }
     setReplacement(picked);
@@ -359,38 +367,38 @@ function PostCard({ post }: { post: FeedPost }) {
       queryClient.invalidateQueries({ queryKey: ["feed"] });
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "Failed to delete.");
+      setError(err instanceof Error ? err.message : t("feed.deleteFailed"));
     },
   });
 
   const isBusy = updateMutation.isPending || deleteMutation.isPending;
 
   function confirmDelete() {
-    Alert.alert("Delete this announcement?", "This cannot be undone.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate() },
+    Alert.alert(t("feed.confirmDeleteTitle"), t("feed.cannotBeUndone"), [
+      { text: t("common.cancel"), style: "cancel" },
+      { text: t("common.delete"), style: "destructive", onPress: () => deleteMutation.mutate() },
     ]);
   }
 
   if (isEditing) {
     return (
       <View style={styles.card}>
-        <Text style={styles.label}>Title</Text>
+        <Text style={styles.label}>{t("feed.postTitle")}</Text>
         <TextInput
           style={styles.input}
           value={title}
           onChangeText={setTitle}
           editable={!isBusy}
-          accessibilityLabel="Edit title"
+          accessibilityLabel={t("feed.editTitle")}
         />
-        <Text style={styles.label}>Body</Text>
+        <Text style={styles.label}>{t("feed.body")}</Text>
         <TextInput
           style={[styles.input, styles.bodyInput]}
           value={body}
           onChangeText={setBody}
           editable={!isBusy}
           multiline
-          accessibilityLabel="Edit body"
+          accessibilityLabel={t("feed.editBody")}
         />
 
         {replacement ? (
@@ -402,19 +410,19 @@ function PostCard({ post }: { post: FeedPost }) {
               accessibilityRole="button"
               style={styles.secondaryButton}
             >
-              <Text style={styles.secondaryButtonText}>Undo</Text>
+              <Text style={styles.secondaryButtonText}>{t("feed.undo")}</Text>
             </Pressable>
           </View>
         ) : removeImage ? (
           <View style={styles.previewRow}>
-            <Text style={styles.bylineMeta}>The picture will be removed when you save.</Text>
+            <Text style={styles.bylineMeta}>{t("feed.pictureWillBeRemoved")}</Text>
             <Pressable
               onPress={resetImageEdits}
               disabled={isBusy}
               accessibilityRole="button"
               style={styles.secondaryButton}
             >
-              <Text style={styles.secondaryButtonText}>Keep it</Text>
+              <Text style={styles.secondaryButtonText}>{t("feed.keepIt")}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -427,7 +435,7 @@ function PostCard({ post }: { post: FeedPost }) {
             style={styles.secondaryButton}
           >
             <Text style={styles.secondaryButtonText}>
-              {post.image_path ? "Replace picture" : "Add a picture"}
+              {post.image_path ? t("feed.replacePictureShort") : t("feed.addPicture")}
             </Text>
           </Pressable>
           {post.image_path && !removeImage && !replacement ? (
@@ -437,7 +445,7 @@ function PostCard({ post }: { post: FeedPost }) {
               accessibilityRole="button"
               style={styles.secondaryButton}
             >
-              <Text style={styles.dangerButtonText}>Remove picture</Text>
+              <Text style={styles.dangerButtonText}>{t("feed.removePicture")}</Text>
             </Pressable>
           ) : null}
         </View>
@@ -455,7 +463,7 @@ function PostCard({ post }: { post: FeedPost }) {
             style={styles.primaryButton}
           >
             <Text style={styles.primaryButtonText}>
-              {updateMutation.isPending ? "Saving…" : "Save"}
+              {updateMutation.isPending ? t("feed.saving") : t("common.save")}
             </Text>
           </Pressable>
           <Pressable
@@ -470,7 +478,7 @@ function PostCard({ post }: { post: FeedPost }) {
             accessibilityRole="button"
             style={styles.secondaryButton}
           >
-            <Text style={styles.secondaryButtonText}>Cancel</Text>
+            <Text style={styles.secondaryButtonText}>{t("common.cancel")}</Text>
           </Pressable>
         </View>
       </View>
@@ -492,13 +500,13 @@ function PostCard({ post }: { post: FeedPost }) {
         {/* `author` is null once the authoring admin's profile is deleted --
             the announcement outlives them by design, so this falls back
             rather than hiding the post. */}
-        <Text style={styles.authorName}>{post.author?.display_name ?? "Staff"}</Text>
-        <Text style={styles.bylineMeta}>· {formatPostDate(post.published_at)}</Text>
+        <Text style={styles.authorName}>{post.author?.display_name ?? t("feed.staff")}</Text>
+        <Text style={styles.bylineMeta}>· {formatPostDate(post.published_at, language)}</Text>
         {post.updated_at !== post.created_at ? (
-          <Text style={styles.bylineMeta}>· edited</Text>
+          <Text style={styles.bylineMeta}>· {t("feed.edited")}</Text>
         ) : null}
         <View style={styles.chip}>
-          <Text style={styles.chipText}>{FEED_CATEGORY_LABELS[post.category]}</Text>
+          <Text style={styles.chipText}>{t(`feed.categories.${post.category}`)}</Text>
         </View>
       </View>
 
@@ -535,7 +543,7 @@ function PostCard({ post }: { post: FeedPost }) {
               accessibilityRole="button"
               style={styles.secondaryButton}
             >
-              <Text style={styles.secondaryButtonText}>Edit</Text>
+              <Text style={styles.secondaryButtonText}>{t("feed.edit")}</Text>
             </Pressable>
           ) : null}
           {post.can_delete ? (
@@ -546,7 +554,7 @@ function PostCard({ post }: { post: FeedPost }) {
               style={styles.secondaryButton}
             >
               <Text style={styles.dangerButtonText}>
-                {deleteMutation.isPending ? "Deleting…" : "Delete"}
+                {deleteMutation.isPending ? t("feed.deleting") : t("common.delete")}
               </Text>
             </Pressable>
           ) : null}
@@ -557,6 +565,7 @@ function PostCard({ post }: { post: FeedPost }) {
 }
 
 export default function FeedScreen() {
+  const { t } = useI18n();
   const styles = useStyles();
   const me = useQuery({ queryKey: ["me"], queryFn: () => getApiClient().getMe() });
   const feed = useQuery({
@@ -567,7 +576,7 @@ export default function FeedScreen() {
   if (me.isPending || feed.isPending) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.loading}>Loading...</Text>
+        <Text style={styles.loading}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -576,7 +585,7 @@ export default function FeedScreen() {
     return (
       <View style={styles.centered}>
         <Text accessibilityRole="alert" style={styles.error}>
-          Failed to load the feed: {(feed.error as Error).message}
+          {t("feed.loadFailed", { message: (feed.error as Error).message })}
         </Text>
       </View>
     );
@@ -589,7 +598,7 @@ export default function FeedScreen() {
     return (
       <View style={styles.centered}>
         <Text accessibilityRole="alert" style={styles.error}>
-          Failed to load your profile: {(me.error as Error).message}
+          {t("feed.profileFailed", { message: (me.error as Error).message })}
         </Text>
       </View>
     );
@@ -613,17 +622,17 @@ export default function FeedScreen() {
       keyExtractor={(post) => post.id}
       ListHeaderComponent={
         <View>
-          <ScreenHeader kicker="Announcements" title="Feed" />
+          <ScreenHeader kicker={t("feed.kicker")} title={t("feed.title")} />
           {isAdmin ? <Composer /> : null}
         </View>
       }
-      ListEmptyComponent={<Text style={styles.empty}>No announcements yet.</Text>}
+      ListEmptyComponent={<Text style={styles.empty}>{t("feed.empty")}</Text>}
       // No "Load more" yet (FEED-9), so a full page means older announcements
       // exist that this screen cannot reach. Saying so beats a list that just
       // ends and reads as the whole history.
       ListFooterComponent={
         (feed.data ?? []).length >= FEED_PAGE_SIZE ? (
-          <Text style={styles.empty}>Showing the {FEED_PAGE_SIZE} most recent announcements.</Text>
+          <Text style={styles.empty}>{t("feed.showingRecent", { count: FEED_PAGE_SIZE })}</Text>
         ) : undefined
       }
       renderItem={({ item }) => <PostCard post={item} />}

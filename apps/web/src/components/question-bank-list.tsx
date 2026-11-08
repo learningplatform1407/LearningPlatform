@@ -8,6 +8,7 @@ import { Button } from "@/components/button";
 import { Tag } from "@/components/chip";
 import { OptionChoice, OUTCOME_MARKS, QuestionRevealPanel } from "@/components/question-reveal";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
 /**
  * Marks a question the reader has attempted before. Outcome-coloured rather
@@ -25,19 +26,29 @@ function ProgressMark({
   pointsPossible: number;
   attemptCount?: number;
 }) {
+  const { t } = useI18n();
   const mark = OUTCOME_MARKS[outcome];
-  const tries = attemptCount !== undefined && attemptCount > 1 ? `, ${attemptCount} attempts` : "";
+  const tries =
+    attemptCount !== undefined && attemptCount > 1
+      ? t("questions.attempts", { count: attemptCount })
+      : "";
   return (
     <span
       className={`flex shrink-0 items-center gap-xs text-xs font-bold ${mark.className}`}
-      aria-label={`${mark.label}, ${pointsAwarded} of ${pointsPossible} points${tries}`}
+      aria-label={`${t("questions.scoreLabel", {
+        outcome: t(`questions.answered.${outcome}`),
+        awarded: pointsAwarded,
+        possible: pointsPossible,
+      })}${tries}`}
     >
       <span aria-hidden="true">{mark.icon}</span>
       <span>
         {pointsAwarded}/{pointsPossible}
       </span>
       {attemptCount !== undefined && attemptCount > 1 && (
-        <span className="text-muted-foreground">· {attemptCount} tries</span>
+        <span className="text-muted-foreground">
+          {t("questions.tries", { count: attemptCount })}
+        </span>
       )}
     </span>
   );
@@ -52,6 +63,7 @@ function QuestionCard({
   onAnswered: () => void;
   onSeeInLesson?: SeeInLesson;
 }) {
+  const { t } = useI18n();
   const [selected, setSelected] = useState<string[]>([]);
   const [reveal, setReveal] = useState<QuestionReveal | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +78,7 @@ function QuestionCard({
         : getBrowserApiClient().unfavouriteQuestion(question.id),
     onError: (_error, on) => {
       setFavourite(!on);
-      setError("Could not save that favourite.");
+      setError(t("questions.favouriteFailed"));
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["question-bank"] }),
   });
@@ -77,7 +89,7 @@ function QuestionCard({
       setReveal(result);
       onAnswered();
     },
-    onError: () => setError("Could not save that answer."),
+    onError: () => setError(t("questions.answerFailed")),
   });
 
   function toggle(optionId: string) {
@@ -116,9 +128,9 @@ function QuestionCard({
           )}
           <button
             type="button"
-            aria-label="Favourite"
+            aria-label={t("questions.favourite")}
             aria-pressed={favourite}
-            title={favourite ? "Remove from favourites" : "Add to favourites"}
+            title={favourite ? t("questions.removeFavourite") : t("questions.addFavourite")}
             onClick={() => {
               setError(null);
               setFavourite(!favourite);
@@ -166,7 +178,7 @@ function QuestionCard({
               setSelected([]);
             }}
           >
-            Try again
+            {t("questions.tryAgain")}
           </Button>
         ) : (
           <Button
@@ -174,7 +186,7 @@ function QuestionCard({
             disabled={selected.length === 0 || answer.isPending}
             onClick={() => answer.mutate()}
           >
-            {answer.isPending ? "Checking..." : "Check answer"}
+            {answer.isPending ? t("questions.checking") : t("questions.check")}
           </Button>
         )}
         {/* Shown once checked, like the design: before that the passage
@@ -185,12 +197,13 @@ function QuestionCard({
             onClick={() => onSeeInLesson(question.id, reveal.source_quotes!)}
             className="text-toc font-bold text-accent hover:underline"
           >
-            ↗ See in lesson
+            {t("questions.seeInLesson")}
           </button>
         )}
         <span className="ml-auto flex flex-wrap items-center justify-end gap-1.5 text-caption font-bold text-muted-foreground">
-          {question.kind === "single" ? "Single answer" : "Multiple answers"} ·{" "}
-          {question.points_possible} points · {question.difficulty}
+          {question.kind === "single" ? t("questions.single") : t("questions.multiple")} ·{" "}
+          {t("questions.points", { count: question.points_possible })} ·{" "}
+          {t(`questions.difficulty.${question.difficulty}`)}
           {question.tags.map((tag) => (
             <Tag key={tag.id}>{tag.label}</Tag>
           ))}
@@ -216,7 +229,7 @@ export function questionElementId(questionId: string): string {
 export function QuestionBankList({
   filter,
   unassigned,
-  emptyMessage = "No questions here yet.",
+  emptyMessage,
   onSeeInLesson,
   favourites,
 }: {
@@ -228,6 +241,7 @@ export function QuestionBankList({
   /** Offered inside a lesson only, where there is a lesson to show. */
   onSeeInLesson?: SeeInLesson;
 }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const questions = useQuery({
     queryKey: ["question-bank", filter ?? null, unassigned ?? false, favourites ?? false],
@@ -242,17 +256,17 @@ export function QuestionBankList({
   });
 
   if (questions.isPending) {
-    return <p className="text-sm text-muted-foreground">Loading questions...</p>;
+    return <p className="text-sm text-muted-foreground">{t("questions.loading")}</p>;
   }
   if (questions.isError) {
     return (
       <p role="alert" className="text-sm text-danger">
-        Failed to load questions.
+        {t("questions.loadFailed")}
       </p>
     );
   }
   if (questions.data.length === 0) {
-    return <p className="text-sm text-muted-foreground">{emptyMessage}</p>;
+    return <p className="text-sm text-muted-foreground">{emptyMessage ?? t("questions.empty")}</p>;
   }
 
   const shown = questions.data.length;
@@ -262,8 +276,8 @@ export function QuestionBankList({
     <>
       <p className="text-sm font-semibold text-muted-foreground">
         {totalCount !== undefined && totalCount > shown
-          ? `Showing ${shown} of ${totalCount} questions`
-          : `${shown} question${shown === 1 ? "" : "s"}`}
+          ? t("questions.showing", { shown, total: totalCount })
+          : t("questions.count", { count: shown })}
       </p>
       <ul className="mt-sm border-b border-border">
         {questions.data.map((question) => (

@@ -1,7 +1,7 @@
 "use client";
 
 import type { DailyQuestion } from "@lp/api-client";
-import { formatCalendarDate } from "@lp/ui";
+import { formatCalendarDate, type Translator } from "@lp/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useState, useSyncExternalStore } from "react";
 
@@ -9,6 +9,7 @@ import { DailyQuestionBody } from "@/components/daily-question-body";
 import { Modal } from "@/components/modal";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { readDismissedDate, subscribeDismissal, writeDismissedDate } from "@/lib/qotd-dismissal";
+import { useI18n } from "@/lib/i18n";
 
 /** Today's question, plus which day the overlay is showing.
  *
@@ -79,8 +80,12 @@ export function useDailyQuestion() {
 }
 
 /** "Question of the day" for today, the date itself for any other day. */
-export function dayTitle(forDate: string, serverToday: string): string {
-  return forDate === serverToday ? "Question of the day" : formatCalendarDate(forDate);
+export function dayTitle(
+  { t, language }: Translator,
+  forDate: string,
+  serverToday: string,
+): string {
+  return forDate === serverToday ? t("daily.title") : formatCalendarDate(forDate, language);
 }
 
 export function DailyQuestionOverlay({
@@ -97,6 +102,8 @@ export function DailyQuestionOverlay({
   onAnswered: () => void;
   onClose: () => void;
 }) {
+  const i18n = useI18n();
+  const { t } = i18n;
   const isToday = forDate === today.server_today;
 
   // Only past days need a fetch; today is already in hand, and is the one day
@@ -112,17 +119,17 @@ export function DailyQuestionOverlay({
   return (
     <Modal
       open={forDate !== null}
-      title={forDate === null ? "" : dayTitle(forDate, today.server_today)}
+      title={forDate === null ? "" : dayTitle(i18n, forDate, today.server_today)}
       onClose={onClose}
     >
       {day ? (
         <DailyQuestionBody day={day} onAnswered={onAnswered} />
       ) : past.isError ? (
         <p role="alert" className="text-sm text-danger">
-          Failed to load that day.
+          {t("daily.dayFailed")}
         </p>
       ) : (
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       )}
     </Modal>
   );

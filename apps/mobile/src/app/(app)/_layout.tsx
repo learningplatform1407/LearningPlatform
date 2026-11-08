@@ -2,6 +2,7 @@ import { Drawer, DrawerContentScrollView, DrawerItem } from "expo-router/drawer"
 import { Tabs } from "expo-router/tabs";
 import { useWindowDimensions, View } from "react-native";
 
+import { useI18n } from "@/lib/i18n";
 import { fontWeights, spacing } from "@/lib/theme";
 
 import type { DrawerContentComponentProps } from "expo-router/drawer";
@@ -78,6 +79,7 @@ const useStyles = makeStyles((colors) => ({
 }));
 
 export default function AppLayout() {
+  const { t } = useI18n();
   const colors = useThemeColors();
   const { width } = useWindowDimensions();
   const isTablet = width >= TABLET_BREAKPOINT;
@@ -100,12 +102,12 @@ export default function AppLayout() {
         {/* Answers `/` and redirects to Learn; AppDrawerContent filters it
             out of the visible items. */}
         <Drawer.Screen name="index" />
-        <Drawer.Screen name="learn" options={{ drawerLabel: "Learn" }} />
-        <Drawer.Screen name="exams" options={{ drawerLabel: "Exam Hub" }} />
-        <Drawer.Screen name="assistant" options={{ drawerLabel: "AI Assistant" }} />
-        <Drawer.Screen name="roadmap" options={{ drawerLabel: "Roadmap" }} />
-        <Drawer.Screen name="feed" options={{ drawerLabel: "Feed" }} />
-        <Drawer.Screen name="profile" options={{ drawerLabel: "Profile" }} />
+        <Drawer.Screen name="learn" options={{ drawerLabel: t("nav.learn") }} />
+        <Drawer.Screen name="exams" options={{ drawerLabel: t("nav.exams") }} />
+        <Drawer.Screen name="assistant" options={{ drawerLabel: t("nav.assistant") }} />
+        <Drawer.Screen name="roadmap" options={{ drawerLabel: t("nav.roadmap") }} />
+        <Drawer.Screen name="feed" options={{ drawerLabel: t("nav.feed") }} />
+        <Drawer.Screen name="profile" options={{ drawerLabel: t("nav.profile") }} />
         {/* No `href: null` here — Drawer's options type doesn't support it, and
             AppDrawerContent above already filters "settings" and
             "question-bank" out by name. */}
@@ -125,19 +127,19 @@ export default function AppLayout() {
     >
       {/* Answers `/` and redirects to Learn — not a tab of its own. */}
       <Tabs.Screen name="index" options={{ href: null }} />
-      <Tabs.Screen name="learn" options={{ title: "Learn" }} />
-      <Tabs.Screen name="exams" options={{ title: "Exam Hub" }} />
-      <Tabs.Screen name="assistant" options={{ title: "AI Assistant" }} />
-      <Tabs.Screen name="roadmap" options={{ title: "Roadmap" }} />
-      <Tabs.Screen name="feed" options={{ title: "Feed" }} />
-      <Tabs.Screen name="profile" options={{ title: "Profile" }} />
+      <Tabs.Screen name="learn" options={{ title: t("nav.learn") }} />
+      <Tabs.Screen name="exams" options={{ title: t("nav.exams") }} />
+      <Tabs.Screen name="assistant" options={{ title: t("nav.assistant") }} />
+      <Tabs.Screen name="roadmap" options={{ title: t("nav.roadmap") }} />
+      <Tabs.Screen name="feed" options={{ title: t("nav.feed") }} />
+      <Tabs.Screen name="profile" options={{ title: t("nav.profile") }} />
       {/* Settings (from Profile) and the Question Bank (from Learn) are real
           tabs without a button: NotchTabBar leaves them out by name. Not
           `href: null` -- since Expo Router 58 that hides the route itself,
           and navigating to a hidden tab redirects to the first one, so both
           screens were unreachable on a phone. */}
-      <Tabs.Screen name="settings" options={{ title: "Settings" }} />
-      <Tabs.Screen name="question-bank" options={{ title: "Question Bank" }} />
+      <Tabs.Screen name="settings" options={{ title: t("nav.settings") }} />
+      <Tabs.Screen name="question-bank" options={{ title: t("nav.questionBank") }} />
     </Tabs>
   );
 }

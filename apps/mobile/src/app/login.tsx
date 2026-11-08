@@ -1,13 +1,17 @@
 import { Link } from "expo-router";
+import { authErrorMessage } from "@lp/ui";
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
+import { useI18n } from "@/lib/i18n";
 import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
 import { supabase } from "@/lib/supabase";
 import { makeStyles } from "@/lib/theme-context";
 
 export default function LoginScreen() {
   const styles = useStyles();
+  const translator = useI18n();
+  const { t } = translator;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +23,7 @@ export default function LoginScreen() {
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     setPending(false);
     if (signInError) {
-      setError(signInError.message);
+      setError(authErrorMessage(translator, signInError));
     }
     // On success, onAuthStateChange updates the session and Stack.Protected
     // reactively swaps to the protected stack — no manual navigation needed.
@@ -27,10 +31,10 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Log in</Text>
+      <Text style={styles.title}>{t("auth.logIn")}</Text>
       <TextInput
         style={styles.input}
-        placeholder="Email"
+        placeholder={t("auth.email")}
         autoCapitalize="none"
         keyboardType="email-address"
         autoComplete="email"
@@ -39,7 +43,7 @@ export default function LoginScreen() {
       />
       <TextInput
         style={styles.input}
-        placeholder="Password"
+        placeholder={t("auth.password")}
         secureTextEntry
         // Without this, Android's soft keyboard reports CapSentences for the
         // field and capitalises the first character, so a password starting
@@ -57,11 +61,11 @@ export default function LoginScreen() {
         disabled={pending}
         accessibilityRole="button"
       >
-        <Text style={styles.buttonText}>{pending ? "Logging in..." : "Log in"}</Text>
+        <Text style={styles.buttonText}>{pending ? t("auth.loggingIn") : t("auth.logIn")}</Text>
       </Pressable>
       <Link href="/signup">
         <Text style={styles.footer}>
-          Don&apos;t have an account? <Text style={styles.footerLink}>Sign up</Text>
+          {t("auth.noAccount")} <Text style={styles.footerLink}>{t("auth.signUp")}</Text>
         </Text>
       </Link>
     </View>

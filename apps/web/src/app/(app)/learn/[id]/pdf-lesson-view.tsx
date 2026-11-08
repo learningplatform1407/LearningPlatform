@@ -22,6 +22,7 @@ import { useToast } from "@/components/toast";
 import { scrollBehavior } from "@/lib/use-media-query";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { createClient } from "@/lib/supabase/client";
+import { useI18n } from "@/lib/i18n";
 
 import { colorName, type LessonTool } from "./lesson-tools";
 import {
@@ -117,6 +118,7 @@ export function PdfLessonView({
   onSourcesShown,
   ref,
 }: PdfLessonViewProps) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const toast = useToast();
   const columnRef = useRef<HTMLDivElement>(null);
@@ -225,11 +227,11 @@ export function PdfLessonView({
         const saved = await getBrowserApiClient().updatePageInk(documentId, page, ink);
         queryClient.setQueryData(key, saved);
       } catch {
-        toast("That change couldn't be saved.");
+        toast(t("lesson.saveFailed"));
         void queryClient.invalidateQueries({ queryKey: key });
       }
     },
-    [documentId, queryClient, toast],
+    [documentId, queryClient, toast, t],
   );
 
   const edit = useCallback(
@@ -302,13 +304,13 @@ export function PdfLessonView({
   if (urlError || loadFailed) {
     return (
       <p role="alert" className="text-sm text-danger">
-        Failed to load the lecture PDF.
+        {t("lesson.pdfView.loadFailed")}
       </p>
     );
   }
 
   if (urlPending || !pdfDoc) {
-    return <p className="text-sm text-muted-foreground">Loading PDF...</p>;
+    return <p className="text-sm text-muted-foreground">{t("lesson.pdfView.loading")}</p>;
   }
 
   // The lower of what pdf.js parsed and what the server counted. The ink
@@ -482,6 +484,7 @@ function PdfPage({
   onEdit: (page: number, before: PageInk, after: PageInk) => void;
   onUndo: () => boolean;
 }) {
+  const { t } = useI18n();
   const toast = useToast();
   const sheetRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -653,7 +656,7 @@ function PdfPage({
     }
 
     if (!words || words.length === 0) {
-      toast(words ? "There's no text on this page to highlight." : "Still reading this page...");
+      toast(words ? t("lesson.pdfView.noText") : t("lesson.pdfView.stillReading"));
       return;
     }
     const word = wordAt(words, point.x, point.y);
@@ -718,7 +721,7 @@ function PdfPage({
       if (tap && touches.current.size === 0) {
         twoFinger.current = null;
         if (!tap.moved && Date.now() - tap.at < TWO_FINGER_TAP_MS && !onUndo()) {
-          toast("Nothing to undo.");
+          toast(t("lesson.nothingToUndo"));
         }
         return;
       }
@@ -770,7 +773,7 @@ function PdfPage({
       id={pageElementId(pageNumber)}
       ref={sheetRef}
       role="img"
-      aria-label={`Page ${pageNumber}`}
+      aria-label={t("lesson.pdfView.page", { number: pageNumber })}
       style={{ width, height }}
       className="book-page relative mx-auto mb-md bg-white shadow-page select-none [-webkit-touch-callout:none]"
     >

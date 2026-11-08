@@ -8,15 +8,17 @@ import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 
 import { DrawingCanvas, DrawingThumbnail } from "./notebook-drawing-canvas";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 
 // Shared between the Notebook list screen and the lesson reader's Notes
 // modal — notes live in one common pool (`notebook_entries`), not linked to
 // any lesson, so both surfaces browse/edit the exact same data with the
 // exact same components.
 
+/** A text note's first non-blank line, or "" when it has none. */
 export function firstLine(content: string): string {
   const line = content.split("\n").find((l) => l.trim().length > 0);
-  return line?.trim() || "Untitled note";
+  return line?.trim() ?? "";
 }
 
 export function NotebookEntryList({
@@ -28,10 +30,11 @@ export function NotebookEntryList({
   selectedEntryId?: string;
   onSelect: (entryId: string) => void;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   return (
     <View style={styles.list}>
-      {entries.length === 0 && <Text style={styles.hint}>No notes yet.</Text>}
+      {entries.length === 0 && <Text style={styles.hint}>{t("notebook.empty")}</Text>}
       {entries.map((entry) => {
         const active = selectedEntryId === entry.id;
         return (
@@ -44,11 +47,13 @@ export function NotebookEntryList({
           >
             {entry.type === "text" ? (
               <Text style={[styles.rowTitle, active && styles.rowTitleActive]} numberOfLines={1}>
-                {firstLine(entry.content ?? "")}
+                {firstLine(entry.content ?? "") || t("notebook.untitled")}
               </Text>
             ) : (
               <View style={styles.drawingRow}>
-                <Text style={[styles.rowTitle, active && styles.rowTitleActive]}>Drawing</Text>
+                <Text style={[styles.rowTitle, active && styles.rowTitleActive]}>
+                  {t("notebook.drawing")}
+                </Text>
                 <DrawingThumbnail strokes={entry.strokes ?? []} />
               </View>
             )}
@@ -66,14 +71,15 @@ export function NewEntryButtons({
   onNewText: () => void;
   onNewDrawing: () => void;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   return (
     <View style={styles.newRow}>
       <Pressable style={styles.newButton} onPress={onNewText} accessibilityRole="button">
-        <Text style={styles.newButtonText}>+ Text</Text>
+        <Text style={styles.newButtonText}>{t("notebook.newText")}</Text>
       </Pressable>
       <Pressable style={styles.newButton} onPress={onNewDrawing} accessibilityRole="button">
-        <Text style={styles.newButtonText}>+ Drawing</Text>
+        <Text style={styles.newButtonText}>{t("notebook.newDrawing")}</Text>
       </Pressable>
     </View>
   );
@@ -117,6 +123,7 @@ export function NotebookEntryEditor({
   onCreated?: (id: string) => void;
   onDeleted?: () => void;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const queryClient = useQueryClient();
@@ -194,11 +201,11 @@ export function NotebookEntryEditor({
       {resolvedType === "text" ? (
         <View style={styles.textBox}>
           <TextInput
-            accessibilityLabel="Title"
+            accessibilityLabel={t("notebook.noteTitle")}
             style={styles.titleInput}
             value={titleValue}
             onChangeText={setTitle}
-            placeholder="Title"
+            placeholder={t("notebook.noteTitle")}
             placeholderTextColor={colors.mutedForeground}
             returnKeyType="next"
             onSubmitEditing={() => bodyInputRef.current?.focus()}
@@ -207,11 +214,11 @@ export function NotebookEntryEditor({
           <LinedPaper>
             <TextInput
               ref={bodyInputRef}
-              accessibilityLabel="Note"
+              accessibilityLabel={t("notebook.noteBody")}
               style={styles.bodyInput}
               value={bodyValue}
               onChangeText={setBody}
-              placeholder="Write a new note..."
+              placeholder={t("notebook.placeholder")}
               placeholderTextColor={colors.mutedForeground}
               multiline
               scrollEnabled={false}
@@ -238,7 +245,7 @@ export function NotebookEntryEditor({
           {createMutation.isPending || updateMutation.isPending ? (
             <ActivityIndicator color={colors.primaryForeground} />
           ) : (
-            <Text style={styles.buttonPrimaryText}>Save</Text>
+            <Text style={styles.buttonPrimaryText}>{t("common.save")}</Text>
           )}
         </Pressable>
         {!isNew && (
@@ -248,10 +255,10 @@ export function NotebookEntryEditor({
             disabled={deleteMutation.isPending}
             accessibilityRole="button"
           >
-            <Text style={styles.buttonDangerText}>Delete</Text>
+            <Text style={styles.buttonDangerText}>{t("common.delete")}</Text>
           </Pressable>
         )}
-        {saved && <Text style={styles.hint}>Saved.</Text>}
+        {saved && <Text style={styles.hint}>{t("common.saved")}</Text>}
       </View>
     </View>
   );

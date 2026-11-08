@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { PageHeader } from "@/components/page-header";
+import { useI18n } from "@/lib/i18n";
 
 import {
   DrawingEntryEditor,
@@ -16,13 +17,14 @@ type Selection =
   { kind: "entry"; entryId: string } | { kind: "new-text" } | { kind: "new-drawing" };
 
 export default function NotebookPage() {
+  const { t } = useI18n();
   const [selection, setSelection] = useState<Selection | null>(null);
   const entries = useNotebookEntries();
 
   if (entries.isPending) {
     return (
       <main className="p-xl">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </main>
     );
   }
@@ -31,7 +33,7 @@ export default function NotebookPage() {
     return (
       <main className="p-xl">
         <p role="alert" className="text-sm text-danger">
-          Failed to load your notebook.
+          {t("notebook.loadFailed")}
         </p>
       </main>
     );
@@ -46,7 +48,7 @@ export default function NotebookPage() {
   return (
     <main className="flex w-full">
       <nav
-        aria-label="Notebook contents"
+        aria-label={t("notebook.contents")}
         className={`sticky top-0 h-screen w-full shrink-0 flex-col border-border md:flex md:w-64 md:border-r ${
           selection ? "hidden" : "flex"
         }`}
@@ -55,9 +57,9 @@ export default function NotebookPage() {
           {/* The title lives with the editor on wide screens; on a phone the
               list is the whole page, so it carries the title instead. */}
           <div className="-mt-[42px] px-1.5 md:hidden">
-            <PageHeader kicker="Learn" title="Notebook" />
+            <PageHeader kicker={t("nav.learn")} title={t("notebook.title")} />
           </div>
-          <h2 className="label-caps ml-1.5">Notes</h2>
+          <h2 className="label-caps ml-1.5">{t("notebook.notes")}</h2>
           <NotebookEntryList
             entries={notebookEntries}
             selectedEntryId={selection?.kind === "entry" ? selection.entryId : undefined}
@@ -83,16 +85,14 @@ export default function NotebookPage() {
             onClick={() => setSelection(null)}
             className="mt-md text-toc font-bold text-accent md:hidden"
           >
-            ‹ All notes
+            {t("notebook.allNotes")}
           </button>
-          <PageHeader kicker="Learn" title="Notebook" />
+          <PageHeader kicker={t("nav.learn")} title={t("notebook.title")} />
         </div>
 
         <div className="mt-lg flex min-h-0 flex-1 flex-col">
           {!selection && (
-            <p className="text-toc text-muted-foreground">
-              Select a note on the left, or create a new one.
-            </p>
+            <p className="text-toc text-muted-foreground">{t("notebook.selectPrompt")}</p>
           )}
           {selection?.kind === "new-text" && (
             <TextEntryEditor onCreated={(id) => setSelection({ kind: "entry", entryId: id })} />

@@ -2,11 +2,12 @@ import { Text, View } from "react-native";
 
 import { fontSizes, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 
 /**
  * A labeled multi-row percentage-bar comparison. Mirrors
  * apps/web/src/components/metric-bar-chart.tsx. A null percent renders an
- * empty track and "No data yet" instead of a number — same null-is-not-zero
+ * empty track and t("profile.noData") instead of a number — same null-is-not-zero
  * posture as ProgressBar.
  */
 export function MetricBarChart({
@@ -14,6 +15,7 @@ export function MetricBarChart({
 }: {
   metrics: { label: string; percent: number | null }[];
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   return (
     <View style={styles.container}>
@@ -31,7 +33,9 @@ export function MetricBarChart({
             >
               {rounded !== null && <View style={[styles.fill, { width: `${rounded}%` }]} />}
             </View>
-            <Text style={styles.value}>{rounded === null ? "No data yet" : `${rounded}%`}</Text>
+            <Text style={styles.value}>
+              {rounded === null ? t("profile.noData") : `${rounded}%`}
+            </Text>
           </View>
         );
       })}

@@ -1,20 +1,16 @@
 import type { DailyQuestion } from "@lp/api-client";
+import { lessonStatusLabel } from "@lp/ui";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n";
 import { DailyQuestionCard } from "@/lib/daily-question-card";
 import { DailyQuestionOverlay, useDailyQuestion } from "@/lib/daily-question-overlay";
 import { fontSizes, fontWeights, shadows, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
-
-const STATUS_LABEL: Record<string, string> = {
-  processing: "Processing...",
-  ready: "Ready",
-  failed: "Failed",
-};
 
 /** The hub's own content: recent lessons and the nav grid.
  *
@@ -31,6 +27,7 @@ function LearnContent({
   onOpenToday: () => void;
 }) {
   const styles = useStyles();
+  const { t } = useI18n();
   const {
     data: recentLessons,
     isPending,
@@ -43,7 +40,7 @@ function LearnContent({
   if (isPending) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loading}>Loading...</Text>
+        <Text style={styles.loading}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -51,7 +48,7 @@ function LearnContent({
   if (isError) {
     return (
       <View style={styles.container}>
-        <Text style={styles.error}>Failed to load your recent lessons.</Text>
+        <Text style={styles.error}>{t("learn.loadRecentFailed")}</Text>
       </View>
     );
   }
@@ -61,7 +58,7 @@ function LearnContent({
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <ScreenHeader kicker="Your course" title="Learn" />
+      <ScreenHeader kicker={t("learn.kicker")} title={t("learn.title")} />
 
       {continueLesson && (
         <Pressable
@@ -69,14 +66,14 @@ function LearnContent({
           onPress={() => router.push(`/learn/${continueLesson.id}`)}
           accessibilityRole="button"
         >
-          <Text style={styles.continueLabel}>Continue where you left off</Text>
+          <Text style={styles.continueLabel}>{t("learn.continue")}</Text>
           <Text style={styles.continueTitle}>{continueLesson.title}</Text>
         </Pressable>
       )}
 
       {recentlyOpened.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionHeading}>Recently opened</Text>
+          <Text style={styles.sectionHeading}>{t("learn.recentlyOpened")}</Text>
           <View style={styles.list}>
             {recentlyOpened.map((lesson) => (
               <Pressable
@@ -86,9 +83,7 @@ function LearnContent({
                 accessibilityRole="button"
               >
                 <Text style={styles.rowTitle}>{lesson.title}</Text>
-                <Text style={styles.rowStatus}>
-                  {lesson.status ? (STATUS_LABEL[lesson.status] ?? lesson.status) : ""}
-                </Text>
+                <Text style={styles.rowStatus}>{lessonStatusLabel(t, lesson.status)}</Text>
               </Pressable>
             ))}
           </View>
@@ -101,46 +96,40 @@ function LearnContent({
           onPress={() => router.push("/learn/library")}
           accessibilityRole="button"
         >
-          <Text style={styles.navCardTitle}>Library</Text>
-          <Text style={styles.navCardSubtitle}>Browse books, chapters, and lessons.</Text>
+          <Text style={styles.navCardTitle}>{t("learn.tools.library")}</Text>
+          <Text style={styles.navCardSubtitle}>{t("learn.tools.libraryDescription")}</Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.navCard, pressed && styles.cardPressed]}
           onPress={() => router.push("/learn/review")}
           accessibilityRole="button"
         >
-          <Text style={styles.navCardTitle}>Review</Text>
-          <Text style={styles.navCardSubtitle}>
-            See how many words are due today, across every lesson.
-          </Text>
+          <Text style={styles.navCardTitle}>{t("learn.tools.review")}</Text>
+          <Text style={styles.navCardSubtitle}>{t("learn.tools.reviewDescription")}</Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.navCard, pressed && styles.cardPressed]}
           onPress={() => router.push("/question-bank")}
           accessibilityRole="button"
         >
-          <Text style={styles.navCardTitle}>Question Bank</Text>
-          <Text style={styles.navCardSubtitle}>
-            Browse and answer questions, with stats on your progress.
-          </Text>
+          <Text style={styles.navCardTitle}>{t("learn.tools.questionBank")}</Text>
+          <Text style={styles.navCardSubtitle}>{t("learn.tools.questionBankDescription")}</Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.navCard, pressed && styles.cardPressed]}
           onPress={() => router.push("/learn/flashcards")}
           accessibilityRole="button"
         >
-          <Text style={styles.navCardTitle}>Flashcards</Text>
-          <Text style={styles.navCardSubtitle}>
-            Spaced-repetition cards per lesson, official and your own.
-          </Text>
+          <Text style={styles.navCardTitle}>{t("learn.tools.flashcards")}</Text>
+          <Text style={styles.navCardSubtitle}>{t("learn.tools.flashcardsDescription")}</Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.navCard, pressed && styles.cardPressed]}
           onPress={() => router.push("/learn/notebook")}
           accessibilityRole="button"
         >
-          <Text style={styles.navCardTitle}>Notebook</Text>
-          <Text style={styles.navCardSubtitle}>All your notes and drawings in one place.</Text>
+          <Text style={styles.navCardTitle}>{t("learn.tools.notebook")}</Text>
+          <Text style={styles.navCardSubtitle}>{t("learn.tools.notebookDescription")}</Text>
         </Pressable>
         {today && <DailyQuestionCard today={today} onOpen={onOpenToday} />}
       </View>

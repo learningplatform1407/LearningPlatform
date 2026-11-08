@@ -7,6 +7,7 @@ import { getApiClient } from "@/lib/api-client";
 import { OUTCOME_MARKS, OptionChoice, QuestionRevealPanel } from "@/lib/question-reveal";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 
 /**
  * Marks a question the reader has attempted before. Outcome-coloured rather
@@ -24,21 +25,29 @@ function ProgressMark({
   pointsPossible: number;
   attemptCount?: number;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const mark = OUTCOME_MARKS[outcome];
-  const tries = attemptCount !== undefined && attemptCount > 1 ? `, ${attemptCount} attempts` : "";
+  const tries =
+    attemptCount !== undefined && attemptCount > 1
+      ? t("questions.attempts", { count: attemptCount })
+      : "";
   return (
     <View
       style={styles.progressMark}
-      accessibilityLabel={`${mark.label}, ${pointsAwarded} of ${pointsPossible} points${tries}`}
+      accessibilityLabel={`${t("questions.scoreLabel", {
+        outcome: t(`questions.answered.${outcome}`),
+        awarded: pointsAwarded,
+        possible: pointsPossible,
+      })}${tries}`}
     >
       <Text style={{ color: colors[mark.tone] }}>{mark.icon}</Text>
       <Text style={[styles.progressMarkText, { color: colors[mark.tone] }]}>
         {pointsAwarded}/{pointsPossible}
       </Text>
       {attemptCount !== undefined && attemptCount > 1 && (
-        <Text style={styles.hint}>· {attemptCount} tries</Text>
+        <Text style={styles.hint}>{t("questions.tries", { count: attemptCount })}</Text>
       )}
     </View>
   );
@@ -56,6 +65,7 @@ function QuestionCard({
   onAnswered: () => void;
   onSeeInLesson?: SeeInLesson;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const [selected, setSelected] = useState<string[]>([]);
@@ -73,7 +83,7 @@ function QuestionCard({
         : getApiClient().unfavouriteQuestion(question.id),
     onError: (_error, on) => {
       setFavourite(!on);
-      setError("Could not save that favourite.");
+      setError(t("questions.favouriteFailed"));
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["question-bank"] }),
   });
@@ -84,7 +94,7 @@ function QuestionCard({
       setReveal(result);
       onAnswered();
     },
-    onError: () => setError("Could not save that answer."),
+    onError: () => setError(t("questions.answerFailed")),
   });
 
   function toggle(optionId: string) {
@@ -118,7 +128,7 @@ function QuestionCard({
         )}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Favourite"
+          accessibilityLabel={t("questions.favourite")}
           accessibilityState={{ selected: favourite }}
           hitSlop={8}
           onPress={() => {
@@ -149,8 +159,9 @@ function QuestionCard({
       )}
 
       <Text style={styles.meta}>
-        {question.kind === "single" ? "Single answer" : "Multiple answers"} ·{" "}
-        {question.points_possible} points · {question.difficulty}
+        {question.kind === "single" ? t("questions.single") : t("questions.multiple")} ·{" "}
+        {t("questions.points", { count: question.points_possible })} ·{" "}
+        {t(`questions.difficulty.${question.difficulty}`)}
       </Text>
       {question.tags.length > 0 && (
         <View style={styles.tagRow}>
@@ -174,7 +185,7 @@ function QuestionCard({
               onPress={() => onSeeInLesson(question.id, reveal.source_quotes!)}
               accessibilityRole="link"
             >
-              <Text style={styles.seeInLesson}>↗ See in lesson</Text>
+              <Text style={styles.seeInLesson}>{t("questions.seeInLesson")}</Text>
             </Pressable>
           )}
           <Pressable
@@ -185,7 +196,7 @@ function QuestionCard({
             }}
             accessibilityRole="button"
           >
-            <Text style={styles.buttonText}>Try again</Text>
+            <Text style={styles.buttonText}>{t("questions.tryAgain")}</Text>
           </Pressable>
         </>
       ) : (
@@ -201,7 +212,7 @@ function QuestionCard({
           {answer.isPending ? (
             <ActivityIndicator color={colors.foreground} />
           ) : (
-            <Text style={styles.buttonText}>Check answer</Text>
+            <Text style={styles.buttonText}>{t("questions.check")}</Text>
           )}
         </Pressable>
       )}
@@ -217,7 +228,7 @@ function QuestionCard({
 export function QuestionBankList({
   filter,
   unassigned,
-  emptyMessage = "No questions here yet.",
+  emptyMessage,
   onSeeInLesson,
   favourites,
 }: {
@@ -229,6 +240,7 @@ export function QuestionBankList({
   /** Only the learner's favourites. */
   favourites?: boolean;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const queryClient = useQueryClient();
   const questions = useQuery({
@@ -242,13 +254,13 @@ export function QuestionBankList({
   });
 
   if (questions.isPending) {
-    return <Text style={styles.hint}>Loading questions...</Text>;
+    return <Text style={styles.hint}>{t("questions.loading")}</Text>;
   }
   if (questions.isError) {
-    return <Text style={styles.error}>Failed to load questions.</Text>;
+    return <Text style={styles.error}>{t("questions.loadFailed")}</Text>;
   }
   if (questions.data.length === 0) {
-    return <Text style={styles.hint}>{emptyMessage}</Text>;
+    return <Text style={styles.hint}>{emptyMessage ?? t("questions.empty")}</Text>;
   }
 
   const shown = questions.data.length;
@@ -258,8 +270,8 @@ export function QuestionBankList({
     <View style={styles.list}>
       <Text style={styles.hint}>
         {totalCount !== undefined && totalCount > shown
-          ? `Showing ${shown} of ${totalCount} questions`
-          : `${shown} question${shown === 1 ? "" : "s"}`}
+          ? t("questions.showing", { shown, total: totalCount })
+          : t("questions.count", { count: shown })}
       </Text>
       {questions.data.map((question) => (
         <QuestionCard
