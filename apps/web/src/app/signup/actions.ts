@@ -1,7 +1,9 @@
 "use server";
 
+import { authErrorMessage } from "@lp/ui";
 import { redirect } from "next/navigation";
 
+import { getServerTranslator } from "@/lib/i18n.server";
 import { createClient } from "@/lib/supabase/server";
 
 export interface SignupState {
@@ -17,7 +19,7 @@ export async function signup(_prevState: SignupState, formData: FormData): Promi
   const { data, error } = await supabase.auth.signUp({ email, password });
 
   if (error) {
-    return { error: error.message, checkEmail: false };
+    return { error: authErrorMessage(await getServerTranslator(), error), checkEmail: false };
   }
 
   // If email confirmation is required, Supabase returns no session yet.

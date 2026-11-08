@@ -4,20 +4,18 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 import { ScreenHeader, SegmentedSwitch } from "@/lib/ui/primitives";
 
-const THEME_OPTIONS = [
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "system", label: "System" },
-] as const;
+const THEME_CHOICES = ["light", "dark", "system"] as const;
 
-type ThemeChoice = (typeof THEME_OPTIONS)[number]["value"];
+type ThemeChoice = (typeof THEME_CHOICES)[number];
 
 export default function AppearanceSettingsScreen() {
   const styles = useStyles();
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
@@ -40,7 +38,7 @@ export default function AppearanceSettingsScreen() {
   if (isPending) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text style={styles.loading}>Loading...</Text>
+        <Text style={styles.loading}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -48,23 +46,33 @@ export default function AppearanceSettingsScreen() {
   if (isError) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text style={styles.error}>Failed to load settings: {(error as Error).message}</Text>
+        <Text style={styles.error}>
+          {t("common.failedToLoadSettings", { message: (error as Error).message })}
+        </Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <ScreenHeader kicker="Settings" title="Appearance" />
+      <ScreenHeader kicker={t("settings.title")} title={t("settings.sections.appearance")} />
 
-      <Text style={styles.label}>Theme</Text>
-      <SegmentedSwitch label="Theme" options={THEME_OPTIONS} value={theme} onChange={setTheme} />
-      <Text style={styles.hint}>
-        System follows your device. Saving applies it here and on the web.
-      </Text>
+      <Text style={styles.label}>{t("settings.appearance.theme")}</Text>
+      <SegmentedSwitch
+        label={t("settings.appearance.theme")}
+        options={THEME_CHOICES.map((value) => ({
+          value,
+          label: t(`settings.appearance.${value}`),
+        }))}
+        value={theme}
+        onChange={setTheme}
+      />
+      <Text style={styles.hint}>{t("settings.appearance.hintMobile")}</Text>
 
       {saveMutation.isError && (
-        <Text style={styles.error}>Failed to save: {(saveMutation.error as Error).message}</Text>
+        <Text style={styles.error}>
+          {t("common.failedToSave", { message: (saveMutation.error as Error).message })}
+        </Text>
       )}
       <Pressable
         style={styles.saveButton}
@@ -72,9 +80,11 @@ export default function AppearanceSettingsScreen() {
         disabled={saveMutation.isPending}
         accessibilityRole="button"
       >
-        <Text style={styles.saveButtonText}>{saveMutation.isPending ? "Saving..." : "Save"}</Text>
+        <Text style={styles.saveButtonText}>
+          {saveMutation.isPending ? t("common.saving") : t("common.save")}
+        </Text>
       </Pressable>
-      {saveMutation.isSuccess && <Text style={styles.saved}>Saved.</Text>}
+      {saveMutation.isSuccess && <Text style={styles.saved}>{t("common.saved")}</Text>}
     </View>
   );
 }

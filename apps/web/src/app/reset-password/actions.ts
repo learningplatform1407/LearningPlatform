@@ -1,8 +1,10 @@
 "use server";
 
+import { authErrorMessage } from "@lp/ui";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { getServerTranslator } from "@/lib/i18n.server";
 import { RECOVERY_COOKIE, verifyRecoveryMarker } from "@/lib/recovery-cookie";
 import { createClient } from "@/lib/supabase/server";
 
@@ -14,16 +16,17 @@ export async function resetPassword(
   _prevState: ResetPasswordState,
   formData: FormData,
 ): Promise<ResetPasswordState> {
+  const translator = await getServerTranslator();
   const password = String(formData.get("password") ?? "");
   const confirmation = String(formData.get("confirm_password") ?? "");
 
   if (!password) {
-    return { error: "Enter a new password." };
+    return { error: translator.t("auth.enterNewPassword") };
   }
   // Ours, not a strength rule: the minimum length is Supabase's to enforce,
   // and a second stricter rule here would only disagree with it.
   if (password !== confirmation) {
-    return { error: "Those passwords do not match." };
+    return { error: translator.t("settings.password.mismatch") };
   }
 
   const supabase = await createClient();
@@ -46,7 +49,7 @@ export async function resetPassword(
 
   const { error } = await supabase.auth.updateUser({ password });
   if (error) {
-    return { error: error.message };
+    return { error: authErrorMessage(translator, error) };
   }
 
   // People reset a password because they think somebody else has it, and by

@@ -12,6 +12,7 @@ import { questionElementId } from "@/components/question-bank-list";
 import { findQuote } from "@/lib/text-offset";
 import { scrollBehavior } from "@/lib/use-media-query";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
 import { FlashcardsTab } from "./flashcards-tab";
 import {
@@ -68,6 +69,7 @@ function recreateRequest(annotation: Annotation): AnnotationCreateRequest {
 }
 
 export default function LecturePage() {
+  const { t } = useI18n();
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -154,7 +156,7 @@ export default function LecturePage() {
       await Promise.all(remove.map((a) => deleteAnnotation.mutateAsync(a.id)));
       return await Promise.all(create.map((body) => createAnnotation.mutateAsync(body)));
     } catch {
-      toast("That change couldn't be saved.");
+      toast(t("lesson.saveFailed"));
       return [];
     } finally {
       await queryClient.invalidateQueries({ queryKey: ["annotations", params.id] });
@@ -170,13 +172,13 @@ export default function LecturePage() {
   async function undo() {
     // PDF pages keep their own history (ink and highlights live per page).
     if (mode === "pdf") {
-      if (!pdfRef.current?.undo()) toast("Nothing to undo.");
+      if (!pdfRef.current?.undo()) toast(t("lesson.nothingToUndo"));
       return;
     }
     const op = undoStack.current.pop();
     setUndoDepth(undoStack.current.length);
     if (!op) {
-      toast("Nothing to undo.");
+      toast(t("lesson.nothingToUndo"));
       return;
     }
     await apply(op.created, op.removed.map(recreateRequest));
@@ -266,7 +268,7 @@ export default function LecturePage() {
     try {
       await updateAnnotation.mutateAsync({ id: note.id, note_text: text });
     } catch {
-      toast("That change couldn't be saved.");
+      toast(t("lesson.saveFailed"));
     } finally {
       await queryClient.invalidateQueries({ queryKey: ["annotations", params.id] });
     }
@@ -298,7 +300,7 @@ export default function LecturePage() {
       (block) => block.type === "paragraph" && quotes.some((q) => findQuote(block.text ?? "", q)),
     );
     if (!inText && !readyLecturePdf) {
-      toast("That passage isn't in this lesson any more.");
+      toast(t("lesson.passageGone"));
       return;
     }
     setSeeInLesson({ questionId, quotes });
@@ -340,7 +342,9 @@ export default function LecturePage() {
 
   function chooseTool(kind: "pen" | "eraser" | "note") {
     if (!toolAvailable(kind, mode)) {
-      toast(kind === "pen" ? "The pen draws on PDF pages." : "Notes work in Text mode.");
+      toast(
+        kind === "pen" ? t("lesson.tools.penPdfOnlyToast") : t("lesson.tools.noteTextOnlyToast"),
+      );
       return;
     }
     setTool((current) => {
@@ -365,7 +369,7 @@ export default function LecturePage() {
   function cycleTextScale() {
     const next = nextTextScale(textScale);
     setTextScale(next);
-    toast(`Text size ${next}%`);
+    toast(t("lesson.tools.textSizeValue", { percent: next }));
     try {
       window.localStorage.setItem(TEXT_SCALE_KEY, String(next));
     } catch {
@@ -390,7 +394,7 @@ export default function LecturePage() {
     eraser: () => chooseTool("eraser"),
     pen: () => chooseTool("pen"),
     note: () => chooseTool("note"),
-    explain: () => toast("AI explanations are coming soon."),
+    explain: () => toast(t("lesson.tools.explainSoon")),
     undo: () => void undo(),
     clear: () => setTool(null),
   });
@@ -449,7 +453,7 @@ export default function LecturePage() {
   if (isPending) {
     return (
       <main className="p-xl">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </main>
     );
   }
@@ -458,7 +462,7 @@ export default function LecturePage() {
     return (
       <main className="p-xl">
         <p role="alert" className="text-sm text-danger">
-          Failed to load lecture: {(error as Error).message}
+          {t("lesson.loadLectureFailed", { message: (error as Error).message })}
         </p>
       </main>
     );
@@ -466,7 +470,7 @@ export default function LecturePage() {
 
   const subChapter = data.sub_chapter;
   const backHref = subChapter ? `/learn/library/${subChapter.chapter.book_id}` : "/learn/library";
-  const tabLabel = LESSON_TABS.find((t) => t.key === activeTab)!.label;
+  const tabLabel = t(LESSON_TABS.find((tab) => tab.key === activeTab)!.label);
   const dotsProps = {
     backHref,
     viewMode: mode,
@@ -597,20 +601,24 @@ export default function LecturePage() {
               onOutline={handleOutline}
               sourceQuotes={seeInLesson?.quotes ?? null}
               onSourcesShown={(found) => {
-                if (!found) toast("That passage isn't in this lesson any more.");
+                if (!found) toast(t("lesson.passageGone"));
               }}
             />
           )}
 
           {activeTab === "lesson" && mode === "text" && (
             <>
-              {!version && <p className="text-sm text-muted-foreground">Not processed yet.</p>}
+              {!version && (
+                <p className="text-sm text-muted-foreground">{t("lesson.notProcessed")}</p>
+              )}
               {version?.status === "processing" && (
-                <p className="text-sm text-muted-foreground">Processing...</p>
+                <p className="text-sm text-muted-foreground">{t("lesson.processing")}</p>
               )}
               {version?.status === "failed" && (
                 <p role="alert" className="text-sm text-danger">
-                  Processing failed: {version.error_message ?? "Unknown error"}
+                  {t("lesson.processingFailed", {
+                    message: version.error_message ?? t("lesson.unknownError"),
+                  })}
                 </p>
               )}
               {version?.status === "ready" && (

@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { CloseIcon } from "@/components/icons";
+import { useI18n } from "@/lib/i18n";
 
 /** The first overlay in this app, so it is shared from the start.
  *
@@ -32,6 +33,7 @@ export function Modal({
   title: string;
   children: ReactNode;
 }) {
+  const { t } = useI18n();
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -107,7 +109,7 @@ export function Modal({
           <button
             ref={closeRef}
             type="button"
-            aria-label="Close"
+            aria-label={t("common.close")}
             onClick={onClose}
             className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
           >

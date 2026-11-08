@@ -7,6 +7,7 @@ import type { NotebookEntry } from "@lp/contracts";
 
 import { Button } from "@/components/button";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
 import { DrawingCanvas, DrawingThumbnail } from "./drawing-canvas";
 
@@ -15,9 +16,10 @@ import { DrawingCanvas, DrawingThumbnail } from "./drawing-canvas";
 // lesson, so both surfaces browse/edit the exact same data with the exact
 // same components.
 
+/** A text note's first non-blank line, or "" when it has none. */
 export function firstLine(content: string): string {
   const line = content.split("\n").find((l) => l.trim().length > 0);
-  return line?.trim() || "Untitled note";
+  return line?.trim() ?? "";
 }
 
 export function useNotebookEntries() {
@@ -44,9 +46,12 @@ export function NotebookEntryList({
   selectedEntryId?: string;
   onSelect: (entryId: string) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div>
-      {entries.length === 0 && <p className="text-sm text-muted-foreground">No notes yet.</p>}
+      {entries.length === 0 && (
+        <p className="text-sm text-muted-foreground">{t("notebook.empty")}</p>
+      )}
       <ul className="flex flex-col gap-0.5">
         {entries.map((entry) => (
           <li key={entry.id}>
@@ -57,10 +62,12 @@ export function NotebookEntryList({
               className="block w-full rounded-sm px-sm py-1.5 text-left text-toc leading-snug font-semibold text-foreground hover:bg-muted aria-current:bg-muted aria-current:font-extrabold"
             >
               {entry.type === "text" ? (
-                <span className="block truncate">{firstLine(entry.content ?? "")}</span>
+                <span className="block truncate">
+                  {firstLine(entry.content ?? "") || t("notebook.untitled")}
+                </span>
               ) : (
                 <span className="flex flex-col gap-xs">
-                  <span>Drawing</span>
+                  <span>{t("notebook.drawing")}</span>
                   <DrawingThumbnail strokes={entry.strokes ?? []} />
                 </span>
               )}
@@ -79,6 +86,7 @@ export function NewEntryButtons({
   onNewText: () => void;
   onNewDrawing: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="flex items-center gap-xs border-t border-border p-sm">
       <button
@@ -86,14 +94,14 @@ export function NewEntryButtons({
         onClick={onNewText}
         className="flex-1 rounded-full border border-border bg-background px-3 py-1.5 text-caption font-bold text-foreground hover:bg-muted"
       >
-        + Text
+        {t("notebook.newText")}
       </button>
       <button
         type="button"
         onClick={onNewDrawing}
         className="flex-1 rounded-full border border-border bg-background px-3 py-1.5 text-caption font-bold text-foreground hover:bg-muted"
       >
-        + Drawing
+        {t("notebook.newDrawing")}
       </button>
     </div>
   );
@@ -110,6 +118,7 @@ export function TextEntryEditor({
   onCreated?: (id: string) => void;
   onDeleted?: () => void;
 }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState(entry?.content ?? "");
   const [saved, setSaved] = useState(false);
@@ -176,14 +185,14 @@ export function TextEntryEditor({
               bodyRef.current?.focus();
             }
           }}
-          placeholder="Title"
+          placeholder={t("notebook.noteTitle")}
           className="border-0 bg-transparent pb-xs text-heading font-extrabold text-foreground placeholder:text-muted-foreground focus:outline-none"
         />
         <textarea
           ref={bodyRef}
           value={bodyValue}
           onChange={(event) => setBody(event.target.value)}
-          placeholder="Write a new note..."
+          placeholder={t("notebook.placeholder")}
           style={LINED_PAPER}
           className="w-full flex-1 resize-none border-0 bg-transparent text-body leading-[1.65] text-foreground placeholder:text-muted-foreground focus:outline-none"
         />
@@ -194,7 +203,9 @@ export function TextEntryEditor({
           disabled={createMutation.isPending || updateMutation.isPending || !draft.trim()}
           className="self-start"
         >
-          {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save"}
+          {createMutation.isPending || updateMutation.isPending
+            ? t("common.saving")
+            : t("common.save")}
         </Button>
         {entry && (
           <Button
@@ -202,10 +213,10 @@ export function TextEntryEditor({
             onClick={() => deleteMutation.mutate()}
             disabled={deleteMutation.isPending}
           >
-            Delete
+            {t("common.delete")}
           </Button>
         )}
-        {saved && <span className="text-xs text-muted-foreground">Saved.</span>}
+        {saved && <span className="text-xs text-muted-foreground">{t("common.saved")}</span>}
       </div>
     </div>
   );
@@ -222,6 +233,7 @@ export function DrawingEntryEditor({
   onCreated?: (id: string) => void;
   onDeleted?: () => void;
 }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [strokes, setStrokes] = useState(entry?.strokes ?? []);
   const [saved, setSaved] = useState(false);
@@ -271,7 +283,9 @@ export function DrawingEntryEditor({
           disabled={createMutation.isPending || updateMutation.isPending || strokes.length === 0}
           className="self-start"
         >
-          {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save"}
+          {createMutation.isPending || updateMutation.isPending
+            ? t("common.saving")
+            : t("common.save")}
         </Button>
         {entry && (
           <Button
@@ -279,10 +293,10 @@ export function DrawingEntryEditor({
             onClick={() => deleteMutation.mutate()}
             disabled={deleteMutation.isPending}
           >
-            Delete
+            {t("common.delete")}
           </Button>
         )}
-        {saved && <span className="text-xs text-muted-foreground">Saved.</span>}
+        {saved && <span className="text-xs text-muted-foreground">{t("common.saved")}</span>}
       </div>
     </div>
   );

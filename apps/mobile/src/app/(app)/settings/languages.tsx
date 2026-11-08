@@ -1,28 +1,29 @@
 import type { MeResponse } from "@lp/contracts";
+import { LANGUAGE_NAMES, LANGUAGES, resolveLanguage, type Language } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
 
-const LANGUAGES = [{ value: "en", label: "English" }] as const;
-
 export default function LanguageSettingsScreen() {
   const styles = useStyles();
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
     queryFn: () => getApiClient().getMe(),
   });
 
-  const [language, setLanguage] = useState("en");
+  const [language, setLanguage] = useState<Language>("en");
 
   const [syncedFrom, setSyncedFrom] = useState<MeResponse | null>(null);
   if (data && data !== syncedFrom) {
-    setLanguage(data.settings.language);
+    setLanguage(resolveLanguage(data.settings.language));
     setSyncedFrom(data);
   }
 
@@ -34,7 +35,7 @@ export default function LanguageSettingsScreen() {
   if (isPending) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text style={styles.loading}>Loading...</Text>
+        <Text style={styles.loading}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -42,34 +43,40 @@ export default function LanguageSettingsScreen() {
   if (isError) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text style={styles.error}>Failed to load settings: {(error as Error).message}</Text>
+        <Text style={styles.error}>
+          {t("common.failedToLoadSettings", { message: (error as Error).message })}
+        </Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <ScreenHeader kicker="Settings" title="Languages" />
+      <ScreenHeader kicker={t("settings.title")} title={t("settings.sections.languages")} />
 
       <View style={styles.segmented}>
-        {LANGUAGES.map((option) => (
+        {/* Each name in its own language, so it reads whatever the
+            interface is currently in. */}
+        {LANGUAGES.map((code) => (
           <Pressable
-            key={option.value}
-            style={[styles.segment, language === option.value && styles.segmentActive]}
-            onPress={() => setLanguage(option.value)}
+            key={code}
+            style={[styles.segment, language === code && styles.segmentActive]}
+            onPress={() => setLanguage(code)}
             accessibilityRole="button"
+            accessibilityState={{ selected: language === code }}
           >
-            <Text
-              style={[styles.segmentText, language === option.value && styles.segmentTextActive]}
-            >
-              {option.label}
+            <Text style={[styles.segmentText, language === code && styles.segmentTextActive]}>
+              {LANGUAGE_NAMES[code]}
             </Text>
           </Pressable>
         ))}
       </View>
+      <Text style={styles.hint}>{t("settings.languages.hint")}</Text>
 
       {saveMutation.isError && (
-        <Text style={styles.error}>Failed to save: {(saveMutation.error as Error).message}</Text>
+        <Text style={styles.error}>
+          {t("common.failedToSave", { message: (saveMutation.error as Error).message })}
+        </Text>
       )}
       <Pressable
         style={styles.saveButton}
@@ -77,9 +84,11 @@ export default function LanguageSettingsScreen() {
         disabled={saveMutation.isPending}
         accessibilityRole="button"
       >
-        <Text style={styles.saveButtonText}>{saveMutation.isPending ? "Saving..." : "Save"}</Text>
+        <Text style={styles.saveButtonText}>
+          {saveMutation.isPending ? t("common.saving") : t("common.save")}
+        </Text>
       </Pressable>
-      {saveMutation.isSuccess && <Text style={styles.saved}>Saved.</Text>}
+      {saveMutation.isSuccess && <Text style={styles.saved}>{t("common.saved")}</Text>}
     </View>
   );
 }
@@ -130,6 +139,10 @@ const useStyles = makeStyles((colors) => ({
     color: colors.primaryForeground,
     fontWeight: fontWeights.medium,
     fontSize: fontSizes.sm,
+  },
+  hint: {
+    fontSize: fontSizes.sm,
+    color: colors.mutedForeground,
   },
   saved: {
     fontSize: fontSizes.sm,

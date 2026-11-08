@@ -2,6 +2,8 @@
 
 import { useSearchParams } from "next/navigation";
 
+import { useI18n } from "@/lib/i18n";
+
 /** Why you are looking at the login form again.
  *
  * Both password paths end with `signOut({ scope: "global" })`, so the last
@@ -14,6 +16,7 @@ import { useSearchParams } from "next/navigation";
  * to this one line leaves the rest of the page prerenderable.
  */
 export function PasswordChangedNotice() {
+  const { t } = useI18n();
   // `?.` despite the non-nullable type: the hook really does hand back null
   // outside a router context, which is every render under vitest and any
   // prerender that reaches here before the Suspense boundary resolves. The
@@ -27,7 +30,7 @@ export function PasswordChangedNotice() {
       role="status"
       className="mt-md rounded-md border border-border bg-muted px-sm py-xs text-sm text-foreground"
     >
-      Password changed. You&apos;ve been signed out everywhere — log in with your new password.
+      {t("auth.passwordChanged")}
     </p>
   );
 }

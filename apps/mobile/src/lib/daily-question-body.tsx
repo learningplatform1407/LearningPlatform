@@ -1,5 +1,6 @@
 import type { DailyQuestion } from "@lp/api-client";
 import { ApiClientError } from "@lp/api-client";
+import type { Translator } from "@lp/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
@@ -8,13 +9,14 @@ import { getApiClient } from "@/lib/api-client";
 import { QuestionRevealPanel } from "@/lib/question-reveal";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 
-function describeError(err: unknown): string {
+function describeError(t: Translator["t"], err: unknown): string {
   if (err instanceof ApiClientError) {
     const body = err.body as { message?: string } | null;
-    return body?.message ?? `Request failed with status ${err.status}`;
+    return body?.message ?? t("questions.requestFailed", { status: err.status });
   }
-  return err instanceof Error ? err.message : "Could not save that answer.";
+  return err instanceof Error ? err.message : t("questions.answerFailed");
 }
 
 function errorCode(err: unknown): string | null {
@@ -39,6 +41,7 @@ export function DailyQuestionBody({
    * `attempt` say, and the host derives its open state from them. */
   onAnswered: () => void;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const queryClient = useQueryClient();
@@ -55,7 +58,7 @@ export function DailyQuestionBody({
       queryClient.invalidateQueries({ queryKey: ["daily-question"] });
     },
     onError: (err) => {
-      setError(describeError(err));
+      setError(describeError(t, err));
       // The day rolled over between render and submit -- an app left open
       // across midnight. Refetch so the next attempt grades against the
       // question that is actually current.
@@ -67,7 +70,7 @@ export function DailyQuestionBody({
   });
 
   if (!question) {
-    return <Text style={styles.hint}>There is no question today. Check back tomorrow.</Text>;
+    return <Text style={styles.hint}>{t("daily.noneToday")}</Text>;
   }
 
   if (day.attempt) {
@@ -94,7 +97,7 @@ export function DailyQuestionBody({
             </Text>
           ))}
         </View>
-        <Text style={styles.hint}>This day has closed, so it can no longer be answered.</Text>
+        <Text style={styles.hint}>{t("daily.closed")}</Text>
       </View>
     );
   }
@@ -140,8 +143,9 @@ export function DailyQuestionBody({
       </View>
 
       <Text style={styles.meta}>
-        {isSingle ? "Single answer" : "Multiple answers"} · {question.points_possible} points ·{" "}
-        {question.difficulty}
+        {isSingle ? t("questions.single") : t("questions.multiple")} ·{" "}
+        {t("questions.points", { count: question.points_possible })} ·{" "}
+        {t(`questions.difficulty.${question.difficulty}`)}
       </Text>
 
       {error && <Text style={styles.error}>{error}</Text>}
@@ -155,7 +159,7 @@ export function DailyQuestionBody({
         {answer.isPending ? (
           <ActivityIndicator color={colors.foreground} />
         ) : (
-          <Text style={styles.buttonText}>Check answer</Text>
+          <Text style={styles.buttonText}>{t("questions.check")}</Text>
         )}
       </Pressable>
     </View>

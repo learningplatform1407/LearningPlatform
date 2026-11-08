@@ -10,6 +10,7 @@ import { Button } from "@/components/button";
 import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
 function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -27,22 +28,23 @@ function ImportResultSummary({
   result: QuestionImportResult;
   dryRun: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <div className="mt-md rounded-xl border border-border p-md shadow-dot">
       <p className="text-sm font-medium text-foreground">
-        {dryRun ? "Dry run — nothing written yet" : "Import committed"}
+        {dryRun ? t("admin.import.dryRun") : t("admin.import.committed")}
       </p>
       <dl className="mt-sm grid grid-cols-3 gap-sm text-sm">
         <div>
-          <dt className="text-muted-foreground">Created</dt>
+          <dt className="text-muted-foreground">{t("admin.import.created")}</dt>
           <dd className="font-medium text-foreground">{result.created}</dd>
         </div>
         <div>
-          <dt className="text-muted-foreground">Updated</dt>
+          <dt className="text-muted-foreground">{t("admin.import.updated")}</dt>
           <dd className="font-medium text-foreground">{result.updated}</dd>
         </div>
         <div>
-          <dt className="text-muted-foreground">Skipped</dt>
+          <dt className="text-muted-foreground">{t("admin.import.skipped")}</dt>
           <dd className="font-medium text-foreground">{result.skipped}</dd>
         </div>
       </dl>
@@ -60,6 +62,7 @@ function ImportResultSummary({
 }
 
 function ImportForm() {
+  const { t } = useI18n();
   const [jsonText, setJsonText] = useState("");
   const [parseError, setParseError] = useState<string | null>(null);
   const [previewedText, setPreviewedText] = useState<string | null>(null);
@@ -88,9 +91,9 @@ function ImportForm() {
   function describeError(err: unknown): string {
     if (err instanceof ApiClientError) {
       const body = err.body as { message?: string } | null;
-      return body?.message ?? `Request failed with status ${err.status}`;
+      return body?.message ?? t("questions.requestFailed", { status: err.status });
     }
-    return err instanceof Error ? err.message : "Something went wrong.";
+    return err instanceof Error ? err.message : t("admin.import.somethingWrong");
   }
 
   function parsePayload(): QuestionImportRequest | null {
@@ -101,7 +104,7 @@ function ImportForm() {
     try {
       raw = JSON.parse(jsonText);
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : "Invalid JSON");
+      setParseError(err instanceof Error ? err.message : t("admin.import.invalidJson"));
       return null;
     }
 
@@ -150,7 +153,7 @@ function ImportForm() {
     try {
       handleTextChange(await readFileAsText(file));
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : "Could not read that file.");
+      setParseError(err instanceof Error ? err.message : t("admin.import.couldNotRead"));
     }
   }
 
@@ -160,7 +163,7 @@ function ImportForm() {
   return (
     <div className="mt-lg flex w-full max-w-[56rem] flex-col gap-md">
       <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-        Upload a JSON file
+        {t("admin.import.uploadJson")}
         <input
           type="file"
           accept="application/json"
@@ -170,7 +173,7 @@ function ImportForm() {
       </label>
 
       <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-        Import payload (JSON)
+        {t("admin.import.payload")}
         <textarea
           value={jsonText}
           onChange={(event) => handleTextChange(event.target.value)}
@@ -182,7 +185,7 @@ function ImportForm() {
 
       {parseError && (
         <p role="alert" className="text-sm text-danger">
-          Invalid JSON: {parseError}
+          {t("admin.import.invalidJsonDetail", { detail: parseError })}
         </p>
       )}
       {requestError && (
@@ -198,20 +201,18 @@ function ImportForm() {
           onClick={handlePreview}
           disabled={jsonText.trim() === "" || previewMutation.isPending}
         >
-          {previewMutation.isPending ? "Checking..." : "Preview (dry run)"}
+          {previewMutation.isPending ? t("admin.import.checking") : t("admin.import.preview")}
         </Button>
         <Button
           type="button"
           onClick={handleCommit}
           disabled={!canCommit || commitMutation.isPending}
         >
-          {commitMutation.isPending ? "Importing..." : "Import"}
+          {commitMutation.isPending ? t("admin.import.importing") : t("admin.import.import")}
         </Button>
       </div>
       {!canCommit && !commitMutation.isSuccess && (
-        <p className="text-xs text-muted-foreground">
-          Run a dry-run preview on the current payload before importing.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("admin.import.previewFirst")}</p>
       )}
 
       {commitMutation.data ? (
@@ -224,12 +225,13 @@ function ImportForm() {
 }
 
 export default function ManageQuestionsPage() {
+  const { t } = useI18n();
   const me = useQuery({ queryKey: ["me"], queryFn: () => getBrowserApiClient().getMe() });
 
   if (me.isPending) {
     return (
       <PageMain>
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </PageMain>
     );
   }
@@ -238,12 +240,12 @@ export default function ManageQuestionsPage() {
 
   return (
     <PageMain>
-      <PageHeader kicker="Admin" title="Import questions" />
+      <PageHeader kicker={t("admin.adminKicker")} title={t("admin.tools.questions")} />
 
       {isAdmin ? (
         <ImportForm />
       ) : (
-        <p className="mt-md text-sm text-muted-foreground">Admin access required.</p>
+        <p className="mt-md text-sm text-muted-foreground">{t("admin.accessRequired")}</p>
       )}
     </PageMain>
   );

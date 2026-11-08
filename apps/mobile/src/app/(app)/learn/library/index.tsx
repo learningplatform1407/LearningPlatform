@@ -13,6 +13,7 @@ import {
 } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n";
 import { fontSizes, fontWeights, shadows, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
@@ -20,12 +21,13 @@ import { ScreenHeader } from "@/lib/ui/primitives";
 interface BookRow {
   id: string;
   title: string;
-  count: number;
+  /** "3 chapters" / "12 lessons", in the reader's language. */
   countLabel: string;
 }
 
 export default function LibraryScreen() {
   const styles = useStyles();
+  const { t } = useI18n();
   const colors = useThemeColors();
   const queryClient = useQueryClient();
   // Half the row each, computed: with `flex: 1` a book alone on the last
@@ -52,14 +54,14 @@ export default function LibraryScreen() {
       queryClient.invalidateQueries({ queryKey: ["books"] });
     },
     onError: (err) => {
-      setCreateError(err instanceof Error ? err.message : "Failed to create book.");
+      setCreateError(err instanceof Error ? err.message : t("library.createFailed"));
     },
   });
 
   if (me.isPending || books.isPending || uncategorized.isPending) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loading}>Loading...</Text>
+        <Text style={styles.loading}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -68,7 +70,7 @@ export default function LibraryScreen() {
     return (
       <View style={styles.container}>
         <Text style={styles.error}>
-          Failed to load the library: {(books.error as Error).message}
+          {t("library.loadFailed", { message: (books.error as Error).message })}
         </Text>
       </View>
     );
@@ -80,14 +82,12 @@ export default function LibraryScreen() {
   const bookRows: BookRow[] = books.data.map((book) => ({
     id: book.id,
     title: book.title,
-    count: book.chapter_count,
-    countLabel: book.chapter_count === 1 ? "chapter" : "chapters",
+    countLabel: t("library.chapters", { count: book.chapter_count }),
   }));
   const uncategorizedRow: BookRow = {
     id: "uncategorized",
-    title: "Uncategorized",
-    count: uncategorizedLessons.length,
-    countLabel: uncategorizedLessons.length === 1 ? "lesson" : "lessons",
+    title: t("library.uncategorized"),
+    countLabel: t("library.lessons", { count: uncategorizedLessons.length }),
   };
   const rows: BookRow[] = hasUncategorized ? [...bookRows, uncategorizedRow] : bookRows;
 
@@ -100,8 +100,8 @@ export default function LibraryScreen() {
       // Two covers to a shelf, as on the web's narrowest grid.
       numColumns={2}
       columnWrapperStyle={styles.shelf}
-      ListHeaderComponent={<ScreenHeader kicker="Learn" title="Library" />}
-      ListEmptyComponent={<Text style={styles.empty}>No books yet.</Text>}
+      ListHeaderComponent={<ScreenHeader kicker={t("nav.learn")} title={t("library.title")} />}
+      ListEmptyComponent={<Text style={styles.empty}>{t("library.empty")}</Text>}
       renderItem={({ item }) => {
         const uncategorizedBook = item.id === "uncategorized";
         return (
@@ -113,7 +113,7 @@ export default function LibraryScreen() {
             ]}
             onPress={() => router.push(`/learn/library/${item.id}`)}
             accessibilityRole="button"
-            accessibilityLabel={`${item.title}, ${item.count} ${item.countLabel}`}
+            accessibilityLabel={`${item.title}, ${item.countLabel}`}
           >
             <View
               style={[
@@ -126,7 +126,7 @@ export default function LibraryScreen() {
               {/* The spine: a darker strip down the left edge. */}
               <View style={[styles.spine, uncategorizedBook && styles.spinePlain]} />
               <Text style={[styles.count, uncategorizedBook && styles.countPlain]}>
-                {item.count} {item.countLabel}
+                {item.countLabel}
               </Text>
               <Text
                 style={[styles.bookTitle, uncategorizedBook && styles.bookTitlePlain]}
@@ -141,8 +141,8 @@ export default function LibraryScreen() {
       ListFooterComponent={
         isAdmin ? (
           <View style={styles.uploadForm}>
-            <Text style={styles.uploadHeading}>New book</Text>
-            <Text style={styles.label}>Title</Text>
+            <Text style={styles.uploadHeading}>{t("library.newBook")}</Text>
+            <Text style={styles.label}>{t("library.bookTitle")}</Text>
             <TextInput style={styles.input} value={title} onChangeText={setTitle} />
 
             {createError && <Text style={styles.error}>{createError}</Text>}
@@ -156,7 +156,7 @@ export default function LibraryScreen() {
               {createBookMutation.isPending ? (
                 <ActivityIndicator color={colors.primaryForeground} />
               ) : (
-                <Text style={styles.uploadButtonText}>Create book</Text>
+                <Text style={styles.uploadButtonText}>{t("library.createBook")}</Text>
               )}
             </Pressable>
           </View>

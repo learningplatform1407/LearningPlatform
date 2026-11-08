@@ -1,5 +1,6 @@
 "use client";
 
+import type { MessageKey } from "@lp/ui";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -7,19 +8,21 @@ import { ArrowLeftIcon, MinusIcon, PlusIcon } from "@/components/icons";
 import { NotchTabs } from "@/components/notch-tabs";
 import { SegmentedSwitch } from "@/components/segmented-switch";
 import { useMediaQuery, WIDE_QUERY } from "@/lib/use-media-query";
+import { useI18n } from "@/lib/i18n";
 
 import type { LessonTab, LessonViewMode } from "./lesson-tools";
 
+/** `label` is the tab's catalogue key; translate it where it's shown. */
 export const LESSON_TABS = [
-  { key: "lesson", label: "Lesson" },
-  { key: "review", label: "Review" },
-  { key: "quizzes", label: "Quizzes" },
-  { key: "flashcards", label: "Flashcards" },
-] as const satisfies readonly { key: LessonTab; label: string }[];
+  { key: "lesson", label: "lesson.tabs.lesson" },
+  { key: "review", label: "lesson.tabs.review" },
+  { key: "quizzes", label: "lesson.tabs.quizzes" },
+  { key: "flashcards", label: "lesson.tabs.flashcards" },
+] as const satisfies readonly { key: LessonTab; label: MessageKey }[];
 
 const VIEW_MODES = [
-  { value: "text", label: "Text" },
-  { value: "pdf", label: "PDF" },
+  { value: "text", label: "lesson.text" },
+  { value: "pdf", label: "lesson.pdf" },
 ] as const;
 
 const DOT =
@@ -56,6 +59,7 @@ export function LessonTopNotch({
   /** −/+ for PDF zoom, only in PDF mode. */
   zoom?: { onOut: () => void; onIn: () => void; percent: number };
 }) {
+  const { t } = useI18n();
   const wide = useMediaQuery(WIDE_QUERY);
   return (
     <header className="pointer-events-none sticky top-[env(safe-area-inset-top,0px)] z-50 flex items-start justify-center gap-2.5">
@@ -64,10 +68,10 @@ export function LessonTopNotch({
       </div>
 
       <NotchTabs
-        tabs={LESSON_TABS}
+        tabs={LESSON_TABS.map((entry) => ({ ...entry, label: t(entry.label) }))}
         active={tab}
         onChange={onTabChange}
-        label="Lesson sections"
+        label={t("lesson.sections")}
         header={
           <div
             aria-hidden={!showTitle}
@@ -120,11 +124,12 @@ export function LessonMobileDots({
 /** Back to the lesson's place in the library. Text size lives in the tool
  * notch, and the theme in the sidebar and Settings. */
 function BackDot({ href }: { href: string }) {
+  const { t } = useI18n();
   return (
     <Link
       href={href}
-      aria-label="Back to the library"
-      title="Back to the library"
+      aria-label={t("lesson.backToLibrary")}
+      title={t("lesson.backToLibrary")}
       className={`${DOT} pointer-events-auto`}
     >
       <ArrowLeftIcon />
@@ -139,10 +144,11 @@ function ViewSwitch({
   mode: LessonViewMode;
   onChange: (mode: LessonViewMode) => void;
 }) {
+  const { t } = useI18n();
   return (
     <SegmentedSwitch
-      label="Lesson view mode"
-      options={VIEW_MODES}
+      label={t("lesson.viewMode")}
+      options={VIEW_MODES.map((option) => ({ ...option, label: t(option.label) }))}
       value={mode}
       onChange={onChange}
       className="pointer-events-auto"
@@ -159,15 +165,16 @@ function ZoomDots({
   onIn: () => void;
   percent: number;
 }) {
+  const { t } = useI18n();
   return (
     <div className="pointer-events-auto flex items-center gap-1.5">
-      <ZoomButton label="Zoom out" onClick={onOut}>
+      <ZoomButton label={t("lesson.zoomOut")} onClick={onOut}>
         <MinusIcon />
       </ZoomButton>
       <span className="w-10 text-center text-caption font-bold text-muted-foreground tabular-nums">
         {percent}%
       </span>
-      <ZoomButton label="Zoom in" onClick={onIn}>
+      <ZoomButton label={t("lesson.zoomIn")} onClick={onIn}>
         <PlusIcon />
       </ZoomButton>
     </div>

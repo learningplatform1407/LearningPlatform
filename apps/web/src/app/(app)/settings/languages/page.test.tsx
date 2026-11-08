@@ -3,6 +3,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 
+import { I18nProvider, LanguageSync } from "@/lib/i18n";
+
 import LanguageSettingsPage from "./page";
 
 const getMe = vi.fn();
@@ -47,4 +49,29 @@ test("shows the current language and saves on submit", async () => {
 
   expect(updateMe).toHaveBeenCalledWith({ language: "en" });
   expect(await screen.findByText("Saved.")).toBeInTheDocument();
+});
+
+test("offers Romanian, and saving it switches the interface", async () => {
+  const user = userEvent.setup();
+  updateMe.mockResolvedValue({ ...me, settings: { ...me.settings, language: "ro" } });
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <I18nProvider initialLanguage="en">
+        <LanguageSync />
+        <LanguageSettingsPage />
+      </I18nProvider>
+    </QueryClientProvider>,
+  );
+
+  await user.selectOptions(await screen.findByRole("combobox"), "ro");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+
+  expect(updateMe).toHaveBeenCalledWith({ language: "ro" });
+  // The saved `me` lands in the cache, LanguageSync adopts it, and the page
+  // re-renders in Romanian -- remembered on the browser for the next visit.
+  expect(await screen.findByRole("button", { name: "Salvează" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Limbi" })).toBeInTheDocument();
+  expect(document.documentElement.lang).toBe("ro");
+  expect(document.cookie).toContain("lp-language=ro");
 });

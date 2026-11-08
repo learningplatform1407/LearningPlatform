@@ -1,0 +1,30 @@
+import { plural } from "../../plural";
+
+export const profile = {
+  title: "Profile",
+  unnamed: "Unnamed",
+  joined: "Joined {date}",
+  editProfile: "Edit Profile",
+  loadingStats: "Loading stats...",
+  streak: "Streak",
+  streakDays: plural({ one: "🔥 {count} day streak", other: "🔥 {count} day streak" }),
+  noStreak: "No streak yet",
+  lessonsCompleted: "Lessons completed",
+  lessonsOf: "{completed} of {eligible} lessons",
+  examsCompleted: "Exams completed",
+  accuracy: "Accuracy & averages",
+  examAverage: "Exam average",
+  questionAccuracy: "Question accuracy",
+  noData: "No data yet",
+  progress: "Progress",
+  badgesTitle: "Badges",
+  badgeState: "{badge}: {state}",
+  earned: "earned",
+  locked: "locked",
+  badges: {
+    joined: { label: "Welcome aboard", description: "Joined the platform" },
+    "first-lesson": { label: "First lesson", description: "Complete your first lesson" },
+    "first-exam": { label: "First exam", description: "Complete your first exam" },
+    "three-day-streak": { label: "On a roll", description: "Reach a 3-day streak" },
+  },
+};

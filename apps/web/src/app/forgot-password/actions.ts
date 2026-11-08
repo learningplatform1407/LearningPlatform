@@ -1,7 +1,9 @@
 "use server";
 
+import { authErrorMessage } from "@lp/ui";
 import { headers } from "next/headers";
 
+import { getServerTranslator } from "@/lib/i18n.server";
 import { createClient } from "@/lib/supabase/server";
 
 export interface ForgotPasswordState {
@@ -50,7 +52,7 @@ export async function requestPasswordReset(
   const email = String(formData.get("email") ?? "").trim();
 
   if (!email) {
-    return { error: "Enter your email address.", sent: false };
+    return { error: (await getServerTranslator()).t("auth.enterEmail"), sent: false };
   }
 
   const supabase = await createClient();
@@ -64,7 +66,7 @@ export async function requestPasswordReset(
   // the user. See `docs/architecture/password-reset.md` §2 before adding an
   // existence check here — the uninformative success is the feature.
   if (error) {
-    return { error: error.message, sent: false };
+    return { error: authErrorMessage(await getServerTranslator(), error), sent: false };
   }
 
   return { error: null, sent: true };

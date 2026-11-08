@@ -1,13 +1,17 @@
 import { Link } from "expo-router";
+import { authErrorMessage } from "@lp/ui";
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
+import { useI18n } from "@/lib/i18n";
 import { fontSizes, fontWeights, lineHeight, spacing } from "@/lib/theme";
 import { supabase } from "@/lib/supabase";
 import { makeStyles } from "@/lib/theme-context";
 
 export default function SignupScreen() {
   const styles = useStyles();
+  const translator = useI18n();
+  const { t } = translator;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +24,7 @@ export default function SignupScreen() {
     const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
     setPending(false);
     if (signUpError) {
-      setError(signUpError.message);
+      setError(authErrorMessage(translator, signUpError));
       return;
     }
     // If a session was returned immediately, onAuthStateChange + Stack.Protected
@@ -33,20 +37,18 @@ export default function SignupScreen() {
   if (checkEmail) {
     return (
       <View style={styles.container}>
-        <Text style={styles.title}>Check your email</Text>
-        <Text style={styles.footer}>
-          We sent you a confirmation link. Follow it to finish creating your account.
-        </Text>
+        <Text style={styles.title}>{t("auth.checkEmail")}</Text>
+        <Text style={styles.footer}>{t("auth.confirmationSent")}</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Sign up</Text>
+      <Text style={styles.title}>{t("auth.signUp")}</Text>
       <TextInput
         style={styles.input}
-        placeholder="Email"
+        placeholder={t("auth.email")}
         autoCapitalize="none"
         keyboardType="email-address"
         autoComplete="email"
@@ -55,7 +57,7 @@ export default function SignupScreen() {
       />
       <TextInput
         style={styles.input}
-        placeholder="Password"
+        placeholder={t("auth.password")}
         secureTextEntry
         autoComplete="new-password"
         value={password}
@@ -68,11 +70,11 @@ export default function SignupScreen() {
         disabled={pending}
         accessibilityRole="button"
       >
-        <Text style={styles.buttonText}>{pending ? "Signing up..." : "Sign up"}</Text>
+        <Text style={styles.buttonText}>{pending ? t("auth.signingUp") : t("auth.signUp")}</Text>
       </Pressable>
       <Link href="/login">
         <Text style={styles.footer}>
-          Already have an account? <Text style={styles.footerLink}>Log in</Text>
+          {t("auth.haveAccount")} <Text style={styles.footerLink}>{t("auth.logIn")}</Text>
         </Text>
       </Link>
     </View>

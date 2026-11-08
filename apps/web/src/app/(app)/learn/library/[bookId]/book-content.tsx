@@ -1,5 +1,6 @@
 "use client";
 
+import { lessonStatusLabel } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BankTreeChapter, BankTreeLesson, BankTreeSubChapter } from "@lp/api-client";
 import { computeLessonCompletionPercent } from "@lp/api-client";
@@ -13,14 +14,9 @@ import { ProgressBar } from "@/components/progress-bar";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { sha256Hex } from "@/lib/checksum";
 import { createClient } from "@/lib/supabase/client";
+import { useI18n } from "@/lib/i18n";
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
-
-const STATUS_LABEL: Record<string, string> = {
-  processing: "Processing...",
-  ready: "Ready",
-  failed: "Failed",
-};
 
 /** The book-detail content, shared by the regular `/learn/library/[bookId]`
  * route (`showAdminTools` always false -- creating/uploading content is an
@@ -28,6 +24,7 @@ const STATUS_LABEL: Record<string, string> = {
  * and `/admin/library/[bookId]` (`showAdminTools` true, after its own role
  * gate). */
 export function UncategorizedLessonsPage({ showAdminTools }: { showAdminTools: boolean }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const uncategorized = useQuery({
     queryKey: ["documents", "uncategorized"],
@@ -47,9 +44,9 @@ export function UncategorizedLessonsPage({ showAdminTools }: { showAdminTools: b
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
-      if (!file) throw new Error("Choose a PDF file first.");
-      if (file.type !== "application/pdf") throw new Error("Only PDF files are supported.");
-      if (file.size > MAX_UPLOAD_BYTES) throw new Error("File must be under 50MB.");
+      if (!file) throw new Error(t("book.choosePdfFirst"));
+      if (file.type !== "application/pdf") throw new Error(t("book.onlyPdf"));
+      if (file.size > MAX_UPLOAD_BYTES) throw new Error(t("book.fileTooLarge"));
 
       const client = getBrowserApiClient();
       const { storage_path, token } = await client.requestDocumentUploadUrl({
@@ -79,24 +76,24 @@ export function UncategorizedLessonsPage({ showAdminTools }: { showAdminTools: b
       queryClient.invalidateQueries({ queryKey: ["documents", "uncategorized"] });
     },
     onError: (err) => {
-      setUploadError(err instanceof Error ? err.message : "Failed to upload document.");
+      setUploadError(err instanceof Error ? err.message : t("book.uploadFailed"));
     },
   });
 
   if (uncategorized.isPending) {
     return (
       <PageMain width="reading">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </PageMain>
     );
   }
 
   return (
     <PageMain width="reading">
-      <PageHeader kicker="Library" title="Uncategorized" />
+      <PageHeader kicker={t("library.title")} title={t("library.uncategorized")} />
       <div className="mt-lg">
         {uncategorized.data && uncategorized.data.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No lessons yet.</p>
+          <p className="text-sm text-muted-foreground">{t("book.noLessons")}</p>
         ) : (
           <ul>
             {uncategorized.data?.map((doc) => (
@@ -109,7 +106,7 @@ export function UncategorizedLessonsPage({ showAdminTools }: { showAdminTools: b
                     {doc.title}
                   </span>
                   <span className="shrink-0 text-caption font-semibold text-muted-foreground">
-                    {doc.status ? (STATUS_LABEL[doc.status] ?? doc.status) : ""}
+                    {lessonStatusLabel(t, doc.status)}
                   </span>
                 </Link>
                 <ProgressBar
@@ -142,9 +139,9 @@ export function UncategorizedLessonsPage({ showAdminTools }: { showAdminTools: b
               uploadMutation.mutate();
             }}
           >
-            <h3 className="label-caps">Upload a new lesson</h3>
+            <h3 className="label-caps">{t("book.uploadNewLesson")}</h3>
             <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-              Title
+              {t("book.title")}
               <input
                 type="text"
                 value={title}
@@ -154,7 +151,7 @@ export function UncategorizedLessonsPage({ showAdminTools }: { showAdminTools: b
               />
             </label>
             <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-              PDF file
+              {t("book.pdfFile")}
               <input
                 type="file"
                 accept="application/pdf"
@@ -168,7 +165,7 @@ export function UncategorizedLessonsPage({ showAdminTools }: { showAdminTools: b
               </p>
             )}
             <Button type="submit" disabled={uploadMutation.isPending} className="self-start">
-              {uploadMutation.isPending ? "Uploading..." : "Upload"}
+              {uploadMutation.isPending ? t("book.uploading") : t("book.upload")}
             </Button>
           </form>
         )}
@@ -183,6 +180,7 @@ export function UncategorizedLessonsPage({ showAdminTools }: { showAdminTools: b
  * reference book -- a replace always wipes every learner's ink on this
  * lesson unconditionally, hence the two-step confirmation). */
 function LessonAdminControls({ documentId, onDone }: { documentId: string; onDone: () => void }) {
+  const { t } = useI18n();
   const [textFile, setTextFile] = useState<File | null>(null);
   const [textError, setTextError] = useState<string | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -190,8 +188,8 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
   const [confirmingPdfReplace, setConfirmingPdfReplace] = useState(false);
 
   async function uploadAndChecksum(file: File) {
-    if (file.type !== "application/pdf") throw new Error("Only PDF files are supported.");
-    if (file.size > MAX_UPLOAD_BYTES) throw new Error("File must be under 50MB.");
+    if (file.type !== "application/pdf") throw new Error(t("book.onlyPdf"));
+    if (file.size > MAX_UPLOAD_BYTES) throw new Error(t("book.fileTooLarge"));
 
     const client = getBrowserApiClient();
     const { storage_path, token } = await client.requestDocumentUploadUrl({
@@ -212,7 +210,7 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
 
   const replaceTextMutation = useMutation({
     mutationFn: async () => {
-      if (!textFile) throw new Error("Choose a PDF file first.");
+      if (!textFile) throw new Error(t("book.choosePdfFirst"));
       const payload = await uploadAndChecksum(textFile);
       return getBrowserApiClient().replaceLectureText(documentId, payload);
     },
@@ -221,13 +219,13 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
       onDone();
     },
     onError: (err) => {
-      setTextError(err instanceof Error ? err.message : "Failed to replace lecture text.");
+      setTextError(err instanceof Error ? err.message : t("book.replaceTextFailed"));
     },
   });
 
   const uploadPdfMutation = useMutation({
     mutationFn: async () => {
-      if (!pdfFile) throw new Error("Choose a PDF file first.");
+      if (!pdfFile) throw new Error(t("book.choosePdfFirst"));
       const payload = await uploadAndChecksum(pdfFile);
       return getBrowserApiClient().upsertLecturePdf(documentId, payload);
     },
@@ -238,7 +236,7 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
     // backend's own reason (e.g. a checksum mismatch).
     onSuccess: (lecturePdf) => {
       if (lecturePdf.status !== "ready") {
-        setPdfError(lecturePdf.error_message ?? "The PDF could not be processed.");
+        setPdfError(lecturePdf.error_message ?? t("book.pdfNotProcessed"));
         return;
       }
       setPdfFile(null);
@@ -246,7 +244,7 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
       onDone();
     },
     onError: (err) => {
-      setPdfError(err instanceof Error ? err.message : "Failed to upload lecture PDF.");
+      setPdfError(err instanceof Error ? err.message : t("book.uploadPdfFailed"));
     },
   });
 
@@ -260,11 +258,11 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
           replaceTextMutation.mutate();
         }}
       >
-        <span className="text-xs font-medium text-foreground">Replace lecture text</span>
+        <span className="text-xs font-medium text-foreground">{t("book.replaceText")}</span>
         <input
           type="file"
           accept="application/pdf"
-          aria-label="Lecture text PDF"
+          aria-label={t("book.lectureTextPdf")}
           onChange={(event) => setTextFile(event.target.files?.[0] ?? null)}
           className="text-xs"
         />
@@ -274,7 +272,7 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
           disabled={!textFile || replaceTextMutation.isPending}
           className="px-sm py-xs text-xs"
         >
-          {replaceTextMutation.isPending ? "Replacing..." : "Replace"}
+          {replaceTextMutation.isPending ? t("book.replacing") : t("book.replace")}
         </Button>
       </form>
       {textError && (
@@ -295,11 +293,11 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
           uploadPdfMutation.mutate();
         }}
       >
-        <span className="text-xs font-medium text-foreground">Upload/replace lecture PDF</span>
+        <span className="text-xs font-medium text-foreground">{t("book.replacePdf")}</span>
         <input
           type="file"
           accept="application/pdf"
-          aria-label="Lecture PDF"
+          aria-label={t("book.lecturePdf")}
           onChange={(event) => {
             setPdfFile(event.target.files?.[0] ?? null);
             setConfirmingPdfReplace(false);
@@ -313,13 +311,12 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
             disabled={!pdfFile}
             className="px-sm py-xs text-xs"
           >
-            Upload
+            {t("book.upload")}
           </Button>
         ) : (
           <>
             <span role="alert" className="text-xs text-danger">
-              This permanently wipes every learner&apos;s ink on this lesson&apos;s PDF — there is
-              no way to get it back.
+              {t("book.wipeInkWarning")}
             </span>
             <Button
               type="submit"
@@ -327,14 +324,14 @@ function LessonAdminControls({ documentId, onDone }: { documentId: string; onDon
               disabled={uploadPdfMutation.isPending}
               className="px-sm py-xs text-xs"
             >
-              {uploadPdfMutation.isPending ? "Replacing..." : "Yes, replace and wipe all ink"}
+              {uploadPdfMutation.isPending ? t("book.replacing") : t("book.confirmWipe")}
             </Button>
             <button
               type="button"
               onClick={() => setConfirmingPdfReplace(false)}
               className="text-xs text-muted-foreground hover:underline"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
           </>
         )}
@@ -359,6 +356,7 @@ function LessonList({
   invalidateKeys?: unknown[][];
   lessonProgress: Map<string, BankTreeLesson>;
 }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const documents = useQuery({
     queryKey: ["documents", subChapterId],
@@ -371,9 +369,9 @@ function LessonList({
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
-      if (!file) throw new Error("Choose a PDF file first.");
-      if (file.type !== "application/pdf") throw new Error("Only PDF files are supported.");
-      if (file.size > MAX_UPLOAD_BYTES) throw new Error("File must be under 50MB.");
+      if (!file) throw new Error(t("book.choosePdfFirst"));
+      if (file.type !== "application/pdf") throw new Error(t("book.onlyPdf"));
+      if (file.size > MAX_UPLOAD_BYTES) throw new Error(t("book.fileTooLarge"));
 
       const client = getBrowserApiClient();
       const { storage_path, token } = await client.requestDocumentUploadUrl({
@@ -407,18 +405,18 @@ function LessonList({
       }
     },
     onError: (err) => {
-      setUploadError(err instanceof Error ? err.message : "Failed to upload document.");
+      setUploadError(err instanceof Error ? err.message : t("book.uploadFailed"));
     },
   });
 
   if (documents.isPending) {
-    return <p className="text-sm text-muted-foreground">Loading...</p>;
+    return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
   }
 
   if (documents.isError) {
     return (
       <p role="alert" className="text-sm text-danger">
-        Failed to load lessons: {(documents.error as Error).message}
+        {t("book.loadLessonsFailed", { message: (documents.error as Error).message })}
       </p>
     );
   }
@@ -426,7 +424,7 @@ function LessonList({
   return (
     <div>
       {documents.data.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No lessons yet.</p>
+        <p className="text-sm text-muted-foreground">{t("book.noLessons")}</p>
       ) : (
         <ul>
           {documents.data.map((doc) => (
@@ -439,7 +437,7 @@ function LessonList({
                   {doc.title}
                 </span>
                 <span className="shrink-0 text-caption font-semibold text-muted-foreground">
-                  {doc.status ? (STATUS_LABEL[doc.status] ?? doc.status) : ""}
+                  {lessonStatusLabel(t, doc.status)}
                 </span>
               </Link>
               <ProgressBar
@@ -472,9 +470,9 @@ function LessonList({
             uploadMutation.mutate();
           }}
         >
-          <h3 className="label-caps">Upload a new lesson</h3>
+          <h3 className="label-caps">{t("book.uploadNewLesson")}</h3>
           <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-            Title
+            {t("book.title")}
             <input
               type="text"
               value={title}
@@ -484,7 +482,7 @@ function LessonList({
             />
           </label>
           <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-            PDF file
+            {t("book.pdfFile")}
             <input
               type="file"
               accept="application/pdf"
@@ -498,7 +496,7 @@ function LessonList({
             </p>
           )}
           <Button type="submit" disabled={uploadMutation.isPending} className="self-start">
-            {uploadMutation.isPending ? "Uploading..." : "Upload"}
+            {uploadMutation.isPending ? t("book.uploading") : t("book.upload")}
           </Button>
         </form>
       )}
@@ -521,6 +519,7 @@ function SubChapterRow({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useI18n();
   const lessonProgress = new Map<string, BankTreeLesson>(
     subChapterNode?.lessons.map((lesson) => [lesson.id, lesson]),
   );
@@ -540,7 +539,7 @@ function SubChapterRow({
         </span>
         <span className="flex-1 text-toc font-bold text-foreground">{subChapter.title}</span>
         <span className="shrink-0 text-caption font-semibold text-muted-foreground">
-          {subChapter.lesson_count} {subChapter.lesson_count === 1 ? "lesson" : "lessons"}
+          {t("library.lessons", { count: subChapter.lesson_count })}
         </span>
       </button>
       {subChapterNode && (
@@ -577,6 +576,7 @@ function ChapterRow({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useI18n();
   const subChapterProgress = new Map<string, BankTreeSubChapter>(
     chapterNode?.sub_chapters.map((subChapter) => [subChapter.id, subChapter]),
   );
@@ -600,7 +600,7 @@ function ChapterRow({
       queryClient.invalidateQueries({ queryKey: ["chapters", bookId] });
     },
     onError: (err) => {
-      setCreateError(err instanceof Error ? err.message : "Failed to create sub-chapter.");
+      setCreateError(err instanceof Error ? err.message : t("book.createSubChapterFailed"));
     },
   });
 
@@ -620,8 +620,7 @@ function ChapterRow({
         </span>
         <span className="flex-1 text-toc font-bold text-foreground">{chapter.title}</span>
         <span className="shrink-0 text-caption font-semibold text-muted-foreground">
-          {chapter.sub_chapter_count}{" "}
-          {chapter.sub_chapter_count === 1 ? "sub-chapter" : "sub-chapters"}
+          {t("library.subChapters", { count: chapter.sub_chapter_count })}
         </span>
       </button>
       {chapterNode && (
@@ -632,13 +631,13 @@ function ChapterRow({
       {isExpanded && (
         <div className="pb-md pl-lg">
           {subChapters.isPending ? (
-            <p className="text-sm text-muted-foreground">Loading...</p>
+            <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
           ) : subChapters.isError ? (
             <p role="alert" className="text-sm text-danger">
-              Failed to load sub-chapters: {(subChapters.error as Error).message}
+              {t("book.loadSubChaptersFailed", { message: (subChapters.error as Error).message })}
             </p>
           ) : subChapters.data.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No sub-chapters yet.</p>
+            <p className="text-sm text-muted-foreground">{t("book.noSubChapters")}</p>
           ) : (
             <ul>
               {subChapters.data.map((subChapter) => (
@@ -668,9 +667,9 @@ function ChapterRow({
                 createSubChapterMutation.mutate();
               }}
             >
-              <h3 className="label-caps">New sub-chapter</h3>
+              <h3 className="label-caps">{t("book.newSubChapter")}</h3>
               <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-                Title
+                {t("book.title")}
                 <input
                   type="text"
                   value={newSubChapterTitle}
@@ -689,7 +688,9 @@ function ChapterRow({
                 disabled={createSubChapterMutation.isPending}
                 className="self-start"
               >
-                {createSubChapterMutation.isPending ? "Creating..." : "Create sub-chapter"}
+                {createSubChapterMutation.isPending
+                  ? t("book.creating")
+                  : t("book.createSubChapter")}
               </Button>
             </form>
           )}
@@ -706,6 +707,7 @@ export function BookChaptersPage({
   bookId: string;
   showAdminTools: boolean;
 }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const chapters = useQuery({
     queryKey: ["chapters", bookId],
@@ -739,14 +741,14 @@ export function BookChaptersPage({
       queryClient.invalidateQueries({ queryKey: ["books"] });
     },
     onError: (err) => {
-      setCreateError(err instanceof Error ? err.message : "Failed to create chapter.");
+      setCreateError(err instanceof Error ? err.message : t("book.createChapterFailed"));
     },
   });
 
   if (chapters.isPending) {
     return (
       <PageMain width="reading">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </PageMain>
     );
   }
@@ -755,7 +757,7 @@ export function BookChaptersPage({
     return (
       <PageMain width="reading">
         <p role="alert" className="text-sm text-danger">
-          Failed to load chapters: {(chapters.error as Error).message}
+          {t("book.loadChaptersFailed", { message: (chapters.error as Error).message })}
         </p>
       </PageMain>
     );
@@ -763,18 +765,18 @@ export function BookChaptersPage({
 
   return (
     <PageMain width="reading">
-      <PageHeader kicker="Library · Chapters" title={bookTitle ?? "Chapters"} />
+      <PageHeader kicker={t("book.kicker")} title={bookTitle ?? t("book.chapters")} />
       {bookNode && (
         <div className="mt-sm max-w-[24rem]">
           <ProgressBar
             percent={computeLessonCompletionPercent(bookNode)}
-            label="Overall progress"
+            label={t("book.overallProgress")}
           />
         </div>
       )}
 
       {chapters.data.length === 0 ? (
-        <p className="mt-md text-sm text-muted-foreground">No chapters yet.</p>
+        <p className="mt-md text-sm text-muted-foreground">{t("book.noChapters")}</p>
       ) : (
         <ul className="mt-lg border-y border-border">
           {chapters.data.map((chapter) => (
@@ -802,9 +804,9 @@ export function BookChaptersPage({
             createChapterMutation.mutate();
           }}
         >
-          <h2 className="label-caps">New chapter</h2>
+          <h2 className="label-caps">{t("book.newChapter")}</h2>
           <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-            Title
+            {t("book.title")}
             <input
               type="text"
               value={title}
@@ -819,7 +821,7 @@ export function BookChaptersPage({
             </p>
           )}
           <Button type="submit" disabled={createChapterMutation.isPending} className="self-start">
-            {createChapterMutation.isPending ? "Creating..." : "Create chapter"}
+            {createChapterMutation.isPending ? t("book.creating") : t("book.createChapter")}
           </Button>
         </form>
       )}

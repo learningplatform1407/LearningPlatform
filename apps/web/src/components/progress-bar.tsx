@@ -1,3 +1,5 @@
+import { useI18n } from "@/lib/i18n";
+
 // Threshold for the "done" color, matching the server's
 // LESSON_COMPLETION_THRESHOLD (services/api/app/progress/constants.py) —
 // kept in sync by eye rather than shared over the wire, since it only
@@ -11,6 +13,7 @@ const DONE_THRESHOLD = 80;
  * treatment BankStatsLine gives a zero-question node.
  */
 export function ProgressBar({ percent, label }: { percent: number | null; label?: string }) {
+  const { t } = useI18n();
   if (percent === null) return null;
   const rounded = Math.round(percent);
   return (
@@ -21,7 +24,7 @@ export function ProgressBar({ percent, label }: { percent: number | null; label?
         aria-valuenow={rounded}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label={label ?? "Progress"}
+        aria-label={label ?? t("profile.progress")}
         className="h-1 flex-1 overflow-hidden rounded-full bg-muted"
       >
         <div

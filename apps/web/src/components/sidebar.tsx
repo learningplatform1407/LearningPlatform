@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { MessageKey } from "@lp/ui";
 import { useState, type ComponentType } from "react";
 
 import { Dot } from "@/components/dot";
@@ -20,35 +21,37 @@ import {
   WrenchIcon,
 } from "@/components/icons";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import { useDismissableOverlay } from "@/lib/use-dismissable-overlay";
 
-type NavItem = { href: string; label: string; Icon: ComponentType<{ size?: number }> };
+type NavItem = { href: string; label: MessageKey; Icon: ComponentType<{ size?: number }> };
 
 // Question Bank has no entry of its own here — it's reached from inside
 // Learn (its card on /learn, and the per-lesson tab), the same way Review
 // and Flashcards are. Promoting it to a top-level item would say it's a
 // peer of Learn rather than part of it.
 const NAV_ITEMS: readonly NavItem[] = [
-  { href: "/learn", label: "Learn", Icon: BookIcon },
-  { href: "/exams", label: "Exam Hub", Icon: ExamIcon },
-  { href: "/assistant", label: "AI Assistant", Icon: SparkleIcon },
-  { href: "/roadmap", label: "Roadmap", Icon: MapIcon },
-  { href: "/feed", label: "Feed", Icon: FeedIcon },
+  { href: "/learn", label: "nav.learn", Icon: BookIcon },
+  { href: "/exams", label: "nav.exams", Icon: ExamIcon },
+  { href: "/assistant", label: "nav.assistant", Icon: SparkleIcon },
+  { href: "/roadmap", label: "nav.roadmap", Icon: MapIcon },
+  { href: "/feed", label: "nav.feed", Icon: FeedIcon },
 ];
 
-const PROFILE_ITEM: NavItem = { href: "/profile", label: "Profile", Icon: UserIcon };
+const PROFILE_ITEM: NavItem = { href: "/profile", label: "nav.profile", Icon: UserIcon };
 
 // A directory of the content tools: the two bulk importers,
 // question-of-the-day, and (unlike mobile, where it stays inline on the
 // Library page) library authoring itself. See docs/architecture/README.md.
-const ADMIN_ITEM: NavItem = { href: "/admin", label: "Admin", Icon: WrenchIcon };
+const ADMIN_ITEM: NavItem = { href: "/admin", label: "nav.admin", Icon: WrenchIcon };
 
 // A lesson owns the whole screen in the redesign: its left edge belongs to
 // the tool notch and table of contents, and it carries its own way back.
 const LESSON_ROUTE = /^\/learn\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function Sidebar() {
+  const { t } = useI18n();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -76,7 +79,7 @@ export function Sidebar() {
           becomes a menu dot and an off-canvas drawer -- the breakpoint the
           mobile app itself switches on (apps/mobile/src/app/(app)/_layout.tsx). */}
       <div className="sticky top-[env(safe-area-inset-top,0px)] z-10 flex h-14 shrink-0 items-center bg-background px-md md:hidden">
-        <Dot size="sm" aria-label="Open menu" onClick={() => setMobileOpen(true)}>
+        <Dot size="sm" aria-label={t("nav.openMenu")} onClick={() => setMobileOpen(true)}>
           <MenuIcon />
         </Dot>
       </div>
@@ -89,12 +92,12 @@ export function Sidebar() {
             aria-hidden="true"
           />
           <nav
-            aria-label="Mobile menu"
+            aria-label={t("nav.mobileMenu")}
             className="absolute top-0 left-0 flex h-full w-[280px] max-w-[85vw] animate-[drawer-in-left_0.25s_ease] motion-reduce:animate-none flex-col overflow-y-auto border-r border-border bg-background pt-[calc(22px+env(safe-area-inset-top,0px))] pr-3 pb-[22px] pl-3.5"
           >
             <div className="mb-3 flex items-center justify-between pl-1.5">
-              <span className="label-caps">Menu</span>
-              <Dot size="xs" aria-label="Close menu" onClick={() => setMobileOpen(false)}>
+              <span className="label-caps">{t("nav.menu")}</span>
+              <Dot size="xs" aria-label={t("nav.closeMenu")} onClick={() => setMobileOpen(false)}>
                 <CloseIcon size={16} />
               </Dot>
             </div>
@@ -105,7 +108,7 @@ export function Sidebar() {
       )}
 
       <nav
-        aria-label="Main"
+        aria-label={t("nav.main")}
         className={`sticky top-0 hidden h-screen shrink-0 flex-col overflow-y-auto border-r border-border bg-background py-[22px] transition-[width] duration-[250ms] md:flex ${
           collapsed ? "w-[3.75rem] px-2" : "w-[15rem] pr-3 pl-3.5"
         }`}
@@ -113,7 +116,7 @@ export function Sidebar() {
         <button
           type="button"
           onClick={() => setCollapsed((value) => !value)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
           className={`mb-3 flex h-[31px] w-[31px] items-center justify-center rounded-sm text-[22px] leading-none font-semibold text-muted-foreground hover:bg-muted hover:text-foreground ${
             collapsed ? "self-center" : "ml-0.5"
           }`}
@@ -189,13 +192,15 @@ function NavLink({
   collapsed: boolean;
   active: boolean;
 }) {
+  const { t } = useI18n();
   const { Icon } = item;
+  const label = t(item.label);
   return (
     <li>
       <Link
         href={item.href}
-        title={collapsed ? item.label : undefined}
-        aria-label={collapsed ? item.label : undefined}
+        title={collapsed ? label : undefined}
+        aria-label={collapsed ? label : undefined}
         aria-current={active ? "page" : undefined}
         className={`${ITEM_CLASSES} ${collapsed ? "justify-center" : ""} ${
           active
@@ -204,7 +209,7 @@ function NavLink({
         }`}
       >
         <Icon />
-        {!collapsed && item.label}
+        {!collapsed && label}
       </Link>
     </li>
   );
@@ -213,9 +218,10 @@ function NavLink({
 /** The design's moon dot, as a nav row. Saves to the user's settings, so
  * the choice follows them to other devices (and the Appearance page). */
 function ThemeToggle({ collapsed }: { collapsed: boolean }) {
+  const { t } = useI18n();
   const { resolved, setPreference } = useTheme();
   const next = resolved === "dark" ? "light" : "dark";
-  const label = next === "dark" ? "Dark theme" : "Light theme";
+  const label = next === "dark" ? t("nav.darkTheme") : t("nav.lightTheme");
   return (
     <button
       type="button"

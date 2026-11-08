@@ -7,8 +7,10 @@ import { NewEntryButtons, NotebookEntryList } from "@/lib/notebook-entry-editor"
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
+import { useI18n } from "@/lib/i18n";
 
 export default function NotebookScreen() {
+  const { t } = useI18n();
   const styles = useStyles();
   const entries = useQuery({
     queryKey: ["notebook-entries"],
@@ -18,7 +20,7 @@ export default function NotebookScreen() {
   if (entries.isPending) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loading}>Loading...</Text>
+        <Text style={styles.loading}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -26,7 +28,7 @@ export default function NotebookScreen() {
   if (entries.isError) {
     return (
       <View style={styles.container}>
-        <Text style={styles.error}>Failed to load your notebook.</Text>
+        <Text style={styles.error}>{t("notebook.loadFailed")}</Text>
       </View>
     );
   }
@@ -36,8 +38,8 @@ export default function NotebookScreen() {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <ScreenHeader kicker="Learn" title="Notebook" />
-        <Text style={styles.sectionLabel}>Notes</Text>
+        <ScreenHeader kicker={t("nav.learn")} title={t("notebook.title")} />
+        <Text style={styles.sectionLabel}>{t("notebook.notes")}</Text>
         <NotebookEntryList
           entries={entries.data}
           onSelect={(entryId) => router.push(`/learn/notebook/entry/${entryId}`)}

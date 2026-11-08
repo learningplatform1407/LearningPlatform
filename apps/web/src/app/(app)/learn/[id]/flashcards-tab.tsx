@@ -15,13 +15,14 @@ import { BottomNotch } from "@/components/bottom-notch";
 import { Button } from "@/components/button";
 import { Chip, Tag } from "@/components/chip";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
 import { GradeButtons, ShowButton, useGradeKeys } from "./grade-bar";
 
 const SCOPE_FILTERS = [
-  { key: "all", label: "All" },
-  { key: "official", label: "Official" },
-  { key: "personal", label: "Mine" },
+  { key: "all", label: "lesson.flashcards.all" },
+  { key: "official", label: "lesson.flashcards.official" },
+  { key: "personal", label: "lesson.flashcards.mine" },
 ] as const;
 
 function ScopeToggle({
@@ -31,15 +32,16 @@ function ScopeToggle({
   scope: FlashcardScopeFilter;
   onChange: (scope: FlashcardScopeFilter) => void;
 }) {
+  const { t } = useI18n();
   return (
-    <div role="group" aria-label="Filter flashcards" className="flex gap-2">
+    <div role="group" aria-label={t("lesson.flashcards.filter")} className="flex gap-2">
       {SCOPE_FILTERS.map((filter) => (
         <Chip
           key={filter.key}
           aria-pressed={scope === filter.key}
           onClick={() => onChange(filter.key)}
         >
-          {filter.label}
+          {t(filter.label)}
         </Chip>
       ))}
     </div>
@@ -48,14 +50,16 @@ function ScopeToggle({
 
 /** Official vs personal, always paired with a word rather than colour alone. */
 function ScopeBadge({ scope, onPaper = false }: { scope: FlashcardScope; onPaper?: boolean }) {
+  const { t } = useI18n();
   return (
     <Tag className={onPaper ? "border-black/15 text-paper-muted-foreground" : ""}>
-      {scope === "official" ? "Official" : "Mine"}
+      {scope === "official" ? t("lesson.flashcards.official") : t("lesson.flashcards.mine")}
     </Tag>
   );
 }
 
 function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: () => void }) {
+  const { t } = useI18n();
   const [front, setFront] = useState("");
   const [back, setBack] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +73,7 @@ function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: 
       setError(null);
       onDone();
     },
-    onError: () => setError("Could not save that card."),
+    onError: () => setError(t("lesson.flashcards.saveFailed")),
   });
 
   return (
@@ -81,11 +85,11 @@ function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: 
       }}
     >
       <label className="flex flex-col gap-xs text-sm font-semibold text-foreground">
-        Front
+        {t("lesson.flashcards.front")}
         <input value={front} onChange={(event) => setFront(event.target.value)} className="field" />
       </label>
       <label className="flex flex-col gap-xs text-sm font-semibold text-foreground">
-        Back
+        {t("lesson.flashcards.back")}
         <textarea
           value={back}
           onChange={(event) => setBack(event.target.value)}
@@ -100,10 +104,10 @@ function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: 
       )}
       <div className="flex gap-sm">
         <Button type="submit" disabled={!front.trim() || !back.trim() || create.isPending}>
-          Save card
+          {t("lesson.flashcards.saveCard")}
         </Button>
         <Button type="button" variant="secondary" onClick={onDone}>
-          Cancel
+          {t("common.cancel")}
         </Button>
       </div>
     </form>
@@ -111,6 +115,7 @@ function AddFlashcardForm({ documentId, onDone }: { documentId: string; onDone: 
 }
 
 function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => void }) {
+  const { t } = useI18n();
   const [editing, setEditing] = useState(false);
   const [front, setFront] = useState(card.front_text);
   const [back, setBack] = useState(card.back_text);
@@ -135,12 +140,12 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
       setError(null);
       onChanged();
     },
-    onError: () => setError("Could not save that card."),
+    onError: () => setError(t("lesson.flashcards.saveFailed")),
   });
   const remove = useMutation({
     mutationFn: () => getBrowserApiClient().deleteFlashcard(card.id),
     onSuccess: onChanged,
-    onError: () => setError("Could not delete that card."),
+    onError: () => setError(t("lesson.flashcards.deleteFailed")),
   });
   const suspension = useMutation({
     mutationFn: () => getBrowserApiClient().setFlashcardSuspension(card.id, !card.suspended),
@@ -148,20 +153,24 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
     // This toggle is the only route back into the rotation, so a silent
     // failure would leave the learner unable to tell the card is still out.
     onError: () =>
-      setError(card.suspended ? "Could not include that card." : "Could not exclude that card."),
+      setError(
+        card.suspended
+          ? t("lesson.flashcards.includeFailed")
+          : t("lesson.flashcards.excludeFailed"),
+      ),
   });
 
   if (editing) {
     return (
       <li className="flex flex-col gap-xs border-t border-border py-3">
         <input
-          aria-label="Front"
+          aria-label={t("lesson.flashcards.front")}
           value={front}
           onChange={(event) => setFront(event.target.value)}
           className="field"
         />
         <textarea
-          aria-label="Back"
+          aria-label={t("lesson.flashcards.back")}
           value={back}
           onChange={(event) => setBack(event.target.value)}
           rows={2}
@@ -177,10 +186,10 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
             disabled={!front.trim() || !back.trim() || update.isPending}
             onClick={() => update.mutate()}
           >
-            Save
+            {t("common.save")}
           </Button>
           <Button variant="secondary" onClick={() => setEditing(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
         </div>
       </li>
@@ -204,7 +213,7 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
       </div>
       <div className="flex shrink-0 items-center gap-xs">
         <ScopeBadge scope={card.scope} />
-        {card.suspended && <Tag>Not in rotation</Tag>}
+        {card.suspended && <Tag>{t("lesson.flashcards.notInRotation")}</Tag>}
         {/* Offered on every visible card, official included — suspension is
             the caller's own review state, not a change to shared content.
             This row is the only place a suspended card is still listed, so
@@ -216,7 +225,7 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
           onClick={() => suspension.mutate()}
           className="text-xs font-bold text-accent hover:underline"
         >
-          {card.suspended ? "Include in reviews" : "Exclude from reviews"}
+          {card.suspended ? t("lesson.flashcards.include") : t("lesson.flashcards.exclude")}
         </button>
         {card.can_edit && (
           <button
@@ -224,7 +233,7 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
             onClick={openEditor}
             className="text-xs font-bold text-accent hover:underline"
           >
-            Edit
+            {t("lesson.flashcards.edit")}
           </button>
         )}
         {card.can_delete && (
@@ -237,7 +246,7 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
             {/* Retiring an official card archives it for everyone; deleting
                 your own personal card removes it. Different verbs because
                 they are different actions. */}
-            {card.scope === "official" ? "Retire" : "Delete"}
+            {card.scope === "official" ? t("lesson.flashcards.retire") : t("common.delete")}
           </button>
         )}
       </div>
@@ -246,6 +255,7 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
 }
 
 export function FlashcardsTab({ documentId }: { documentId: string }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [scope, setScope] = useState<FlashcardScopeFilter>("all");
   const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
@@ -298,19 +308,17 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
           // nothing.
           return card ? [...withoutIt, card] : withoutIt;
         });
-        setFeedback("You'll see this one again before you finish.");
+        setFeedback(t("lesson.flashcards.seeAgain"));
       } else {
         setAgainCards((previous) => previous.filter((c) => c.id !== cardId));
-        setFeedback(
-          `Next review in ${state.interval_days} ${state.interval_days === 1 ? "day" : "days"}.`,
-        );
+        setFeedback(t("lesson.flashcards.nextReview", { count: state.interval_days }));
       }
       refresh();
     },
     // Without this a failed grade silently does nothing: the card stays
     // revealed, the buttons re-enable, and the learner has no idea the
     // rating never landed.
-    onError: () => setActionError("Could not save that rating."),
+    onError: () => setActionError(t("lesson.flashcards.rateFailed")),
   });
 
   const excludeMutation = useMutation({
@@ -323,10 +331,10 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
       setAgainCards((previous) => previous.filter((c) => c.id !== cardId));
       setRevealedCardId(null);
       setActionError(null);
-      setFeedback("Excluded from reviews. You can include it again below.");
+      setFeedback(t("lesson.flashcards.excluded"));
       refresh();
     },
-    onError: () => setActionError("Could not exclude that card."),
+    onError: () => setActionError(t("lesson.flashcards.excludeFailed")),
   });
 
   // Filtered client-side rather than trusting the refetched list to shrink,
@@ -353,12 +361,12 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
   });
 
   if (deckQuery.isPending) {
-    return <p className="text-sm text-muted-foreground">Loading...</p>;
+    return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
   }
   if (deckQuery.isError) {
     return (
       <p role="alert" className="text-sm text-danger">
-        Failed to load flashcards.
+        {t("lesson.flashcards.loadFailed")}
       </p>
     );
   }
@@ -385,7 +393,7 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
         />
         {!adding && (
           <Button variant="secondary" onClick={() => setAdding(true)}>
-            Add a card
+            {t("lesson.flashcards.addCard")}
           </Button>
         )}
       </div>
@@ -406,8 +414,8 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
               excluded the deck is empty while the lesson is not, and the
               "no flashcards yet" copy would contradict the list below. */}
           {lessonCards.length === 0 && cardsQuery.isSuccess && gradedIds.size === 0
-            ? "No flashcards for this lesson yet. Add your own, or check back for official ones."
-            : "You're all caught up — nothing to review right now."}
+            ? t("lesson.flashcards.none")
+            : t("lesson.review.allCaughtUp")}
         </p>
       )}
 
@@ -423,7 +431,10 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
             <span className="flex w-full items-center justify-between gap-2.5 text-xs font-bold tracking-[0.1em] text-paper-muted-foreground uppercase">
               <ScopeBadge scope={currentCard.scope} onPaper />
               <span>
-                Card {completed + 1} of {completed + queue.length}
+                {t("lesson.flashcards.cardOf", {
+                  current: completed + 1,
+                  total: completed + queue.length,
+                })}
               </span>
             </span>
             <p className="font-bold">{currentCard.front_text}</p>
@@ -431,12 +442,12 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
               <p className="border-t border-black/10 pt-3">{currentCard.back_text}</p>
             ) : (
               <span className="text-sm font-semibold text-paper-muted-foreground">
-                Tap to reveal
+                {t("lesson.flashcards.tapToReveal")}
               </span>
             )}
           </button>
 
-          <BottomNotch label="Flashcard controls">
+          <BottomNotch label={t("lesson.flashcards.controls")}>
             {revealed ? (
               <GradeButtons
                 onGrade={grade}
@@ -458,7 +469,7 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
               onClick={() => excludeMutation.mutate(currentCard.id)}
               className="text-xs font-semibold text-muted-foreground hover:underline"
             >
-              Exclude this card from reviews
+              {t("lesson.flashcards.excludeThis")}
             </button>
           )}
         </>
@@ -473,17 +484,17 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
 
       {cardsQuery.isError && (
         <p role="alert" className="text-sm text-danger">
-          Failed to load this lesson&apos;s cards, so excluded ones can&apos;t be managed right now.
+          {t("lesson.flashcards.manageFailed")}
         </p>
       )}
 
       {lessonCards.length > 0 && (
         <section className="mt-lg w-full">
           <h2 className="label-caps mb-sm">
-            All cards in this lesson
+            {t("lesson.flashcards.allCards")}
             {excludedCount > 0 && (
               <span className="ml-xs font-normal text-muted-foreground">
-                · {excludedCount} excluded
+                {t("lesson.flashcards.excludedCount", { count: excludedCount }).trim()}
               </span>
             )}
           </h2>

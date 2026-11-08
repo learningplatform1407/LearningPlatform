@@ -1,3 +1,5 @@
+import { useI18n } from "@/lib/i18n";
+
 /**
  * A labeled multi-row percentage-bar comparison — for metrics like exam
  * average and question accuracy that are naturally compared side by side,
@@ -6,7 +8,7 @@
  * label column and no "done" color threshold, since these are comparison
  * metrics rather than completion.
  *
- * A null percent renders an empty track and "No data yet" instead of a
+ * A null percent renders an empty track and t("profile.noData") instead of a
  * number — same null-is-not-zero posture as ProgressBar/computeBankStatsRates.
  */
 export function MetricBarChart({
@@ -14,6 +16,7 @@ export function MetricBarChart({
 }: {
   metrics: { label: string; percent: number | null }[];
 }) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col gap-sm border-t border-border pt-md">
       {metrics.map((metric) => {
@@ -36,7 +39,7 @@ export function MetricBarChart({
               )}
             </div>
             <span className="w-20 shrink-0 text-right text-sm font-bold text-foreground tabular-nums">
-              {rounded === null ? "No data yet" : `${rounded}%`}
+              {rounded === null ? t("profile.noData") : `${rounded}%`}
             </span>
           </div>
         );

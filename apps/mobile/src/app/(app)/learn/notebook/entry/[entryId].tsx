@@ -7,6 +7,7 @@ import { NotebookEntryEditor } from "@/lib/notebook-entry-editor";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
+import { useI18n } from "@/lib/i18n";
 
 // entryId is either a real notebook entry id (editing) or one of these
 // sentinels (creating) — same idiom as the "uncategorized" sentinel already
@@ -16,6 +17,7 @@ const NEW_TEXT_SENTINEL = "new-text";
 const NEW_DRAWING_SENTINEL = "new-drawing";
 
 export default function NotebookEntryScreen() {
+  const { t } = useI18n();
   const styles = useStyles();
   const { entryId } = useLocalSearchParams<{ entryId: string }>();
   const isNewText = entryId === NEW_TEXT_SENTINEL;
@@ -31,7 +33,7 @@ export default function NotebookEntryScreen() {
   if (!isNew && entriesQuery.isPending) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loading}>Loading...</Text>
+        <Text style={styles.loading}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -39,7 +41,7 @@ export default function NotebookEntryScreen() {
   if (!isNew && !entry) {
     return (
       <View style={styles.container}>
-        <Text style={styles.error}>Note not found.</Text>
+        <Text style={styles.error}>{t("notebook.notFound")}</Text>
       </View>
     );
   }
@@ -49,9 +51,9 @@ export default function NotebookEntryScreen() {
       {/* As on the web notebook at phone width: back to the list, then the
           page header, then the note itself. */}
       <Pressable onPress={() => router.back()} accessibilityRole="button" hitSlop={8}>
-        <Text style={styles.back}>‹ All notes</Text>
+        <Text style={styles.back}>{t("notebook.allNotes")}</Text>
       </Pressable>
-      <ScreenHeader kicker="Learn" title="Notebook" />
+      <ScreenHeader kicker={t("nav.learn")} title={t("notebook.title")} />
 
       <NotebookEntryEditor
         entry={entry}

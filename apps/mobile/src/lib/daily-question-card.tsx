@@ -1,21 +1,25 @@
 import type { DailyQuestion } from "@lp/api-client";
+import type { Translator } from "@lp/ui";
 import { Pressable, Text } from "react-native";
 
-import { OUTCOME_MARKS } from "@/lib/question-reveal";
 import { fontSizes, fontWeights, shadows, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 
 /** One line describing today. The same wording as the web rail and card. */
-export function summariseDay(today: DailyQuestion): string {
+export function summariseDay(t: Translator["t"], today: DailyQuestion): string {
   if (today.attempt) {
-    const mark = OUTCOME_MARKS[today.attempt.outcome];
-    return `${mark.label}, ${today.attempt.points_awarded}/${today.attempt.points_possible} points.`;
+    return t("daily.summaryAnswered", {
+      outcome: t(`questions.answered.${today.attempt.outcome}`),
+      awarded: today.attempt.points_awarded,
+      possible: today.attempt.points_possible,
+    });
   }
-  if (today.question === null) return "No question today.";
-  if (today.answerable) return "Answer today's question.";
+  if (today.question === null) return t("daily.noQuestion");
+  if (today.answerable) return t("daily.answerToday");
   // Drawn, then withdrawn before anyone answered it. Rare, but saying so beats
   // a blank line.
-  return "Today's question is unavailable.";
+  return t("daily.unavailable");
 }
 
 /** The Learn hub's entry point to the question of the day.
@@ -25,6 +29,7 @@ export function summariseDay(today: DailyQuestion): string {
  * what everything else on this screen already is.
  */
 export function DailyQuestionCard({ today, onOpen }: { today: DailyQuestion; onOpen: () => void }) {
+  const { t } = useI18n();
   const styles = useStyles();
   return (
     <Pressable
@@ -32,8 +37,8 @@ export function DailyQuestionCard({ today, onOpen }: { today: DailyQuestion; onO
       onPress={onOpen}
       accessibilityRole="button"
     >
-      <Text style={styles.navCardTitle}>Question of the day</Text>
-      <Text style={styles.navCardSubtitle}>{summariseDay(today)}</Text>
+      <Text style={styles.navCardTitle}>{t("daily.title")}</Text>
+      <Text style={styles.navCardSubtitle}>{summariseDay(t, today)}</Text>
     </Pressable>
   );
 }

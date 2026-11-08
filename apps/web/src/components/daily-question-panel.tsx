@@ -1,31 +1,50 @@
 "use client";
 
 import type { DailyQuestion, DailyQuestionDay } from "@lp/api-client";
-import { WEEKDAY_LABELS, buildMonthGrid, formatCalendarDate, monthOf, shiftMonth } from "@lp/ui";
+import {
+  buildMonthGrid,
+  formatCalendarDate,
+  monthOf,
+  shiftMonth,
+  weekdayLabels,
+  type Translator,
+} from "@lp/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Card } from "@/components/card";
 import { OUTCOME_MARKS } from "@/components/question-reveal";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
 /** One line describing today, shared by the rail and the nav card. */
-function summarise(today: DailyQuestion): string {
+function summarise(t: Translator["t"], today: DailyQuestion): string {
   if (today.attempt) {
-    const mark = OUTCOME_MARKS[today.attempt.outcome];
-    return `${mark.label}, ${today.attempt.points_awarded}/${today.attempt.points_possible} points.`;
+    return t("daily.summaryAnswered", {
+      outcome: t(`questions.answered.${today.attempt.outcome}`),
+      awarded: today.attempt.points_awarded,
+      possible: today.attempt.points_possible,
+    });
   }
-  if (today.question === null) return "No question today.";
-  if (today.answerable) return "Answer today's question.";
+  if (today.question === null) return t("daily.noQuestion");
+  if (today.answerable) return t("daily.answerToday");
   // Drawn, then withdrawn before anyone answered it. Rare, but saying so beats
   // a blank line.
-  return "Today's question is unavailable.";
+  return t("daily.unavailable");
 }
 
-function dayLabel(date: string, row: DailyQuestionDay | undefined, isToday: boolean): string {
-  const when = isToday ? `Today, ${formatCalendarDate(date)}` : formatCalendarDate(date);
-  if (row?.answered && row.outcome) return `${when}: ${OUTCOME_MARKS[row.outcome].label}`;
-  return `${when}: not answered`;
+function dayLabel(
+  { t, language }: Translator,
+  date: string,
+  row: DailyQuestionDay | undefined,
+  isToday: boolean,
+): string {
+  const formatted = formatCalendarDate(date, language);
+  const when = isToday ? t("daily.todayWithDate", { date: formatted }) : formatted;
+  if (row?.answered && row.outcome) {
+    return t("daily.dayOutcome", { when, outcome: t(`questions.answered.${row.outcome}`) });
+  }
+  return t("daily.dayNotAnswered", { when });
 }
 
 /** The calendar rail: a month of days, each openable if it has a question.
@@ -42,6 +61,8 @@ export function DailyQuestionRail({
   today: DailyQuestion;
   onOpenDay: (forDate: string) => void;
 }) {
+  const i18n = useI18n();
+  const { t } = i18n;
   const serverToday = today.server_today;
   const currentMonth = monthOf(serverToday);
   const [month, setMonth] = useState(currentMonth);
@@ -52,7 +73,7 @@ export function DailyQuestionRail({
   // matching no row -- inert and unmarked even for a day you answered. The
   // server clamps `end` to its own today, so a range running into next month
   // is safe.
-  const grid = buildMonthGrid(month, { today: serverToday });
+  const grid = buildMonthGrid(month, { today: serverToday, language: i18n.language });
 
   const calendar = useQuery({
     queryKey: ["daily-question", "calendar", month],
@@ -62,13 +83,15 @@ export function DailyQuestionRail({
 
   return (
     <div className="flex w-full flex-col">
-      <h2 className="label-caps">Question of the day</h2>
-      <p className="mt-xs text-caption font-semibold text-muted-foreground">{summarise(today)}</p>
+      <h2 className="label-caps">{t("daily.title")}</h2>
+      <p className="mt-xs text-caption font-semibold text-muted-foreground">
+        {summarise(t, today)}
+      </p>
 
       <div className="mt-md flex items-center justify-between">
         <button
           type="button"
-          aria-label="Previous month"
+          aria-label={t("daily.previousMonth")}
           onClick={() => setMonth(shiftMonth(month, -1))}
           className="rounded-md px-sm py-xs text-sm text-muted-foreground hover:bg-muted"
         >
@@ -77,7 +100,7 @@ export function DailyQuestionRail({
         <span className="text-xs font-semibold text-foreground">{grid.label}</span>
         <button
           type="button"
-          aria-label="Next month"
+          aria-label={t("daily.nextMonth")}
           // Nothing exists past the current month: future days are never drawn
           // for a learner, so paging forward would only show an empty grid.
           disabled={month >= currentMonth}
@@ -89,7 +112,7 @@ export function DailyQuestionRail({
       </div>
 
       <div className="mt-md grid grid-cols-7 gap-xs" role="presentation">
-        {WEEKDAY_LABELS.map((label) => (
+        {weekdayLabels(i18n.language).map((label) => (
           <span
             key={label}
             className="text-center text-xs font-semibold tracking-wide text-muted-foreground uppercase"
@@ -127,7 +150,7 @@ export function DailyQuestionRail({
             <button
               key={cell.date}
               type="button"
-              aria-label={dayLabel(cell.date, row, cell.isToday)}
+              aria-label={dayLabel(i18n, cell.date, row, cell.isToday)}
               onClick={() => onOpenDay(cell.date)}
               className={`aspect-square rounded-full py-xs text-center text-xs font-medium hover:bg-muted ${
                 cell.isToday
@@ -148,7 +171,7 @@ export function DailyQuestionRail({
 
       {calendar.isError && (
         <p role="alert" className="mt-sm text-xs text-danger">
-          Failed to load the calendar.
+          {t("daily.calendarFailed")}
         </p>
       )}
     </div>
@@ -162,6 +185,7 @@ export function DailyQuestionRail({
  * triggers for it would read as two different things.
  */
 export function DailyQuestionCard({ today, onOpen }: { today: DailyQuestion; onOpen: () => void }) {
+  const { t } = useI18n();
   return (
     <Card
       as="button"
@@ -170,8 +194,8 @@ export function DailyQuestionCard({ today, onOpen }: { today: DailyQuestion; onO
       onClick={onOpen}
       className="block px-md py-3.5 text-left lg:hidden"
     >
-      <p className="text-card leading-snug font-extrabold text-foreground">Question of the day</p>
-      <p className="mt-xs text-toc leading-snug text-muted-foreground">{summarise(today)}</p>
+      <p className="text-card leading-snug font-extrabold text-foreground">{t("daily.title")}</p>
+      <p className="mt-xs text-toc leading-snug text-muted-foreground">{summarise(t, today)}</p>
     </Card>
   );
 }

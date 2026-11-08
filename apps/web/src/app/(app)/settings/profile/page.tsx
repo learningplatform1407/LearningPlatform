@@ -8,11 +8,13 @@ import { Button } from "@/components/button";
 import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/client";
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
 export default function ProfileSettingsPage() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
@@ -56,11 +58,11 @@ export default function ProfileSettingsPage() {
 
     setAvatarError(null);
     if (!file.type.startsWith("image/")) {
-      setAvatarError("Please choose an image file.");
+      setAvatarError(t("settings.profile.chooseImage"));
       return;
     }
     if (file.size > MAX_AVATAR_BYTES) {
-      setAvatarError("Image must be under 5MB.");
+      setAvatarError(t("settings.profile.imageTooLarge"));
       return;
     }
 
@@ -77,7 +79,7 @@ export default function ProfileSettingsPage() {
       const { data: publicUrlData } = supabase.storage.from("avatars").getPublicUrl(path);
       await avatarMutation.mutateAsync(publicUrlData.publicUrl);
     } catch (err) {
-      setAvatarError(err instanceof Error ? err.message : "Failed to upload image.");
+      setAvatarError(err instanceof Error ? err.message : t("settings.profile.uploadFailed"));
     } finally {
       setAvatarUploading(false);
     }
@@ -86,7 +88,7 @@ export default function ProfileSettingsPage() {
   if (isPending) {
     return (
       <main className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </main>
     );
   }
@@ -95,7 +97,7 @@ export default function ProfileSettingsPage() {
     return (
       <main className="flex min-h-screen items-center justify-center">
         <p role="alert" className="text-sm text-danger">
-          Failed to load profile: {(error as Error).message}
+          {t("common.failedToLoadProfile", { message: (error as Error).message })}
         </p>
       </main>
     );
@@ -103,7 +105,7 @@ export default function ProfileSettingsPage() {
 
   return (
     <PageMain width="reading">
-      <PageHeader kicker="Settings" title="Profile Settings" />
+      <PageHeader kicker={t("settings.title")} title={t("settings.sections.profile")} />
 
       <div className="mt-lg flex items-center gap-md">
         <label className="relative flex h-16 w-16 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-lg font-medium text-muted-foreground">
@@ -126,7 +128,7 @@ export default function ProfileSettingsPage() {
             disabled={avatarUploading}
           />
         </label>
-        <p className="text-sm text-muted-foreground">Click the picture to change it.</p>
+        <p className="text-sm text-muted-foreground">{t("settings.profile.clickToChange")}</p>
       </div>
       {avatarError && (
         <p role="alert" className="mt-xs text-sm text-danger">
@@ -142,7 +144,7 @@ export default function ProfileSettingsPage() {
         }}
       >
         <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-          Email
+          {t("settings.profile.email")}
           <input
             type="email"
             value={data.email ?? ""}
@@ -151,7 +153,7 @@ export default function ProfileSettingsPage() {
           />
         </label>
         <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-          Display name
+          {t("settings.profile.displayName")}
           <input
             type="text"
             value={displayName}
@@ -160,7 +162,7 @@ export default function ProfileSettingsPage() {
           />
         </label>
         <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-          University
+          {t("settings.profile.university")}
           <input
             type="text"
             value={university}
@@ -170,14 +172,16 @@ export default function ProfileSettingsPage() {
         </label>
         {saveMutation.isError && (
           <p role="alert" className="text-sm text-danger">
-            Failed to save: {(saveMutation.error as Error).message}
+            {t("common.failedToSave", { message: (saveMutation.error as Error).message })}
           </p>
         )}
         <div className="flex items-center gap-md">
           <Button type="submit" disabled={saveMutation.isPending}>
-            {saveMutation.isPending ? "Saving..." : "Save"}
+            {saveMutation.isPending ? t("common.saving") : t("common.save")}
           </Button>
-          {saveMutation.isSuccess && <span className="text-sm text-success">Saved.</span>}
+          {saveMutation.isSuccess && (
+            <span className="text-sm text-success">{t("common.saved")}</span>
+          )}
         </div>
       </form>
     </PageMain>

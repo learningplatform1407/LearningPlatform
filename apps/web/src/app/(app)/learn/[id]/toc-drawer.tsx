@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
 export interface TocHeading {
   id: string;
@@ -33,6 +34,7 @@ export function TocDrawer({
   scopeId: string;
   currentDocumentId: string;
 }) {
+  const { t } = useI18n();
   const { data, isPending } = useQuery({
     queryKey: ["documents", scopeId],
     queryFn: () => getBrowserApiClient().listDocuments(scopeId),
@@ -44,7 +46,7 @@ export function TocDrawer({
   return (
     <nav
       data-no-swipe
-      aria-label="Table of contents"
+      aria-label={t("lesson.toc.title")}
       className="fixed top-0 bottom-0 left-0 z-[59] w-[280px] max-w-[85vw] animate-[drawer-in-left_0.25s_ease] motion-reduce:animate-none overflow-y-auto border-r border-border bg-background pt-[calc(22px+env(safe-area-inset-top,0px))] pr-3 pb-[22px] pl-3.5"
     >
       {headings.length > 0 && (
@@ -68,10 +70,10 @@ export function TocDrawer({
       )}
 
       <section>
-        <h2 className="label-caps mb-3 ml-1.5">Lessons in this chapter</h2>
-        {isPending && <p className="px-2 text-sm text-muted-foreground">Loading...</p>}
+        <h2 className="label-caps mb-3 ml-1.5">{t("lesson.toc.lessonsInChapter")}</h2>
+        {isPending && <p className="px-2 text-sm text-muted-foreground">{t("common.loading")}</p>}
         {!isPending && (!data || data.length === 0) && (
-          <p className="px-2 text-sm text-muted-foreground">No lessons.</p>
+          <p className="px-2 text-sm text-muted-foreground">{t("bank.noLessons")}</p>
         )}
         {data && data.length > 0 && (
           <ul className="flex flex-col">

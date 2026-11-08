@@ -1,5 +1,5 @@
 import { computeProfileBadges } from "@lp/api-client";
-import { formatMonthYear } from "@lp/ui";
+import { badgeText, formatMonthYear } from "@lp/ui";
 import { useQuery } from "@tanstack/react-query";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback } from "react";
@@ -12,8 +12,10 @@ import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
 import { SettingsIcon } from "@/lib/ui/icons";
 import { Dot } from "@/lib/ui/primitives";
+import { useI18n } from "@/lib/i18n";
 
 export default function ProfileScreen() {
+  const { t, language } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const { data, isPending, isError, error } = useQuery({
@@ -43,7 +45,7 @@ export default function ProfileScreen() {
   if (isPending) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text style={styles.loading}>Loading...</Text>
+        <Text style={styles.loading}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -51,12 +53,17 @@ export default function ProfileScreen() {
   if (isError) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text style={styles.error}>Failed to load profile: {(error as Error).message}</Text>
+        <Text style={styles.error}>
+          {t("common.failedToLoadProfile", { message: (error as Error).message })}
+        </Text>
       </View>
     );
   }
 
-  const badges = statsQuery.data ? computeProfileBadges(statsQuery.data) : null;
+  // Derived with English text in api-client; shown in the reader's language.
+  const badges = statsQuery.data
+    ? computeProfileBadges(statsQuery.data).map((badge) => ({ ...badge, ...badgeText(t, badge) }))
+    : null;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -72,16 +79,18 @@ export default function ProfileScreen() {
             )}
           </View>
           <View>
-            <Text style={styles.kicker}>Profile</Text>
+            <Text style={styles.kicker}>{t("profile.title")}</Text>
             <Text style={styles.name} accessibilityRole="header">
-              {data.display_name ?? data.email ?? "Unnamed"}
+              {data.display_name ?? data.email ?? t("profile.unnamed")}
             </Text>
-            <Text style={styles.joined}>Joined {formatMonthYear(data.created_at)}</Text>
+            <Text style={styles.joined}>
+              {t("profile.joined", { date: formatMonthYear(data.created_at, language) })}
+            </Text>
           </View>
         </View>
         {/* The design's round dot with the line-icon gear, as on the web --
             not the ⚙ text glyph, which each Android font draws differently. */}
-        <Dot label="Settings" onPress={() => router.push("/settings")}>
+        <Dot label={t("nav.settings")} onPress={() => router.push("/settings")}>
           <SettingsIcon color={colors.foreground} size={20} strokeWidth={1.8} />
         </Dot>
       </View>
@@ -91,42 +100,48 @@ export default function ProfileScreen() {
         onPress={() => router.push("/settings/profile")}
         accessibilityRole="button"
       >
-        <Text style={styles.editButtonText}>Edit Profile</Text>
+        <Text style={styles.editButtonText}>{t("profile.editProfile")}</Text>
       </Pressable>
 
       <View style={styles.statsSection}>
-        {statsQuery.isPending && <Text style={styles.loading}>Loading stats...</Text>}
+        {statsQuery.isPending && <Text style={styles.loading}>{t("profile.loadingStats")}</Text>}
         {statsQuery.data && (
           <>
             <View style={styles.statsGrid}>
               <StatTile
                 emphasis
-                label="Streak"
+                label={t("profile.streak")}
                 value={
                   statsQuery.data.current_streak_days > 0
-                    ? `🔥 ${statsQuery.data.current_streak_days} day streak`
-                    : "No streak yet"
+                    ? t("profile.streakDays", { count: statsQuery.data.current_streak_days })
+                    : t("profile.noStreak")
                 }
               />
               <StatTile
                 emphasis
-                label="Lessons completed"
-                value={`${statsQuery.data.lessons_completed} of ${statsQuery.data.lessons_eligible} lessons`}
+                label={t("profile.lessonsCompleted")}
+                value={t("profile.lessonsOf", {
+                  completed: statsQuery.data.lessons_completed,
+                  eligible: statsQuery.data.lessons_eligible,
+                })}
               />
               <StatTile
                 emphasis
-                label="Exams completed"
+                label={t("profile.examsCompleted")}
                 value={`${statsQuery.data.exams_completed}`}
               />
             </View>
 
             <View>
-              <Text style={styles.sectionTitle}>Accuracy & averages</Text>
+              <Text style={styles.sectionTitle}>{t("profile.accuracy")}</Text>
               <MetricBarChart
                 metrics={[
-                  { label: "Exam average", percent: statsQuery.data.exam_average_score_percent },
                   {
-                    label: "Question accuracy",
+                    label: t("profile.examAverage"),
+                    percent: statsQuery.data.exam_average_score_percent,
+                  },
+                  {
+                    label: t("profile.questionAccuracy"),
                     percent: statsQuery.data.question_accuracy_percent,
                   },
                 ]}
@@ -135,13 +150,16 @@ export default function ProfileScreen() {
 
             {badges && (
               <View>
-                <Text style={styles.sectionTitle}>Badges</Text>
+                <Text style={styles.sectionTitle}>{t("profile.badgesTitle")}</Text>
                 <View style={styles.badgeCell}>
                   {badges.map((badge) => (
                     <View key={badge.id} style={styles.badge}>
                       <View
                         accessibilityRole="summary"
-                        accessibilityLabel={`${badge.label}: ${badge.earned ? "earned" : "locked"}`}
+                        accessibilityLabel={t("profile.badgeState", {
+                          badge: badge.label,
+                          state: badge.earned ? t("profile.earned") : t("profile.locked"),
+                        })}
                         style={[
                           styles.badgeCircle,
                           badge.earned ? styles.badgeCircleEarned : styles.badgeCircleLocked,

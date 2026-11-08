@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from "r
 
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 
 /** A full-screen sheet, the shape every overlay in this app already has.
  *
@@ -35,6 +36,7 @@ export function Overlay({
   side?: "left" | "right";
   children: ReactNode;
 }) {
+  const { t } = useI18n();
   const overlayStyles = useOverlayStyles();
   // 85% of the screen, at most 360 -- computed, so it doesn't depend on
   // percentage widths resolving inside a transparent Modal.
@@ -52,7 +54,7 @@ export function Overlay({
       <View style={overlayStyles.header}>
         <Text style={overlayStyles.title}>{title}</Text>
         <Pressable onPress={onClose} accessibilityRole="button">
-          <Text style={overlayStyles.close}>Close</Text>
+          <Text style={overlayStyles.close}>{t("common.close")}</Text>
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={overlayStyles.content}>{children}</ScrollView>
@@ -76,7 +78,7 @@ export function Overlay({
           style={overlayStyles.scrim}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel={`Close ${title.toLowerCase()}`}
+          accessibilityLabel={t("common.closeNamed", { name: title.toLowerCase() })}
         />
       </View>
     </Modal>

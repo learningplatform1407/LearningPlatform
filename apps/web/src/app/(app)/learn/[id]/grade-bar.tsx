@@ -5,14 +5,15 @@ import { useEffect, useRef } from "react";
 import type { NextIntervals, ReviewRating } from "@lp/contracts";
 import { describeInterval, formatInterval } from "@lp/ui";
 
+import { useI18n } from "@/lib/i18n";
+
 const GRADES = [
-  { rating: "again", label: "Again", border: "border-again", key: "1" },
-  { rating: "hard", label: "Hard", border: "border-hard", key: "2" },
-  { rating: "good", label: "Good", border: "border-good", key: "3" },
-  { rating: "easy", label: "Easy", border: "border-easy", key: "4" },
+  { rating: "again", border: "border-again", key: "1" },
+  { rating: "hard", border: "border-hard", key: "2" },
+  { rating: "good", border: "border-good", key: "3" },
+  { rating: "easy", border: "border-easy", key: "4" },
 ] as const satisfies readonly {
   rating: ReviewRating;
-  label: string;
   border: string;
   key: string;
 }[];
@@ -24,15 +25,16 @@ const PAPER_BUTTON =
 
 /** The wide "Show" button that comes before grading. */
 export function ShowButton({ onShow }: { onShow: () => void }) {
+  const { t } = useI18n();
   return (
     <button
       type="button"
       onClick={onShow}
       className={`${PAPER_BUTTON} min-w-[190px] border-foreground min-[721px]:min-w-[252px]`}
     >
-      Show
+      {t("lesson.show")}
       <small className="text-xs font-semibold text-paper-muted-foreground" aria-hidden="true">
-        Space
+        {t("lesson.space")}
       </small>
     </button>
   );
@@ -52,26 +54,33 @@ export function GradeButtons({
   intervals?: NextIntervals;
   disabled?: boolean;
 }) {
+  const { t, language } = useI18n();
   return (
     <div className="flex gap-1.5 min-[721px]:gap-2">
       {GRADES.map((grade) => {
         const days = intervals?.[grade.rating];
+        const label = t(`lesson.grades.${grade.rating}`);
         return (
           <button
             key={grade.rating}
             type="button"
             disabled={disabled}
             onClick={() => onGrade(grade.rating)}
-            title={`${grade.label} (${grade.key})`}
+            title={`${label} (${grade.key})`}
             aria-keyshortcuts={grade.key}
             aria-label={
-              days === undefined ? grade.label : `${grade.label}, ${describeInterval(days)}`
+              days === undefined
+                ? label
+                : t("lesson.gradeWithInterval", {
+                    grade: label,
+                    interval: describeInterval(days, language),
+                  })
             }
             className={`${PAPER_BUTTON} ${grade.border}`}
           >
-            {grade.label}
+            {label}
             <small className="text-xs font-semibold text-paper-muted-foreground" aria-hidden="true">
-              {days === undefined ? grade.key : formatInterval(days)}
+              {days === undefined ? grade.key : formatInterval(days, language)}
             </small>
           </button>
         );

@@ -1,17 +1,18 @@
 import { Slot, router, usePathname } from "expo-router";
 import { Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 
+import { useI18n } from "@/lib/i18n";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 
 const SECTIONS = [
-  { href: "/settings/account", label: "Account" },
-  { href: "/settings/privacy", label: "Privacy" },
-  { href: "/settings/billing", label: "Subscription & Billing" },
-  { href: "/settings/notifications", label: "Notifications" },
-  { href: "/settings/languages", label: "Languages" },
-  { href: "/settings/appearance", label: "Appearance" },
-  { href: "/settings/profile", label: "Profile Settings" },
+  { href: "/settings/account", label: "settings.sections.account" },
+  { href: "/settings/privacy", label: "settings.sections.privacy" },
+  { href: "/settings/billing", label: "settings.sections.billing" },
+  { href: "/settings/notifications", label: "settings.sections.notifications" },
+  { href: "/settings/languages", label: "settings.sections.languages" },
+  { href: "/settings/appearance", label: "settings.sections.appearance" },
+  { href: "/settings/profile", label: "settings.sections.profile" },
 ] as const;
 
 /** Each settings section is its own route (not a tab over client state), the
@@ -22,6 +23,7 @@ const SECTIONS = [
  * (see learn/_layout.tsx for why that matters). */
 export default function SettingsLayout() {
   const styles = useStyles();
+  const { t } = useI18n();
   const pathname = usePathname();
   // About two fifths of a phone, so "Subscription & Billing" fits on two
   // lines at the same reading size as the section beside it.
@@ -34,7 +36,7 @@ export default function SettingsLayout() {
         style={[styles.nav, { width: navWidth }]}
         contentContainerStyle={styles.navContent}
       >
-        <Text style={styles.navTitle}>Settings</Text>
+        <Text style={styles.navTitle}>{t("settings.title")}</Text>
         {SECTIONS.map((section) => {
           const active = pathname === section.href;
           return (
@@ -45,7 +47,7 @@ export default function SettingsLayout() {
               style={[styles.navItem, active && styles.navItemActive]}
             >
               <Text style={[styles.navItemText, active && styles.navItemTextActive]}>
-                {section.label}
+                {t(section.label)}
               </Text>
             </Pressable>
           );

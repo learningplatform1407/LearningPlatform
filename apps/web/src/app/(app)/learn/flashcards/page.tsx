@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/page-header";
 import { Tag } from "@/components/chip";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
 // Derived from the response type rather than exporting four more schemas
 // from @lp/validation — the tree only ever arrives as part of the whole.
@@ -22,10 +23,11 @@ type SummaryLesson = SummarySubChapter["lessons"][number];
  * opened yet is not overdue, and conflating them would make a freshly
  * imported deck look like a backlog. */
 function CountBadges({ dueCount, newCount }: { dueCount: number; newCount: number }) {
+  const { t } = useI18n();
   return (
     <span className="flex shrink-0 items-center gap-xs">
-      <Tag active={dueCount > 0}>{dueCount} due</Tag>
-      <Tag>{newCount} new</Tag>
+      <Tag active={dueCount > 0}>{t("study.due", { count: dueCount })}</Tag>
+      <Tag>{t("study.new", { count: newCount })}</Tag>
     </span>
   );
 }
@@ -45,13 +47,14 @@ function LessonRow({ lesson }: { lesson: SummaryLesson }) {
 }
 
 function SubChapterRow({ subChapter }: { subChapter: SummarySubChapter }) {
+  const { t } = useI18n();
   return (
     <ExpandableRow
       title={subChapter.title}
       badge={<CountBadges dueCount={subChapter.due_count} newCount={subChapter.new_count} />}
     >
       {subChapter.lessons.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No lessons.</p>
+        <p className="text-sm text-muted-foreground">{t("bank.noLessons")}</p>
       ) : (
         <ul>
           {subChapter.lessons.map((lesson) => (
@@ -64,13 +67,14 @@ function SubChapterRow({ subChapter }: { subChapter: SummarySubChapter }) {
 }
 
 function ChapterRow({ chapter }: { chapter: SummaryChapter }) {
+  const { t } = useI18n();
   return (
     <ExpandableRow
       title={chapter.title}
       badge={<CountBadges dueCount={chapter.due_count} newCount={chapter.new_count} />}
     >
       {chapter.sub_chapters.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No sub-chapters.</p>
+        <p className="text-sm text-muted-foreground">{t("bank.noSubChapters")}</p>
       ) : (
         <ul>
           {chapter.sub_chapters.map((subChapter) => (
@@ -83,13 +87,14 @@ function ChapterRow({ chapter }: { chapter: SummaryChapter }) {
 }
 
 function BookRow({ book }: { book: SummaryBook }) {
+  const { t } = useI18n();
   return (
     <ExpandableRow
       title={book.title}
       badge={<CountBadges dueCount={book.due_count} newCount={book.new_count} />}
     >
       {book.chapters.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No chapters.</p>
+        <p className="text-sm text-muted-foreground">{t("bank.noChapters")}</p>
       ) : (
         <ul>
           {book.chapters.map((chapter) => (
@@ -102,6 +107,7 @@ function BookRow({ book }: { book: SummaryBook }) {
 }
 
 export default function FlashcardsPage() {
+  const { t } = useI18n();
   const api = getBrowserApiClient();
   const { data, isPending, isError } = useQuery({
     // Under the "flashcards" namespace on purpose: the lesson runner
@@ -116,7 +122,7 @@ export default function FlashcardsPage() {
   if (isPending) {
     return (
       <PageMain width="reading">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </PageMain>
     );
   }
@@ -125,7 +131,7 @@ export default function FlashcardsPage() {
     return (
       <PageMain width="reading">
         <p role="alert" className="text-sm text-danger">
-          Failed to load your flashcard summary.
+          {t("study.flashcardsLoadFailed")}
         </p>
       </PageMain>
     );
@@ -144,13 +150,13 @@ export default function FlashcardsPage() {
 
   return (
     <PageMain width="reading">
-      <PageHeader kicker="Learn" title="Flashcards" />
+      <PageHeader kicker={t("nav.learn")} title={t("study.flashcards")} />
       <p className="text-toc text-muted-foreground">
-        {totalDue} {totalDue === 1 ? "card" : "cards"} due today · {totalNew} not studied yet.
+        {t("study.cardsDueToday", { count: totalDue, new: totalNew })}
       </p>
 
       {data.books.length === 0 && data.uncategorized_lessons.length === 0 ? (
-        <p className="mt-md text-sm text-muted-foreground">No lessons yet.</p>
+        <p className="mt-md text-sm text-muted-foreground">{t("book.noLessons")}</p>
       ) : (
         <ul className="mt-lg border-y border-border">
           {data.books.map((book) => (
@@ -158,7 +164,7 @@ export default function FlashcardsPage() {
           ))}
           {data.uncategorized_lessons.length > 0 && (
             <ExpandableRow
-              title="Uncategorized"
+              title={t("library.uncategorized")}
               badge={<CountBadges dueCount={uncategorizedDue} newCount={uncategorizedNew} />}
             >
               <ul>

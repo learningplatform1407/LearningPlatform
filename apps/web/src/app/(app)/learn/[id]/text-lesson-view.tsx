@@ -7,6 +7,7 @@ import { highlightIndex } from "@lp/ui";
 
 import { NoteIcon } from "@/components/icons";
 import { spliceAnnotations } from "@/lib/text-offset";
+import { useI18n } from "@/lib/i18n";
 
 import { ExtractedImage } from "./extracted-image";
 import { wordRanges, type BlockRange, type LessonTool, type WordRange } from "./lesson-tools";
@@ -320,10 +321,11 @@ function Paragraph({
 
 /** The design's inline note bubble: accent circle, white note glyph. */
 export function NoteBubble({ onClick }: { onClick: () => void }) {
+  const { t } = useI18n();
   return (
     <button
       type="button"
-      aria-label="Open note"
+      aria-label={t("lesson.panel.openNote")}
       // Stops a marking tool's drag from starting on the bubble itself.
       onPointerDown={(event) => event.stopPropagation()}
       onClick={onClick}

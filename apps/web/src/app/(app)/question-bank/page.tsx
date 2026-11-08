@@ -12,15 +12,17 @@ import { PageMain } from "@/components/page-main";
 import { QuestionBankList } from "@/components/question-bank-list";
 import { SegmentedSwitch } from "@/components/segmented-switch";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
 function ProgressBadge({ answered, total }: { answered: number; total: number }) {
+  const { t } = useI18n();
   if (total === 0) {
-    return <span className="text-xs text-muted-foreground">no questions</span>;
+    return <span className="text-xs text-muted-foreground">{t("bank.noQuestions")}</span>;
   }
   return (
     <span
       className={`shrink-0 text-caption font-bold tabular-nums ${answered === total ? "text-good" : "text-muted-foreground"}`}
-      aria-label={`${answered} of ${total} answered`}
+      aria-label={t("bank.answeredOf", { answered, total })}
     >
       {answered}/{total}
     </span>
@@ -28,6 +30,7 @@ function ProgressBadge({ answered, total }: { answered: number; total: number })
 }
 
 function LessonRow({ lesson }: { lesson: BankTreeLesson }) {
+  const { t } = useI18n();
   return (
     <ExpandableRow
       title={lesson.title}
@@ -36,15 +39,16 @@ function LessonRow({ lesson }: { lesson: BankTreeLesson }) {
       <BankStatsLine counts={lesson} />
       <QuestionBankList
         filter={{ documentIds: [lesson.id] }}
-        emptyMessage="No questions for this lesson yet."
+        emptyMessage={t("bank.noLessonQuestions")}
       />
     </ExpandableRow>
   );
 }
 
 function LessonList({ lessons }: { lessons: BankTreeLesson[] }) {
+  const { t } = useI18n();
   if (lessons.length === 0) {
-    return <p className="text-sm text-muted-foreground">No lessons.</p>;
+    return <p className="text-sm text-muted-foreground">{t("bank.noLessons")}</p>;
   }
   return (
     <ul>
@@ -70,6 +74,7 @@ function SubChapterRow({ subChapter }: { subChapter: BankTreeSubChapter }) {
 }
 
 function ChapterRow({ chapter }: { chapter: BankTreeChapter }) {
+  const { t } = useI18n();
   return (
     <ExpandableRow
       title={chapter.title}
@@ -77,7 +82,7 @@ function ChapterRow({ chapter }: { chapter: BankTreeChapter }) {
     >
       <BankStatsLine counts={chapter} />
       {chapter.sub_chapters.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No sub-chapters.</p>
+        <p className="text-sm text-muted-foreground">{t("bank.noSubChapters")}</p>
       ) : (
         <ul>
           {chapter.sub_chapters.map((subChapter) => (
@@ -89,13 +94,11 @@ function ChapterRow({ chapter }: { chapter: BankTreeChapter }) {
   );
 }
 
-const VIEWS = [
-  { value: "all", label: "All questions" },
-  { value: "favourites", label: "Favourites" },
-] as const;
+const VIEWS = ["all", "favourites"] as const;
 
 export default function QuestionBankPage() {
-  const [view, setView] = useState<(typeof VIEWS)[number]["value"]>("all");
+  const { t } = useI18n();
+  const [view, setView] = useState<(typeof VIEWS)[number]>("all");
   const api = getBrowserApiClient();
   const tree = useQuery({
     queryKey: ["question-bank-tree"],
@@ -124,15 +127,15 @@ export default function QuestionBankPage() {
 
   return (
     <PageMain width="reading">
-      <PageHeader kicker="Learn" title="Question Bank" />
-      <p className="text-toc text-muted-foreground">
-        The same structure as your lessons, one level deeper. Answer anything to check yourself —
-        attempts are recorded, and you can retry.
-      </p>
+      <PageHeader kicker={t("nav.learn")} title={t("bank.title")} />
+      <p className="text-toc text-muted-foreground">{t("bank.intro")}</p>
 
       <SegmentedSwitch
-        label="Which questions"
-        options={VIEWS}
+        label={t("bank.whichQuestions")}
+        options={VIEWS.map((value) => ({
+          value,
+          label: value === "all" ? t("bank.all") : t("bank.favourites"),
+        }))}
         value={view}
         onChange={setView}
         className="mt-md"
@@ -140,23 +143,22 @@ export default function QuestionBankPage() {
 
       {view === "favourites" ? (
         <div className="mt-lg">
-          <QuestionBankList
-            favourites
-            emptyMessage="No favourites yet. Tap ♡ on any question to keep it here."
-          />
+          <QuestionBankList favourites emptyMessage={t("bank.noFavourites")} />
         </div>
       ) : (
         <>
-          {tree.isPending && <p className="mt-lg text-sm text-muted-foreground">Loading...</p>}
+          {tree.isPending && (
+            <p className="mt-lg text-sm text-muted-foreground">{t("common.loading")}</p>
+          )}
           {tree.isError && (
             <p role="alert" className="mt-lg text-sm text-danger">
-              Failed to load the question bank.
+              {t("bank.loadFailed")}
             </p>
           )}
 
           {tree.data && overall && (
             <div className="mt-lg w-full border-t border-border pt-md">
-              <h2 className="label-caps">Overall</h2>
+              <h2 className="label-caps">{t("bank.overall")}</h2>
               <p className="mt-xs text-toc font-semibold text-muted-foreground">
                 {overall.answered_count}/{overall.question_count} answered
               </p>
@@ -167,7 +169,7 @@ export default function QuestionBankPage() {
           {tree.data && (
             <div className="mt-lg">
               {isEmpty ? (
-                <p className="text-sm text-muted-foreground">The question bank is empty.</p>
+                <p className="text-sm text-muted-foreground">{t("bank.empty")}</p>
               ) : (
                 <ul className="border-y border-border">
                   {tree.data.books.map((book) => (
@@ -180,7 +182,7 @@ export default function QuestionBankPage() {
                     >
                       <BankStatsLine counts={book} />
                       {book.chapters.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No chapters.</p>
+                        <p className="text-sm text-muted-foreground">{t("bank.noChapters")}</p>
                       ) : (
                         <ul>
                           {book.chapters.map((chapter) => (
@@ -193,7 +195,7 @@ export default function QuestionBankPage() {
 
                   {tree.data.uncategorized_lessons.length > 0 && (
                     <ExpandableRow
-                      title="Uncategorized lessons"
+                      title={t("bank.uncategorizedLessons")}
                       badge={
                         <ProgressBadge
                           answered={tree.data.uncategorized_lessons.reduce(
@@ -217,7 +219,7 @@ export default function QuestionBankPage() {
                   be unreachable from the bank entirely. */}
                   {tree.data.unassigned_question_count > 0 && unassignedCounts && (
                     <ExpandableRow
-                      title="Questions not linked to a lesson"
+                      title={t("bank.unassigned")}
                       badge={
                         <ProgressBadge
                           answered={tree.data.unassigned_answered_count}
@@ -226,7 +228,7 @@ export default function QuestionBankPage() {
                       }
                     >
                       <BankStatsLine counts={unassignedCounts} />
-                      <QuestionBankList unassigned emptyMessage="Nothing here." />
+                      <QuestionBankList unassigned emptyMessage={t("bank.nothingHere")} />
                     </ExpandableRow>
                   )}
                 </ul>

@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 
 import { Button } from "@/components/button";
+import { useI18n } from "@/lib/i18n";
 
 import { changePassword, type ChangePasswordState } from "./actions";
 
@@ -11,21 +12,22 @@ const initialState: ChangePasswordState = { error: null };
 const inputClass = "field";
 
 export function ChangePasswordForm() {
+  const { t } = useI18n();
   const [state, formAction, pending] = useActionState(changePassword, initialState);
 
   return (
     <section className="mt-xl max-w-[32rem]">
-      <h2 className="text-lg font-semibold text-foreground">Change password</h2>
+      <h2 className="text-lg font-semibold text-foreground">{t("settings.password.title")}</h2>
       <p className="mt-xs text-sm text-muted-foreground">
-        You&apos;ll be signed out on every device, including this one. Forgotten it instead?{" "}
+        {t("settings.password.intro")}{" "}
         <a href="/forgot-password" className="text-accent underline underline-offset-2">
-          Reset it by email
+          {t("settings.password.resetByEmail")}
         </a>
         .
       </p>
       <form action={formAction} className="mt-md flex flex-col gap-md">
         <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-          Current password
+          {t("settings.password.current")}
           <input
             type="password"
             name="current_password"
@@ -35,7 +37,7 @@ export function ChangePasswordForm() {
           />
         </label>
         <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-          New password
+          {t("settings.password.new")}
           <input
             type="password"
             name="password"
@@ -45,7 +47,7 @@ export function ChangePasswordForm() {
           />
         </label>
         <label className="flex flex-col gap-1.5 text-toc font-semibold text-foreground">
-          Confirm new password
+          {t("settings.password.confirm")}
           <input
             type="password"
             name="confirm_password"
@@ -63,7 +65,7 @@ export function ChangePasswordForm() {
             the confirmation. This component is unmounted by then. */}
         {/* w-44: the same width as the Account page's other two buttons. */}
         <Button type="submit" className="w-44 self-start" disabled={pending}>
-          {pending ? "Saving..." : "Change password"}
+          {pending ? t("common.saving") : t("settings.password.submit")}
         </Button>
       </form>
     </section>

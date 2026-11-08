@@ -1,5 +1,6 @@
 import type { QuizQuestionResult, QuizSession, QuizSessionQuestion } from "@lp/api-client";
 import { ApiClientError } from "@lp/api-client";
+import { outcomeLabel, quizStatusLabel, revealModeLabel, type Translator } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useEffectEvent, useState } from "react";
 import {
@@ -19,13 +20,14 @@ import { ExpandableRow } from "@/lib/expandable-row";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
+import { useI18n } from "@/lib/i18n";
 
-function describeError(err: unknown): string {
+function describeError(t: Translator["t"], err: unknown): string {
   if (err instanceof ApiClientError) {
     const body = err.body as { message?: string } | null;
-    return body?.message ?? `Request failed with status ${err.status}`;
+    return body?.message ?? t("questions.requestFailed", { status: err.status });
   }
-  return err instanceof Error ? err.message : "Something went wrong.";
+  return err instanceof Error ? err.message : t("admin.import.somethingWrong");
 }
 
 function formatSeconds(total: number): string {
@@ -101,6 +103,7 @@ function TopicPicker({
   topics: TopicSelection;
   onChange: (next: TopicSelection) => void;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const tree = useQuery({
     queryKey: ["question-bank-tree"],
@@ -113,7 +116,7 @@ function TopicPicker({
 
   return (
     <View style={styles.field}>
-      <Text style={styles.label}>Topics</Text>
+      <Text style={styles.label}>{t("exams.topics")}</Text>
       <View style={styles.topicsHeaderRow}>
         <Pressable
           style={[styles.pillButton, everything && styles.pillButtonActive]}
@@ -121,19 +124,21 @@ function TopicPicker({
           accessibilityRole="button"
         >
           <Text style={[styles.pillButtonText, everything && styles.pillButtonTextActive]}>
-            All topics
+            {t("exams.allTopics")}
           </Text>
         </Pressable>
-        {!everything && <Text style={styles.hint}>{selectedCount} selected</Text>}
+        {!everything && (
+          <Text style={styles.hint}>{t("exams.selected", { count: selectedCount })}</Text>
+        )}
       </View>
 
-      {tree.isPending && <Text style={styles.hint}>Loading topics...</Text>}
+      {tree.isPending && <Text style={styles.hint}>{t("exams.loadingTopics")}</Text>}
       {tree.data && (
         <View style={styles.list}>
           {tree.data.books.map((book) => (
             <ExpandableRow key={book.id} title={book.title}>
               {book.chapters.length === 0 ? (
-                <Text style={styles.hint}>No chapters.</Text>
+                <Text style={styles.hint}>{t("bank.noChapters")}</Text>
               ) : (
                 <View style={styles.list}>
                   {book.chapters.map((chapter) => (
@@ -142,7 +147,7 @@ function TopicPicker({
                       title={chapter.title}
                       badge={
                         <CheckboxRow
-                          label="whole chapter"
+                          label={t("exams.wholeChapter")}
                           checked={topics.chapterIds.includes(chapter.id)}
                           onToggle={() =>
                             onChange({
@@ -160,7 +165,7 @@ function TopicPicker({
                             title={subChapter.title}
                             badge={
                               <CheckboxRow
-                                label="all"
+                                label={t("exams.all")}
                                 checked={topics.subChapterIds.includes(subChapter.id)}
                                 onToggle={() =>
                                   onChange({
@@ -202,6 +207,7 @@ function TopicPicker({
 }
 
 function StartForm({ onStarted }: { onStarted: () => void }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const api = getApiClient();
@@ -252,7 +258,7 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
       }),
     onMutate: () => setError(null),
     onSuccess: onStarted,
-    onError: (err) => setError(describeError(err)),
+    onError: (err) => setError(describeError(t, err)),
   });
 
   const startDisabled = start.isPending || availableCount === 0 || countInvalid || durationInvalid;
@@ -262,7 +268,7 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
       <TopicPicker topics={topics} onChange={setTopics} />
 
       <View style={styles.field}>
-        <Text style={styles.label}>Tags — none selected means no tag filter</Text>
+        <Text style={styles.label}>{t("exams.tagsLegend")}</Text>
         <View style={styles.tagRow}>
           {(tags.data ?? []).map((tag) => (
             <Pressable
@@ -280,23 +286,21 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
             </Pressable>
           ))}
         </View>
-        {tagIds.length > 1 && (
-          <Text style={styles.hint}>
-            Tags narrow the pool — a question must carry every tag you select.
-          </Text>
-        )}
+        {tagIds.length > 1 && <Text style={styles.hint}>{t("exams.tagsNarrow")}</Text>}
         {availableCount !== undefined && (
           <Text style={styles.hint}>
             {availableCount === 0
-              ? "No published questions match this filter."
-              : `${availableCount} question${availableCount === 1 ? "" : "s"} available` +
-                (parsedCount > availableCount ? ` — you'll get all ${availableCount}` : "")}
+              ? t("exams.noneAvailable")
+              : t("exams.available", { count: availableCount }) +
+                (parsedCount > availableCount
+                  ? t("exams.youGetAll", { count: availableCount })
+                  : "")}
           </Text>
         )}
       </View>
 
       <View style={styles.field}>
-        <Text style={styles.label}>Number of questions</Text>
+        <Text style={styles.label}>{t("exams.questionCount")}</Text>
         <TextInput
           style={styles.input}
           keyboardType="number-pad"
@@ -305,7 +309,7 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
         />
         {countInvalid && (
           <Text style={styles.error}>
-            Between {MIN_QUESTIONS} and {MAX_QUESTIONS} questions.
+            {t("exams.questionRange", { min: MIN_QUESTIONS, max: MAX_QUESTIONS })}
           </Text>
         )}
       </View>
@@ -316,12 +320,12 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
         accessibilityRole="switch"
         accessibilityState={{ checked: timed }}
       >
-        <Text style={styles.label}>Timed</Text>
+        <Text style={styles.label}>{t("exams.timed")}</Text>
         <Switch value={timed} onValueChange={setTimed} />
       </Pressable>
       {timed && (
         <View style={styles.field}>
-          <Text style={styles.label}>Duration (minutes)</Text>
+          <Text style={styles.label}>{t("exams.duration")}</Text>
           <TextInput
             style={styles.input}
             keyboardType="number-pad"
@@ -330,14 +334,14 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
           />
           {durationInvalid && (
             <Text style={styles.error}>
-              Between {MIN_MINUTES} and {MAX_MINUTES} minutes.
+              {t("exams.minuteRange", { min: MIN_MINUTES, max: MAX_MINUTES })}
             </Text>
           )}
         </View>
       )}
 
       <View style={styles.field}>
-        <Text style={styles.label}>Reveal mode</Text>
+        <Text style={styles.label}>{t("exams.revealMode")}</Text>
         <View style={styles.segmented}>
           <Pressable
             style={[styles.segment, revealMode === "immediate" && styles.segmentActive]}
@@ -347,7 +351,7 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
             <Text
               style={[styles.segmentText, revealMode === "immediate" && styles.segmentTextActive]}
             >
-              Immediate
+              {t("exams.immediate")}
             </Text>
           </Pressable>
           <Pressable
@@ -358,14 +362,12 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
             <Text
               style={[styles.segmentText, revealMode === "on_finish" && styles.segmentTextActive]}
             >
-              On finish
+              {t("exams.onFinish")}
             </Text>
           </Pressable>
         </View>
         <Text style={styles.hint}>
-          {revealMode === "immediate"
-            ? "See the answer after each question."
-            : "See results only at the end."}
+          {revealMode === "immediate" ? t("exams.immediateHint") : t("exams.onFinishHint")}
         </Text>
       </View>
 
@@ -380,7 +382,7 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
         {start.isPending ? (
           <ActivityIndicator color={colors.primaryForeground} />
         ) : (
-          <Text style={styles.buttonPrimaryText}>Start quiz</Text>
+          <Text style={styles.buttonPrimaryText}>{t("exams.start")}</Text>
         )}
       </Pressable>
     </View>
@@ -402,6 +404,7 @@ function QuestionCard({
   onAnswer: (position: number, selected: string[]) => void;
   reveal: QuizQuestionResult | undefined;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const [selected, setSelected] = useState<string[]>(question.selected_option_ids ?? []);
   const answered = question.answered_at !== null || reveal !== undefined;
@@ -454,8 +457,11 @@ function QuestionCard({
         // rationales -- those only come back from the answer call itself
         // and from /results once the quiz is over.
         <Text style={styles.hint}>
-          Answered — {question.outcome} ({question.points_awarded}/{question.points_possible}{" "}
-          points)
+          {t("exams.answeredLine", {
+            outcome: outcomeLabel(t, question.outcome),
+            awarded: question.points_awarded ?? 0,
+            possible: question.points_possible ?? 0,
+          })}
         </Text>
       ) : (
         <Pressable
@@ -465,7 +471,11 @@ function QuestionCard({
           accessibilityRole="button"
         >
           <Text style={styles.buttonText}>
-            {!answered ? "Save answer" : changed ? "Update answer" : "Answer saved ✓"}
+            {!answered
+              ? t("exams.saveAnswer")
+              : changed
+                ? t("exams.updateAnswer")
+                : t("exams.answerSaved")}
           </Text>
         </Pressable>
       )}
@@ -474,6 +484,7 @@ function QuestionCard({
 }
 
 function Runner({ session, onFinished }: { session: QuizSession; onFinished: () => void }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const api = getApiClient();
@@ -539,35 +550,35 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
       }
       refetchSession();
     },
-    onError: (err) => setError(describeError(err)),
+    onError: (err) => setError(describeError(t, err)),
   });
 
   const pause = useMutation({
     mutationFn: () => api.pauseQuizSession(session.id),
     onMutate: () => setError(null),
     onSuccess: refetchSession,
-    onError: (err) => setError(describeError(err)),
+    onError: (err) => setError(describeError(t, err)),
   });
 
   const resume = useMutation({
     mutationFn: () => api.resumeQuizSession(session.id),
     onMutate: () => setError(null),
     onSuccess: refetchSession,
-    onError: (err) => setError(describeError(err)),
+    onError: (err) => setError(describeError(t, err)),
   });
 
   const cancel = useMutation({
     mutationFn: () => api.cancelQuizSession(session.id),
     onMutate: () => setError(null),
     onSuccess: onFinished,
-    onError: (err) => setError(describeError(err)),
+    onError: (err) => setError(describeError(t, err)),
   });
 
   const submit = useMutation({
     mutationFn: () => api.submitQuizSession(session.id),
     onMutate: () => setError(null),
     onSuccess: onFinished,
-    onError: (err) => setError(describeError(err)),
+    onError: (err) => setError(describeError(t, err)),
   });
 
   const isPaused = session.status === "paused";
@@ -579,20 +590,16 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
       submit.mutate();
       return;
     }
-    Alert.alert(
-      "Submit the quiz?",
-      `${unanswered} question${unanswered === 1 ? " is" : "s are"} not answered and will score 0.`,
-      [
-        { text: "Keep going", style: "cancel" },
-        { text: "Submit", onPress: () => submit.mutate() },
-      ],
-    );
+    Alert.alert(t("exams.submitTitle"), t("exams.unansweredWarning", { count: unanswered }), [
+      { text: t("exams.keepGoing"), style: "cancel" },
+      { text: t("exams.submit"), onPress: () => submit.mutate() },
+    ]);
   }
 
   function confirmCancel() {
-    Alert.alert("Cancel this attempt?", "It cannot be resumed.", [
-      { text: "Keep going", style: "cancel" },
-      { text: "Cancel attempt", style: "destructive", onPress: () => cancel.mutate() },
+    Alert.alert(t("exams.confirmCancelTitle"), t("exams.cannotResume"), [
+      { text: t("exams.keepGoing"), style: "cancel" },
+      { text: t("exams.cancelAttempt"), style: "destructive", onPress: () => cancel.mutate() },
     ]);
   }
 
@@ -600,8 +607,8 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
     <View style={styles.form}>
       <View style={styles.timerRow}>
         <Text style={styles.timerText}>
-          {remaining !== null ? formatSeconds(remaining) : "Untimed"}
-          {isPaused && " (paused)"} · {session.reveal_mode}
+          {remaining !== null ? formatSeconds(remaining) : t("exams.untimed")}
+          {isPaused && t("exams.paused")} · {revealModeLabel(t, session.reveal_mode)}
         </Text>
         <View style={styles.timerActions}>
           {isPaused ? (
@@ -610,7 +617,7 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
               onPress={() => resume.mutate()}
               accessibilityRole="button"
             >
-              <Text style={styles.buttonText}>Resume</Text>
+              <Text style={styles.buttonText}>{t("exams.resume")}</Text>
             </Pressable>
           ) : (
             <Pressable
@@ -618,18 +625,18 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
               onPress={() => pause.mutate()}
               accessibilityRole="button"
             >
-              <Text style={styles.buttonText}>Pause</Text>
+              <Text style={styles.buttonText}>{t("exams.pause")}</Text>
             </Pressable>
           )}
           <Pressable style={styles.button} onPress={confirmCancel} accessibilityRole="button">
-            <Text style={styles.buttonText}>Cancel</Text>
+            <Text style={styles.buttonText}>{t("common.cancel")}</Text>
           </Pressable>
         </View>
       </View>
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      {isPaused && <Text style={styles.hint}>Paused — resume to see the questions again.</Text>}
+      {isPaused && <Text style={styles.hint}>{t("exams.pausedHint")}</Text>}
       {/* Hidden, not unmounted, while paused: ticks not saved yet (on_finish)
           would otherwise be lost. The server still refuses answers then. */}
       <View style={[styles.list, isPaused && styles.hidden]}>
@@ -657,7 +664,7 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
         {submit.isPending ? (
           <ActivityIndicator color={colors.primaryForeground} />
         ) : (
-          <Text style={styles.buttonPrimaryText}>Submit quiz</Text>
+          <Text style={styles.buttonPrimaryText}>{t("exams.submitQuiz")}</Text>
         )}
       </Pressable>
     </View>
@@ -667,6 +674,7 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
 // --- results ---------------------------------------------------------------
 
 function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const api = getApiClient();
   const results = useQuery({
@@ -675,10 +683,10 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
   });
 
   if (results.isPending) {
-    return <Text style={styles.hint}>Loading results...</Text>;
+    return <Text style={styles.hint}>{t("exams.loadingResults")}</Text>;
   }
   if (results.isError) {
-    return <Text style={styles.error}>{describeError(results.error)}</Text>;
+    return <Text style={styles.error}>{describeError(t, results.error)}</Text>;
   }
 
   const data = results.data;
@@ -686,13 +694,16 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
     <View style={styles.form}>
       <Text style={styles.resultsTitle}>
         {data.status === "cancelled"
-          ? "Attempt cancelled"
-          : `${data.points_awarded ?? 0} / ${data.points_possible ?? 0} points`}
+          ? t("exams.attemptCancelled")
+          : t("exams.score", {
+              awarded: data.points_awarded ?? 0,
+              possible: data.points_possible ?? 0,
+            })}
       </Text>
       {data.questions.map((question) => (
         <View key={question.position} style={styles.card}>
           <Text style={styles.prompt}>
-            {question.position + 1}. {question.prompt} — {question.outcome} (
+            {question.position + 1}. {question.prompt} — {outcomeLabel(t, question.outcome)} (
             {question.points_awarded}/{question.points_possible})
           </Text>
           <View style={styles.optionResultList}>
@@ -708,7 +719,7 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
         onPress={onDone}
         accessibilityRole="button"
       >
-        <Text style={styles.buttonPrimaryText}>Back to quizzes</Text>
+        <Text style={styles.buttonPrimaryText}>{t("exams.backToQuizzes")}</Text>
       </Pressable>
     </View>
   );
@@ -717,6 +728,7 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
 // --- history -----------------------------------------------------------------
 
 function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const api = getApiClient();
   const history = useQuery({
@@ -728,7 +740,7 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
 
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionHeading}>Recent attempts</Text>
+      <Text style={styles.sectionHeading}>{t("exams.recentAttempts")}</Text>
       <View style={styles.list}>
         {history.data.map((item) => (
           <Pressable
@@ -738,8 +750,12 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
             accessibilityRole="button"
           >
             <Text style={styles.optionText}>
-              {item.status} · {item.points_awarded ?? "—"}/{item.points_possible ?? "—"} points ·{" "}
-              {item.question_count} questions
+              {t("exams.historyRow", {
+                status: quizStatusLabel(t, item.status),
+                awarded: item.points_awarded ?? "—",
+                possible: item.points_possible ?? "—",
+                questions: t("questions.count", { count: item.question_count }),
+              })}
             </Text>
           </Pressable>
         ))}
@@ -751,6 +767,7 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
 // --- screen ----------------------------------------------------------------
 
 export default function ExamsScreen() {
+  const { t } = useI18n();
   const styles = useStyles();
   const api = getApiClient();
   const queryClient = useQueryClient();
@@ -776,10 +793,8 @@ export default function ExamsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <ScreenHeader kicker="Practice" title="Exam Hub" />
-      <Text style={styles.hint}>
-        Build a custom quiz from any topics and tags. Scheduled mock exams will appear here too.
-      </Text>
+      <ScreenHeader kicker={t("exams.kicker")} title={t("exams.title")} />
+      <Text style={styles.hint}>{t("exams.intro")}</Text>
 
       {viewingResultsFor ? (
         <Results
@@ -790,7 +805,7 @@ export default function ExamsScreen() {
           }}
         />
       ) : current.isPending ? (
-        <Text style={styles.hint}>Loading...</Text>
+        <Text style={styles.hint}>{t("common.loading")}</Text>
       ) : current.data ? (
         <Runner
           key={current.data.id}

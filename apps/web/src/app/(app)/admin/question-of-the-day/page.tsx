@@ -1,6 +1,7 @@
 "use client";
 
 import type { DailyQuestionAdminDay } from "@lp/api-client";
+import type { Translator } from "@lp/ui";
 import { ApiClientError } from "@lp/api-client";
 import { addDays, formatCalendarDate } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,13 +11,14 @@ import { Button } from "@/components/button";
 import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
-function describeError(err: unknown): string {
+function describeError(t: Translator["t"], err: unknown): string {
   if (err instanceof ApiClientError) {
     const body = err.body as { message?: string } | null;
-    return body?.message ?? `Request failed with status ${err.status}`;
+    return body?.message ?? t("questions.requestFailed", { status: err.status });
   }
-  return err instanceof Error ? err.message : "Something went wrong.";
+  return err instanceof Error ? err.message : t("admin.import.somethingWrong");
 }
 
 /** A day in the planning window, whether or not it has a row yet. */
@@ -35,6 +37,7 @@ function DayRow({
   serverToday: string;
   onChanged: () => void;
 }) {
+  const { t, language } = useI18n();
   const [questionId, setQuestionId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +48,7 @@ function DayRow({
       setQuestionId("");
       onChanged();
     },
-    onError: (err) => setError(describeError(err)),
+    onError: (err) => setError(describeError(t, err)),
   });
 
   // A day with no row has nothing to refuse yet. One that exists locks the
@@ -59,16 +62,22 @@ function DayRow({
     <li className="border-t border-border py-md">
       <div className="flex flex-wrap items-baseline justify-between gap-sm">
         <p className="text-ui font-extrabold text-foreground">
-          {isToday ? `Today — ${formatCalendarDate(day.forDate)}` : formatCalendarDate(day.forDate)}
+          {isToday
+            ? t("admin.daily.todayWithDate", { date: formatCalendarDate(day.forDate, language) })
+            : formatCalendarDate(day.forDate, language)}
         </p>
         <p className="text-xs text-muted-foreground">
-          {day.row?.overridden ? "Chosen by an admin" : day.row ? "Drawn at random" : "Not drawn"}
-          {answers > 0 && ` · ${answers} answer${answers === 1 ? "" : "s"}`}
+          {day.row?.overridden
+            ? t("admin.daily.chosenByAdmin")
+            : day.row
+              ? t("admin.daily.drawnAtRandom")
+              : t("admin.daily.notDrawn")}
+          {answers > 0 && t("admin.daily.answers", { count: answers })}
         </p>
       </div>
 
       <p className="mt-xs text-sm text-muted-foreground">
-        {day.row?.question ? day.row.question.prompt : "No question picked yet."}
+        {day.row?.question ? day.row.question.prompt : t("admin.daily.noQuestionPicked")}
       </p>
 
       {error && (
@@ -79,22 +88,23 @@ function DayRow({
 
       {locked ? (
         <p className="mt-sm text-xs text-muted-foreground">
-          {answers === 1 ? "Someone has" : `${answers} people have`} already answered this day, so
-          it can no longer be changed.
+          {t("admin.daily.locked", { count: answers })}
         </p>
       ) : (
         <div className="mt-sm flex flex-wrap items-center gap-sm">
           {/* A day with no row has nothing to replace, so "different" would be
               a lie -- but it is the same request either way. */}
           <Button variant="secondary" disabled={set.isPending} onClick={() => set.mutate(null)}>
-            {day.row ? "Draw a different question" : "Draw a question"}
+            {day.row ? t("admin.daily.drawDifferent") : t("admin.daily.draw")}
           </Button>
           <input
             type="text"
             value={questionId}
             onChange={(event) => setQuestionId(event.target.value)}
-            placeholder="Question id"
-            aria-label={`Question id for ${formatCalendarDate(day.forDate)}`}
+            placeholder={t("admin.daily.questionId")}
+            aria-label={t("admin.daily.questionIdFor", {
+              date: formatCalendarDate(day.forDate, language),
+            })}
             className="field flex-1"
           />
           <Button
@@ -102,7 +112,7 @@ function DayRow({
             disabled={questionId.trim() === "" || set.isPending}
             onClick={() => set.mutate(questionId.trim())}
           >
-            Set
+            {t("admin.daily.set")}
           </Button>
         </div>
       )}
@@ -125,6 +135,7 @@ function DayRow({
  * router is the real gate.
  */
 export default function DailyQuestionAdminPage() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => getBrowserApiClient().getMe() });
 
@@ -137,7 +148,7 @@ export default function DailyQuestionAdminPage() {
   if (me.isPending) {
     return (
       <PageMain width="reading">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </PageMain>
     );
   }
@@ -145,26 +156,27 @@ export default function DailyQuestionAdminPage() {
   if (me.data?.role !== "admin") {
     return (
       <PageMain width="reading">
-        <PageHeader kicker="Admin" title="Question of the day" />
-        <p className="mt-md text-sm font-medium text-muted-foreground">Admin access required.</p>
+        <PageHeader kicker={t("admin.adminKicker")} title={t("admin.tools.daily")} />
+        <p className="mt-md text-sm font-medium text-muted-foreground">
+          {t("admin.accessRequired")}
+        </p>
       </PageMain>
     );
   }
 
   return (
     <PageMain width="reading">
-      <PageHeader kicker="Admin" title="Question of the day" />
+      <PageHeader kicker={t("admin.adminKicker")} title={t("admin.tools.daily")} />
       <p className="text-toc text-muted-foreground">
-        Today and the next {days.data?.horizon_days ?? 14} days. A day nobody has drawn yet gets a
-        random published question the first time a learner opens it, so leaving these alone is a
-        valid plan. Past days never appear here: changing one would rewrite history people have
-        already answered.
+        {t("admin.daily.intro", { days: days.data?.horizon_days ?? 14 })}
       </p>
 
-      {days.isPending && <p className="mt-lg text-sm text-muted-foreground">Loading days...</p>}
+      {days.isPending && (
+        <p className="mt-lg text-sm text-muted-foreground">{t("admin.daily.loadingDays")}</p>
+      )}
       {days.isError && (
         <p role="alert" className="mt-lg text-sm text-danger">
-          Failed to load the schedule.
+          {t("admin.daily.loadFailed")}
         </p>
       )}
 

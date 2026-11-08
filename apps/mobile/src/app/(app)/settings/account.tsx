@@ -5,12 +5,14 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { getApiClient } from "@/lib/api-client";
 import { Overlay } from "@/lib/overlay";
 import { supabase } from "@/lib/supabase";
+import { useI18n } from "@/lib/i18n";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
 
 export default function AccountSettingsScreen() {
   const styles = useStyles();
+  const { t } = useI18n();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
     queryFn: () => getApiClient().getMe(),
@@ -31,7 +33,7 @@ export default function AccountSettingsScreen() {
   if (isPending) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text style={styles.loading}>Loading...</Text>
+        <Text style={styles.loading}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -39,14 +41,16 @@ export default function AccountSettingsScreen() {
   if (isError) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text style={styles.error}>Failed to load account: {(error as Error).message}</Text>
+        <Text style={styles.error}>
+          {t("settings.account.failedToLoad", { message: (error as Error).message })}
+        </Text>
       </View>
     );
   }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <ScreenHeader kicker="Settings" title="Account" />
+      <ScreenHeader kicker={t("settings.title")} title={t("settings.sections.account")} />
 
       <Text style={styles.rowValue}>{data.email}</Text>
       <Pressable
@@ -54,19 +58,19 @@ export default function AccountSettingsScreen() {
         onPress={() => supabase.auth.signOut()}
         accessibilityRole="button"
       >
-        <Text style={styles.buttonText}>Sign out</Text>
+        <Text style={styles.buttonText}>{t("settings.account.signOut")}</Text>
       </Pressable>
       <Pressable
         style={styles.dangerButton}
         onPress={() => setDeleteOpen(true)}
         accessibilityRole="button"
       >
-        <Text style={styles.dangerButtonText}>Delete Account</Text>
+        <Text style={styles.dangerButtonText}>{t("settings.account.deleteAccount")}</Text>
       </Pressable>
 
       <Overlay
         visible={deleteOpen}
-        title="Delete Account"
+        title={t("settings.account.deleteAccount")}
         onClose={() => setDeleteOpen(false)}
         footer={
           <Pressable
@@ -76,18 +80,19 @@ export default function AccountSettingsScreen() {
             accessibilityRole="button"
           >
             <Text style={styles.dangerButtonText}>
-              {deleteMutation.isPending ? "Deleting..." : "Delete my account"}
+              {deleteMutation.isPending
+                ? t("common.deleting")
+                : t("settings.account.deleteConfirm")}
             </Text>
           </Pressable>
         }
       >
-        <Text style={styles.rowValue}>
-          This will permanently delete your account and all of your data — lessons progress,
-          flashcards, notebook entries, everything. This cannot be undone.
-        </Text>
+        <Text style={styles.rowValue}>{t("settings.account.deleteWarning")}</Text>
         {deleteMutation.isError && (
           <Text style={styles.error}>
-            Failed to delete account: {(deleteMutation.error as Error).message}
+            {t("settings.account.deleteFailed", {
+              message: (deleteMutation.error as Error).message,
+            })}
           </Text>
         )}
       </Overlay>

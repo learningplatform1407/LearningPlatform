@@ -4,6 +4,7 @@ import { Text } from "react-native";
 
 import { fontSizes } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 
 function formatPercent(rate: number | null): string {
   return rate === null ? "—" : `${Math.round(rate * 100)}%`;
@@ -19,21 +20,23 @@ function formatPercent(rate: number | null): string {
  * there.
  */
 export function BankStatsLine({ counts }: { counts: BankStatsCounts }) {
+  const { t } = useI18n();
   const styles = useStyles();
   if (counts.question_count === 0) return null;
   if (counts.answered_count === 0) {
     return (
-      <Text style={styles.text}>
-        {counts.question_count} question{counts.question_count === 1 ? "" : "s"} waiting — nothing
-        answered yet.
-      </Text>
+      <Text style={styles.text}>{t("questions.waiting", { count: counts.question_count })}</Text>
     );
   }
   const rates = computeBankStatsRates(counts);
   return (
     <Text style={styles.text}>
-      {formatPercent(rates.success_rate)} success · {formatPercent(rates.failure_rate)} failing ·{" "}
-      {rates.pending_count} pending · avg score {formatPercent(rates.average_score)}
+      {t("questions.statsLine", {
+        success: formatPercent(rates.success_rate),
+        failure: formatPercent(rates.failure_rate),
+        pending: rates.pending_count,
+        average: formatPercent(rates.average_score),
+      })}
     </Text>
   );
 }

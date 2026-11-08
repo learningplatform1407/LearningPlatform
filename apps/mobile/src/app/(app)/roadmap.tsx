@@ -3,13 +3,15 @@ import { Text, View } from "react-native";
 import { fontSizes, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
+import { useI18n } from "@/lib/i18n";
 
 export default function RoadmapScreen() {
+  const { t } = useI18n();
   const styles = useStyles();
   return (
     <View style={styles.container}>
-      <ScreenHeader kicker="Coming soon" title="Roadmap" />
-      <Text style={styles.subtitle}>Coming soon.</Text>
+      <ScreenHeader kicker={t("common.comingSoonKicker")} title={t("nav.roadmap")} />
+      <Text style={styles.subtitle}>{t("common.comingSoon")}</Text>
     </View>
   );
 }

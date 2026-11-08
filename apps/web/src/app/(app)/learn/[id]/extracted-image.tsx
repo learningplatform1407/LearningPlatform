@@ -3,8 +3,10 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { createClient } from "@/lib/supabase/client";
+import { useI18n } from "@/lib/i18n";
 
 export function ExtractedImage({ path }: { path: string }) {
+  const { t } = useI18n();
   const {
     data: url,
     isPending,
@@ -22,14 +24,14 @@ export function ExtractedImage({ path }: { path: string }) {
   if (isPending) {
     return (
       <div className="rounded-md border border-border p-md text-sm text-muted-foreground">
-        Loading image...
+        {t("lesson.loadingImage")}
       </div>
     );
   }
   if (isError || !url) {
     return (
       <div role="alert" className="rounded-md border border-border p-md text-sm text-danger">
-        Failed to load image.
+        {t("lesson.imageFailed")}
       </div>
     );
   }

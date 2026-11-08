@@ -1,8 +1,10 @@
 "use server";
 
+import { authErrorMessage } from "@lp/ui";
 import { createClient as createPlainClient } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 
+import { getServerTranslator } from "@/lib/i18n.server";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,18 +18,20 @@ export async function changePassword(
   _prevState: ChangePasswordState,
   formData: FormData,
 ): Promise<ChangePasswordState> {
+  const translator = await getServerTranslator();
+  const { t } = translator;
   const currentPassword = String(formData.get("current_password") ?? "");
   const password = String(formData.get("password") ?? "");
   const confirmation = String(formData.get("confirm_password") ?? "");
 
   if (!currentPassword || !password) {
-    return { error: "Fill in every field." };
+    return { error: t("settings.password.fillEveryField") };
   }
   if (password !== confirmation) {
-    return { error: "Those passwords do not match." };
+    return { error: t("settings.password.mismatch") };
   }
   if (password === currentPassword) {
-    return { error: "That is already your password." };
+    return { error: t("settings.password.sameAsCurrent") };
   }
 
   const supabase = await createClient();
@@ -38,7 +42,7 @@ export async function changePassword(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user?.email) {
-    return { error: "You are not signed in." };
+    return { error: t("settings.password.notSignedIn") };
   }
 
   // Supabase accepts `updateUser` on the strength of the session alone.
@@ -57,12 +61,12 @@ export async function changePassword(
     password: currentPassword,
   });
   if (wrongPassword) {
-    return { error: "That is not your current password." };
+    return { error: t("settings.password.wrongCurrent") };
   }
 
   const { error } = await supabase.auth.updateUser({ password });
   if (error) {
-    return { error: error.message };
+    return { error: authErrorMessage(translator, error) };
   }
 
   // Same rule as recovery: a password change ends every session, this one

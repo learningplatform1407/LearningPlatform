@@ -10,6 +10,7 @@ import { DrawingCanvas } from "@/lib/notebook-drawing-canvas";
 import { supabase } from "@/lib/supabase";
 import { fontSizes, shadows } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 
 // react-native-pdf downloads the file once (see `cache` below), so this URL
 // only has to outlive that first fetch. Kept in step with the web TTL, and
@@ -122,6 +123,7 @@ export function PdfLessonView({
   onAnchorChange,
   onSaveError,
 }: PdfLessonViewProps) {
+  const { t } = useI18n();
   const styles = useStyles();
   const [width, setWidth] = useState(0);
   const [top, setTop] = useState(0);
@@ -164,10 +166,10 @@ export function PdfLessonView({
   }
 
   if (isError || failed) {
-    return <Text style={styles.error}>Failed to load the lecture PDF.</Text>;
+    return <Text style={styles.error}>{t("lesson.pdfView.loadFailed")}</Text>;
   }
   if (isPending || !signedUrl) {
-    return <Text style={styles.hint}>Loading PDF...</Text>;
+    return <Text style={styles.hint}>{t("lesson.pdfView.loading")}</Text>;
   }
 
   // A storage path is never reused for different bytes (a replacement gets
@@ -244,6 +246,7 @@ function PdfPage({
   onFailed: () => void;
   onSaveError?: () => void;
 }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
   const queryClient = useQueryClient();
@@ -301,7 +304,7 @@ function PdfPage({
   function tapToMark(x: number, y: number) {
     if (tool?.type !== "highlight" || !words) return;
     if (words.words.length === 0) {
-      Alert.alert("Highlight", "This page has no text to highlight — it may be a scan.");
+      Alert.alert(t("lesson.pdfView.noTextTitle"), t("lesson.pdfView.noTextScan"));
       return;
     }
     const index = wordAt(words.words, x / width, y / height);
@@ -324,7 +327,7 @@ function PdfPage({
   return (
     <View
       style={[styles.page, { width, height }]}
-      accessibilityLabel={`Page ${page}`}
+      accessibilityLabel={t("lesson.pdfView.page", { number: page })}
       testID={`pdf-page-${page}`}
     >
       {rendered ? (
@@ -351,7 +354,7 @@ function PdfPage({
           }}
         />
       ) : (
-        <Text style={styles.placeholder}>Page {page}</Text>
+        <Text style={styles.placeholder}>{t("lesson.pdfView.page", { number: page })}</Text>
       )}
 
       <View style={styles.layer} pointerEvents="none">
@@ -416,7 +419,7 @@ function PdfPage({
           style={styles.layer}
           onPress={(event) => tapToMark(event.nativeEvent.locationX, event.nativeEvent.locationY)}
           accessibilityRole="button"
-          accessibilityLabel={`Mark words on page ${page}`}
+          accessibilityLabel={t("lesson.pdfView.markWords", { number: page })}
         />
       )}
     </View>

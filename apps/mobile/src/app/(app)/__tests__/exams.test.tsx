@@ -201,7 +201,7 @@ test("shows results for a finished attempt", async () => {
 
   renderScreen();
 
-  fireEvent.press(await screen.findByText(/completed · 1\/1 points · 1 questions/));
+  fireEvent.press(await screen.findByText(/completed · 1\/1 points · 1 question/));
 
   expect(await screen.findByText("1 / 1 points")).toBeTruthy();
 });

@@ -9,16 +9,14 @@ import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { SegmentedSwitch } from "@/components/segmented-switch";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { useI18n } from "@/lib/i18n";
 
-const THEME_OPTIONS = [
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "system", label: "System" },
-] as const;
+const THEME_CHOICES = ["light", "dark", "system"] as const;
 
-type ThemeChoice = (typeof THEME_OPTIONS)[number]["value"];
+type ThemeChoice = (typeof THEME_CHOICES)[number];
 
 export default function AppearanceSettingsPage() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["me"],
@@ -42,7 +40,7 @@ export default function AppearanceSettingsPage() {
   if (isPending) {
     return (
       <PageMain width="reading">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </PageMain>
     );
   }
@@ -51,7 +49,7 @@ export default function AppearanceSettingsPage() {
     return (
       <PageMain width="reading">
         <p role="alert" className="text-sm text-danger">
-          Failed to load settings: {(error as Error).message}
+          {t("common.failedToLoadSettings", { message: (error as Error).message })}
         </p>
       </PageMain>
     );
@@ -59,7 +57,7 @@ export default function AppearanceSettingsPage() {
 
   return (
     <PageMain width="reading">
-      <PageHeader kicker="Settings" title="Appearance" />
+      <PageHeader kicker={t("settings.title")} title={t("settings.sections.appearance")} />
 
       <form
         className="mt-lg flex max-w-[32rem] flex-col gap-md"
@@ -69,30 +67,33 @@ export default function AppearanceSettingsPage() {
         }}
       >
         <div className="flex flex-col gap-sm">
-          <span className="text-toc font-semibold text-foreground">Theme</span>
+          <span className="text-toc font-semibold text-foreground">
+            {t("settings.appearance.theme")}
+          </span>
           <SegmentedSwitch
-            label="Theme"
-            options={THEME_OPTIONS}
+            label={t("settings.appearance.theme")}
+            options={THEME_CHOICES.map((value) => ({
+              value,
+              label: t(`settings.appearance.${value}`),
+            }))}
             value={theme}
             onChange={setTheme}
             className="w-fit"
           />
-          <p className="text-caption text-muted-foreground">
-            System follows your device. The moon button in the sidebar switches it too.
-          </p>
+          <p className="text-caption text-muted-foreground">{t("settings.appearance.hintWeb")}</p>
         </div>
 
         {saveMutation.isError && (
           <p role="alert" className="text-sm text-danger">
-            Failed to save: {(saveMutation.error as Error).message}
+            {t("common.failedToSave", { message: (saveMutation.error as Error).message })}
           </p>
         )}
         <div className="flex items-center gap-md">
           <Button type="submit" disabled={saveMutation.isPending}>
-            {saveMutation.isPending ? "Saving..." : "Save"}
+            {saveMutation.isPending ? t("common.saving") : t("common.save")}
           </Button>
           {saveMutation.isSuccess && (
-            <span className="text-sm font-semibold text-good">Saved.</span>
+            <span className="text-sm font-semibold text-good">{t("common.saved")}</span>
           )}
         </div>
       </form>

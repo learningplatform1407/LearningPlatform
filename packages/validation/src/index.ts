@@ -24,7 +24,8 @@ export const profileUpdateRequestSchema = z.object({
   university: z.string().nullable().optional(),
   theme: z.string().optional(),
   notifications_enabled: z.boolean().optional(),
-  language: z.string().optional(),
+  // The languages the apps ship catalogues for; the API refuses others.
+  language: z.enum(["en", "ro"]).optional(),
 });
 
 export const profileStatsResponseSchema = z.object({

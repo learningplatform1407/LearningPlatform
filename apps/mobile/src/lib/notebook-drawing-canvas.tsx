@@ -12,6 +12,7 @@ import Svg, { Path, Polyline } from "react-native-svg";
 
 import { spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 
 // Every stroke's points are normalized to [0, 1] relative to this fixed
 // aspect ratio so a drawing looks the same regardless of what size box it's
@@ -27,7 +28,7 @@ export const NOTEBOOK_CANVAS_ASPECT_RATIO = 4 / 3;
 // Graphite ink, then the design's five pen colours -- the same palette as
 // the web notebook and the lesson's pen.
 export const NOTEBOOK_PEN_COLORS = [
-  { name: "graphite", hex: "#1D1F23" },
+  { name: "graphite" as const, hex: "#1D1F23" },
   ...HIGHLIGHT_COLOR_NAMES.map((name, index) => ({ name, hex: pageColors.pens[index]! })),
 ];
 
@@ -110,6 +111,7 @@ export function DrawingCanvas({
   onErasePoint,
   onGestureEnd,
 }: DrawingCanvasProps) {
+  const { t } = useI18n();
   const styles = useStyles();
   const explicitSize = width !== undefined && height !== undefined;
   const [autoSize, setAutoSize] = useState({ width: 0, height: 0 });
@@ -244,7 +246,7 @@ export function DrawingCanvas({
               key={swatch.name}
               onPress={() => setColor(swatch.hex)}
               accessibilityRole="button"
-              accessibilityLabel={`Pen color — ${swatch.name}`}
+              accessibilityLabel={t("notebook.penColor", { color: t(`colors.${swatch.name}`) })}
               accessibilityState={{ selected: color === swatch.hex }}
               style={[
                 styles.swatch,
@@ -259,7 +261,7 @@ export function DrawingCanvas({
             accessibilityState={{ selected: tool === "pen" }}
             style={[styles.toolButton, tool === "pen" && styles.toolButtonActive]}
           >
-            <Text style={styles.toolButtonText}>Pen</Text>
+            <Text style={styles.toolButtonText}>{t("notebook.pen")}</Text>
           </Pressable>
           <Pressable
             onPress={() => setTool("eraser")}
@@ -267,7 +269,7 @@ export function DrawingCanvas({
             accessibilityState={{ selected: tool === "eraser" }}
             style={[styles.toolButton, tool === "eraser" && styles.toolButtonActive]}
           >
-            <Text style={styles.toolButtonText}>Eraser</Text>
+            <Text style={styles.toolButtonText}>{t("notebook.eraser")}</Text>
           </Pressable>
           <Pressable
             onPress={handleUndo}
@@ -275,7 +277,7 @@ export function DrawingCanvas({
             accessibilityRole="button"
             style={[styles.toolButton, history.length === 0 && styles.toolButtonDisabled]}
           >
-            <Text style={styles.toolButtonText}>Undo</Text>
+            <Text style={styles.toolButtonText}>{t("notebook.undo")}</Text>
           </Pressable>
           <Pressable
             onPress={handleClear}
@@ -283,7 +285,7 @@ export function DrawingCanvas({
             accessibilityRole="button"
             style={[styles.toolButton, strokes.length === 0 && styles.toolButtonDisabled]}
           >
-            <Text style={styles.toolButtonText}>Clear</Text>
+            <Text style={styles.toolButtonText}>{t("notebook.clear")}</Text>
           </Pressable>
         </View>
       )}
@@ -291,7 +293,7 @@ export function DrawingCanvas({
         onLayout={handleLayout}
         style={explicitSize ? [styles.canvasBoxOverlay, { width, height }] : styles.canvasBox}
         accessibilityRole="image"
-        accessibilityLabel="Drawing canvas"
+        accessibilityLabel={t("notebook.canvas")}
         {...(readOnly
           ? {}
           : {
@@ -339,12 +341,13 @@ export function DrawingCanvas({
 }
 
 export function DrawingThumbnail({ strokes }: { strokes: Stroke[] }) {
+  const { t } = useI18n();
   const styles = useStyles();
   return (
     <View
       style={styles.thumbnailBox}
       accessibilityRole="image"
-      accessibilityLabel="Drawing preview"
+      accessibilityLabel={t("notebook.preview")}
     >
       <Svg viewBox="0 0 1 1" preserveAspectRatio="none" width="100%" height="100%">
         {strokes.map((stroke, index) => (

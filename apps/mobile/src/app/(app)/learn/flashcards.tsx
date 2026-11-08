@@ -8,6 +8,7 @@ import { ExpandableRow } from "@/lib/expandable-row";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 import { ScreenHeader, Tag } from "@/lib/ui/primitives";
+import { useI18n } from "@/lib/i18n";
 
 // Derived from the response type rather than exporting four more schemas
 // from @lp/validation — the tree only ever arrives as part of the whole.
@@ -21,11 +22,12 @@ type SummaryLesson = SummarySubChapter["lessons"][number];
  * opened yet is not overdue, and conflating them would make a freshly
  * imported deck look like a backlog. */
 function CountBadges({ dueCount, newCount }: { dueCount: number; newCount: number }) {
+  const { t } = useI18n();
   const styles = useStyles();
   return (
     <View style={styles.badges}>
-      <Tag active={dueCount > 0}>{dueCount} due</Tag>
-      <Tag>{newCount} new</Tag>
+      <Tag active={dueCount > 0}>{t("study.due", { count: dueCount })}</Tag>
+      <Tag>{t("study.new", { count: newCount })}</Tag>
     </View>
   );
 }
@@ -45,6 +47,7 @@ function LessonRow({ lesson }: { lesson: SummaryLesson }) {
 }
 
 function SubChapterRow({ subChapter }: { subChapter: SummarySubChapter }) {
+  const { t } = useI18n();
   const styles = useStyles();
   return (
     <ExpandableRow
@@ -52,7 +55,7 @@ function SubChapterRow({ subChapter }: { subChapter: SummarySubChapter }) {
       badge={<CountBadges dueCount={subChapter.due_count} newCount={subChapter.new_count} />}
     >
       {subChapter.lessons.length === 0 ? (
-        <Text style={styles.hint}>No lessons.</Text>
+        <Text style={styles.hint}>{t("bank.noLessons")}</Text>
       ) : (
         <View style={styles.list}>
           {subChapter.lessons.map((lesson) => (
@@ -65,6 +68,7 @@ function SubChapterRow({ subChapter }: { subChapter: SummarySubChapter }) {
 }
 
 function ChapterRow({ chapter }: { chapter: SummaryChapter }) {
+  const { t } = useI18n();
   const styles = useStyles();
   return (
     <ExpandableRow
@@ -72,7 +76,7 @@ function ChapterRow({ chapter }: { chapter: SummaryChapter }) {
       badge={<CountBadges dueCount={chapter.due_count} newCount={chapter.new_count} />}
     >
       {chapter.sub_chapters.length === 0 ? (
-        <Text style={styles.hint}>No sub-chapters.</Text>
+        <Text style={styles.hint}>{t("bank.noSubChapters")}</Text>
       ) : (
         <View style={styles.list}>
           {chapter.sub_chapters.map((subChapter) => (
@@ -85,6 +89,7 @@ function ChapterRow({ chapter }: { chapter: SummaryChapter }) {
 }
 
 function BookRow({ book }: { book: SummaryBook }) {
+  const { t } = useI18n();
   const styles = useStyles();
   return (
     <ExpandableRow
@@ -92,7 +97,7 @@ function BookRow({ book }: { book: SummaryBook }) {
       badge={<CountBadges dueCount={book.due_count} newCount={book.new_count} />}
     >
       {book.chapters.length === 0 ? (
-        <Text style={styles.hint}>No chapters.</Text>
+        <Text style={styles.hint}>{t("bank.noChapters")}</Text>
       ) : (
         <View style={styles.list}>
           {book.chapters.map((chapter) => (
@@ -105,6 +110,7 @@ function BookRow({ book }: { book: SummaryBook }) {
 }
 
 export default function FlashcardsScreen() {
+  const { t } = useI18n();
   const styles = useStyles();
   const { data, isPending, isError } = useQuery({
     // Under the "flashcards" namespace on purpose: the lesson runner
@@ -120,7 +126,7 @@ export default function FlashcardsScreen() {
   if (isPending) {
     return (
       <View style={styles.container}>
-        <Text style={styles.hint}>Loading...</Text>
+        <Text style={styles.hint}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -128,7 +134,7 @@ export default function FlashcardsScreen() {
   if (isError) {
     return (
       <View style={styles.container}>
-        <Text style={styles.error}>Failed to load your flashcard summary.</Text>
+        <Text style={styles.error}>{t("study.flashcardsLoadFailed")}</Text>
       </View>
     );
   }
@@ -146,13 +152,13 @@ export default function FlashcardsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <ScreenHeader kicker="Learn" title="Flashcards" />
+      <ScreenHeader kicker={t("nav.learn")} title={t("study.flashcards")} />
       <Text style={styles.hint}>
-        {totalDue} {totalDue === 1 ? "card" : "cards"} due today · {totalNew} not studied yet.
+        {t("study.cardsDueToday", { count: totalDue, new: totalNew })}
       </Text>
 
       {data.books.length === 0 && data.uncategorized_lessons.length === 0 ? (
-        <Text style={styles.hint}>No lessons yet.</Text>
+        <Text style={styles.hint}>{t("book.noLessons")}</Text>
       ) : (
         <View style={styles.list}>
           {data.books.map((book) => (
@@ -160,7 +166,7 @@ export default function FlashcardsScreen() {
           ))}
           {data.uncategorized_lessons.length > 0 && (
             <ExpandableRow
-              title="Uncategorized"
+              title={t("library.uncategorized")}
               badge={<CountBadges dueCount={uncategorizedDue} newCount={uncategorizedNew} />}
             >
               <View style={styles.list}>

@@ -29,11 +29,6 @@ export function isAllowedFeedImageType(value: string | undefined): value is Feed
   return value !== undefined && (ALLOWED_FEED_IMAGE_TYPES as readonly string[]).includes(value);
 }
 
-export const FEED_CATEGORY_LABELS = {
-  news: "News",
-  media: "Media",
-} as const;
-
 /** Only an absolute http(s) run is a candidate. Deliberately narrow: the body
  * is free text, so a looser pattern is how `javascript:` ends up in an href
  * or handed to a browser. */

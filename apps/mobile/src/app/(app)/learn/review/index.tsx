@@ -13,9 +13,11 @@ import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 import { ExpandableRow } from "@/lib/expandable-row";
 import { ScreenHeader, Tag } from "@/lib/ui/primitives";
+import { useI18n } from "@/lib/i18n";
 
 function DueBadge({ count }: { count: number }) {
-  return <Tag active={count > 0}>{count} due</Tag>;
+  const { t } = useI18n();
+  return <Tag active={count > 0}>{t("study.due", { count })}</Tag>;
 }
 
 function LessonRow({ lesson }: { lesson: ReviewSummaryLesson }) {
@@ -33,11 +35,12 @@ function LessonRow({ lesson }: { lesson: ReviewSummaryLesson }) {
 }
 
 function SubChapterRow({ subChapter }: { subChapter: ReviewSummarySubChapter }) {
+  const { t } = useI18n();
   const styles = useStyles();
   return (
     <ExpandableRow title={subChapter.title} badge={<DueBadge count={subChapter.due_count} />}>
       {subChapter.lessons.length === 0 ? (
-        <Text style={styles.hint}>No lessons.</Text>
+        <Text style={styles.hint}>{t("bank.noLessons")}</Text>
       ) : (
         <View style={styles.list}>
           {subChapter.lessons.map((lesson) => (
@@ -50,11 +53,12 @@ function SubChapterRow({ subChapter }: { subChapter: ReviewSummarySubChapter }) 
 }
 
 function ChapterRow({ chapter }: { chapter: ReviewSummaryChapter }) {
+  const { t } = useI18n();
   const styles = useStyles();
   return (
     <ExpandableRow title={chapter.title} badge={<DueBadge count={chapter.due_count} />}>
       {chapter.sub_chapters.length === 0 ? (
-        <Text style={styles.hint}>No sub-chapters.</Text>
+        <Text style={styles.hint}>{t("bank.noSubChapters")}</Text>
       ) : (
         <View style={styles.list}>
           {chapter.sub_chapters.map((subChapter) => (
@@ -67,11 +71,12 @@ function ChapterRow({ chapter }: { chapter: ReviewSummaryChapter }) {
 }
 
 function BookRow({ book }: { book: ReviewSummaryBook }) {
+  const { t } = useI18n();
   const styles = useStyles();
   return (
     <ExpandableRow title={book.title} badge={<DueBadge count={book.due_count} />}>
       {book.chapters.length === 0 ? (
-        <Text style={styles.hint}>No chapters.</Text>
+        <Text style={styles.hint}>{t("bank.noChapters")}</Text>
       ) : (
         <View style={styles.list}>
           {book.chapters.map((chapter) => (
@@ -84,6 +89,7 @@ function BookRow({ book }: { book: ReviewSummaryBook }) {
 }
 
 export default function ReviewSummaryScreen() {
+  const { t } = useI18n();
   const styles = useStyles();
   const { data, isPending, isError } = useQuery({
     queryKey: ["review-summary"],
@@ -93,7 +99,7 @@ export default function ReviewSummaryScreen() {
   if (isPending) {
     return (
       <View style={styles.container}>
-        <Text style={styles.hint}>Loading...</Text>
+        <Text style={styles.hint}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -101,7 +107,7 @@ export default function ReviewSummaryScreen() {
   if (isError) {
     return (
       <View style={styles.container}>
-        <Text style={styles.error}>Failed to load your review summary.</Text>
+        <Text style={styles.error}>{t("study.reviewLoadFailed")}</Text>
       </View>
     );
   }
@@ -114,20 +120,21 @@ export default function ReviewSummaryScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <ScreenHeader kicker="Learn" title="Review" />
-      <Text style={styles.hint}>
-        {totalDue} {totalDue === 1 ? "word" : "words"} due today across your course.
-      </Text>
+      <ScreenHeader kicker={t("nav.learn")} title={t("study.review")} />
+      <Text style={styles.hint}>{t("study.wordsDueToday", { count: totalDue })}</Text>
 
       {data.books.length === 0 && data.uncategorized_lessons.length === 0 ? (
-        <Text style={styles.hint}>No lessons yet.</Text>
+        <Text style={styles.hint}>{t("book.noLessons")}</Text>
       ) : (
         <View style={styles.list}>
           {data.books.map((book) => (
             <BookRow key={book.id} book={book} />
           ))}
           {data.uncategorized_lessons.length > 0 && (
-            <ExpandableRow title="Uncategorized" badge={<DueBadge count={uncategorizedDue} />}>
+            <ExpandableRow
+              title={t("library.uncategorized")}
+              badge={<DueBadge count={uncategorizedDue} />}
+            >
               <View style={styles.list}>
                 {data.uncategorized_lessons.map((lesson) => (
                   <LessonRow key={lesson.id} lesson={lesson} />

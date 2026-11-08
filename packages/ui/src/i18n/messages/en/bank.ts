@@ -1,0 +1,21 @@
+export const bank = {
+  title: "Question Bank",
+  intro:
+    "The same structure as your lessons, one level deeper. Answer anything to check yourself — attempts are recorded, and you can retry.",
+  whichQuestions: "Which questions",
+  all: "All questions",
+  favourites: "Favourites",
+  noFavourites: "No favourites yet. Tap ♡ on any question to keep it here.",
+  noQuestions: "no questions",
+  answeredOf: "{answered} of {total} answered",
+  noLessonQuestions: "No questions for this lesson yet.",
+  noLessons: "No lessons.",
+  noSubChapters: "No sub-chapters.",
+  noChapters: "No chapters.",
+  loadFailed: "Failed to load the question bank.",
+  overall: "Overall",
+  empty: "The question bank is empty.",
+  uncategorizedLessons: "Uncategorized lessons",
+  unassigned: "Questions not linked to a lesson",
+  nothingHere: "Nothing here.",
+};
