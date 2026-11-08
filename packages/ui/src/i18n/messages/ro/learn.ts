@@ -2,7 +2,7 @@ import { plural } from "../../plural";
 import type { Messages } from "../en";
 
 export const learn: Messages["learn"] = {
-  kicker: "Cursul tău",
+  // No `kicker` -- see the note in ../en/learn.ts.
   title: "Învață",
   loadRecentFailed: "Lecțiile recente nu s-au putut încărca.",
   continue: "Continuă de unde ai rămas",
