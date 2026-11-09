@@ -14,7 +14,6 @@
   "dependencies": {
     "@lp/api-client": "workspace:*",
     "@lp/contracts": "workspace:*",
-    "@lp/domain-types": "workspace:*",
     "@lp/ui": "workspace:*",
     "@lp/validation": "workspace:*",
     "@supabase/ssr": "^0.12.5",

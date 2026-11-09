@@ -70,13 +70,9 @@ repo/
 
 │   ├── validation/                # Shared Zod schemas
 
-│   ├── domain-types/              # Shared business types
-
 │   ├── ui/                        # Truly cross-platform UI primitives
 
-│   ├── config/                    # Shared linting and TS config
-
-│   └── test-utils/                # Shared test helpers
+│   └── config/                    # Shared linting and TS config
 
 ├── services/
 
