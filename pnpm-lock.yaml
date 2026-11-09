@@ -38,9 +38,6 @@ importers:
       '@lp/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@lp/domain-types':
-        specifier: workspace:*
-        version: link:../../packages/domain-types
       '@lp/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -195,9 +192,6 @@ importers:
       '@lp/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@lp/domain-types':
-        specifier: workspace:*
-        version: link:../../packages/domain-types
       '@lp/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -317,36 +311,6 @@ importers:
       zod:
         specifier: ^3.23.0
         version: 3.25.76
-    devDependencies:
-      '@lp/config':
-        specifier: workspace:*
-        version: link:../config
-      eslint:
-        specifier: ^9
-        version: 9.39.5(jiti@2.7.0)(supports-color@8.1.1)
-      typescript:
-        specifier: ^5.6.0
-        version: 5.9.3
-      vitest:
-        specifier: ^2.1.0
-        version: 2.1.9(@types/node@20.19.43)(jsdom@26.1.0(supports-color@8.1.1))(lightningcss@1.33.0)(supports-color@8.1.1)(terser@5.50.0)
-
-  packages/domain-types:
-    devDependencies:
-      '@lp/config':
-        specifier: workspace:*
-        version: link:../config
-      eslint:
-        specifier: ^9
-        version: 9.39.5(jiti@2.7.0)(supports-color@8.1.1)
-      typescript:
-        specifier: ^5.6.0
-        version: 5.9.3
-      vitest:
-        specifier: ^2.1.0
-        version: 2.1.9(@types/node@20.19.43)(jsdom@26.1.0(supports-color@8.1.1))(lightningcss@1.33.0)(supports-color@8.1.1)(terser@5.50.0)
-
-  packages/test-utils:
     devDependencies:
       '@lp/config':
         specifier: workspace:*

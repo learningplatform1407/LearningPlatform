@@ -1,34 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# web
 
-## Getting Started
+The Next.js web client. See [`/README.md`](../../README.md) for the monorepo and
+[`/PLAN.md`](../../PLAN.md) for the architecture.
 
-First, run the development server:
+## Prerequisites
+
+Install workspace dependencies from the **repo root**, not from here — this is a pnpm workspace and
+the app depends on `@lp/contracts`, `@lp/validation` and friends via `workspace:*`:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install          # from the repo root
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Create `.env.local` with the variables listed in
+[`infra/env/README.md`](../../infra/env/README.md).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Running
 
-## Learn More
+```bash
+pnpm dev:web          # from the repo root, or `pnpm dev` from here
+```
 
-To learn more about Next.js, take a look at the following resources:
+Open [http://localhost:3000](http://localhost:3000).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+This Next.js version differs from older releases in places; read [`AGENTS.md`](AGENTS.md) before
+changing framework code.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`public/pdf.worker.min.mjs` is the vendored pdf.js worker for the lesson reader's PDF mode — see
+[`docs/architecture/lecture-pdf-ink.md`](../../docs/architecture/lecture-pdf-ink.md) before
+upgrading `pdfjs-dist`.
 
-## Deploy on Vercel
+## Checks
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Run from the repo root to cover every workspace, or from here for this app alone:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test             # vitest
+pnpm test:e2e         # Playwright
+```
+
+## Layout
+
+```text
+src/app/          App Router routes; (app)/ is the authenticated shell
+src/components/   shared UI components
+src/lib/          API client, auth, i18n, theme and other helpers
+src/proxy.ts      request proxy (session refresh and auth redirects)
+```

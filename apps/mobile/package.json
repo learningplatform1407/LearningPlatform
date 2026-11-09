@@ -24,7 +24,6 @@
     "@expo/ui": "~58.0.23",
     "@lp/api-client": "workspace:*",
     "@lp/contracts": "workspace:*",
-    "@lp/domain-types": "workspace:*",
     "@lp/ui": "workspace:*",
     "@lp/validation": "workspace:*",
     "@react-native-async-storage/async-storage": "^2.2.0",
