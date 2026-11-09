@@ -12,7 +12,8 @@ the app depends on `@lp/contracts`, `@lp/validation` and friends via `workspace:
 pnpm install          # from the repo root
 ```
 
-Copy `.env.example` to `.env` and fill in the Supabase values.
+Create `.env` with the variables listed in
+[`infra/env/README.md`](../../infra/env/README.md).
 
 ## Running
 
