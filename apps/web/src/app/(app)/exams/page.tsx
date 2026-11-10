@@ -3,11 +3,25 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QuizQuestionResult, QuizSession, QuizSessionQuestion } from "@lp/api-client";
 import { ApiClientError } from "@lp/api-client";
-import { outcomeLabel, quizStatusLabel, revealModeLabel, type Translator } from "@lp/ui";
+import {
+  attemptPercent,
+  formatPostDate,
+  MAX_FILTER_TAGS,
+  outcomeLabel,
+  quizStatusLabel,
+  revealModeLabel,
+  summarizePastExams,
+  type Translator,
+} from "@lp/ui";
 import { useEffect, useEffectEvent, useState } from "react";
 
 import { Button } from "@/components/button";
+import { Card } from "@/components/card";
+import { Tag } from "@/components/chip";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ExpandableRow } from "@/components/expandable-row";
+import { ProgressBar } from "@/components/progress-bar";
+import { StatTile } from "@/components/stat-tile";
 import { OptionChoice, QuestionRevealPanel } from "@/components/question-reveal";
 import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
@@ -225,6 +239,7 @@ function TagPicker({
   }, [open]);
 
   const filtered = tags.filter((tag) => tag.label.toLowerCase().includes(search.toLowerCase()));
+  const atLimit = selectedIds.length >= MAX_FILTER_TAGS;
 
   return (
     <div className="relative">
@@ -247,25 +262,38 @@ function TagPicker({
                 className="field text-sm!"
               />
             </div>
+            {/* The server rejects more than MAX_FILTER_TAGS with a 400, which
+                nothing used to mention until it happened. At the cap, further
+                boxes are disabled and the limit is stated; already-selected
+                ones stay operable so the picker is never a dead end. */}
+            {atLimit && (
+              <p className="px-sm pb-xs text-sm text-muted-foreground">
+                {t("exams.tagLimitReached", { max: MAX_FILTER_TAGS })}
+              </p>
+            )}
             <div className="flex max-h-64 flex-col gap-xs overflow-y-auto p-sm">
               {filtered.length === 0 ? (
                 <p className="px-sm py-xs text-sm text-muted-foreground">
                   {t("exams.noMatchingTags")}
                 </p>
               ) : (
-                filtered.map((tag) => (
-                  <label
-                    key={tag.id}
-                    className="flex items-center gap-sm rounded-sm px-sm py-1.5 text-toc font-semibold text-foreground hover:bg-muted"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(tag.id)}
-                      onChange={() => onToggle(tag.id)}
-                    />
-                    {tag.label} ({tag.question_count})
-                  </label>
-                ))
+                filtered.map((tag) => {
+                  const isSelected = selectedIds.includes(tag.id);
+                  return (
+                    <label
+                      key={tag.id}
+                      className="flex items-center gap-sm rounded-sm px-sm py-1.5 text-toc font-semibold text-foreground hover:bg-muted has-disabled:opacity-50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        disabled={!isSelected && atLimit}
+                        onChange={() => onToggle(tag.id)}
+                      />
+                      {tag.label} ({tag.question_count})
+                    </label>
+                  );
+                })
               )}
             </div>
           </div>
@@ -629,13 +657,17 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
   const isPaused = session.status === "paused";
   const unanswered = session.questions.filter((question) => question.answered_at === null).length;
 
+  // Which confirmation is open, rather than two booleans: only one question
+  // can be on screen at a time, and the dialog derives what it shows from it.
+  const [confirming, setConfirming] = useState<"submit" | "cancel" | null>(null);
+
   function confirmSubmit() {
-    if (
-      unanswered === 0 ||
-      confirm(`${t("exams.unansweredWarning", { count: unanswered })} ${t("exams.submitAnyway")}`)
-    ) {
+    // Nothing to warn about when every question has an answer.
+    if (unanswered === 0) {
       submit.mutate();
+      return;
     }
+    setConfirming("submit");
   }
 
   return (
@@ -655,17 +687,33 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
               {t("exams.pause")}
             </Button>
           )}
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => {
-              if (confirm(t("exams.confirmCancel"))) cancel.mutate();
-            }}
-          >
+          <Button type="button" variant="secondary" onClick={() => setConfirming("cancel")}>
             {t("common.cancel")}
           </Button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirming !== null}
+        title={confirming === "cancel" ? t("exams.confirmCancelTitle") : t("exams.submitTitle")}
+        message={
+          confirming === "cancel"
+            ? t("exams.cannotResume")
+            : t("exams.unansweredWarning", { count: unanswered })
+        }
+        confirmLabel={confirming === "cancel" ? t("exams.cancelAttempt") : t("exams.submit")}
+        cancelLabel={t("exams.keepGoing")}
+        destructive={confirming === "cancel"}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => {
+          // Read before clearing: the dialog closes on the same tick, and the
+          // mutation to fire depends on which question was asked.
+          const kind = confirming;
+          setConfirming(null);
+          if (kind === "cancel") cancel.mutate();
+          else submit.mutate();
+        }}
+      />
 
       {error && (
         <p role="alert" className="text-sm text-danger">
@@ -744,8 +792,18 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
 
 // --- history -----------------------------------------------------------------
 
+/** Past exams: three summary tiles over a card per attempt.
+ *
+ * This replaced a ruled list whose every row was one interpolated sentence
+ * ("completed · 18/24 points · 20 questions"). Three things were wrong with
+ * that: a score is a proportion, and as prose it has to be worked out; the
+ * payload's `created_at` was never shown at all, so attempts could not be
+ * told apart; and the section was dense text on a screen already heavy with
+ * it. Nothing new is fetched -- the date and every number here were already
+ * in `listQuizSessionHistory()`.
+ */
 function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const api = getBrowserApiClient();
   const history = useQuery({
     queryKey: ["quiz-session-history"],
@@ -754,28 +812,67 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
 
   if (!history.data || history.data.length === 0) return null;
 
+  const summary = summarizePastExams(history.data);
+
   return (
-    <div className="mt-xl">
-      <h2 className="label-caps">{t("exams.recentAttempts")}</h2>
-      <ul className="mt-sm border-t border-border">
-        {history.data.map((item) => (
-          <li key={item.id} className="border-b border-border">
-            <button
-              type="button"
-              onClick={() => onOpen(item.id)}
-              className="-mx-sm w-[calc(100%+16px)] rounded-sm px-sm py-2.5 text-left text-toc font-semibold text-foreground hover:bg-muted"
-            >
-              {t("exams.historyRow", {
-                status: quizStatusLabel(t, item.status),
-                awarded: item.points_awarded ?? "—",
-                possible: item.points_possible ?? "—",
-                questions: t("questions.count", { count: item.question_count }),
-              })}
-            </button>
-          </li>
-        ))}
+    <section className="mt-xl">
+      <h2 className="label-caps">{t("exams.pastExams")}</h2>
+
+      <div className="mt-sm grid grid-cols-3 gap-sm">
+        <StatTile label={t("exams.statTaken")} value={String(summary.taken)} />
+        <StatTile
+          label={t("exams.statAverage")}
+          value={summary.averagePercent === null ? "—" : `${summary.averagePercent}%`}
+        />
+        <StatTile
+          label={t("exams.statBest")}
+          value={summary.bestPercent === null ? "—" : `${summary.bestPercent}%`}
+          emphasis
+        />
+      </div>
+
+      <ul className="mt-md flex flex-col gap-sm">
+        {history.data.map((item) => {
+          const percent = attemptPercent(item);
+          return (
+            <li key={item.id}>
+              <Card
+                as="button"
+                interactive
+                onClick={() => onOpen(item.id)}
+                className="w-full p-md text-left"
+              >
+                <div className="flex items-baseline justify-between gap-sm">
+                  <span className="text-sm text-muted-foreground">
+                    {formatPostDate(item.created_at, language)}
+                  </span>
+                  <Tag active={item.status === "completed"}>{quizStatusLabel(t, item.status)}</Tag>
+                </div>
+                <div className="mt-xs flex items-baseline justify-between gap-sm">
+                  <span className="text-toc font-bold text-foreground tabular-nums">
+                    {percent === null
+                      ? t("exams.notScored")
+                      : t("exams.scoreFraction", {
+                          awarded: item.points_awarded ?? 0,
+                          possible: item.points_possible ?? 0,
+                        })}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {t("questions.count", { count: item.question_count })}
+                  </span>
+                </div>
+                {/* Renders nothing when the attempt never scored -- that is
+                    ProgressBar's own contract for a null percent. */}
+                <ProgressBar
+                  percent={percent}
+                  label={percent === null ? undefined : `${percent}%`}
+                />
+              </Card>
+            </li>
+          );
+        })}
       </ul>
-    </div>
+    </section>
   );
 }
 

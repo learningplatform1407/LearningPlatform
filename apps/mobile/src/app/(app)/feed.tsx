@@ -13,12 +13,13 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import * as WebBrowser from "expo-web-browser";
 import { Fragment, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Pressable, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
 import { fontSizes, fontWeights, lineHeight, radii, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { ConfirmDialog } from "@/lib/ui/confirm-dialog";
 import { ScreenHeader } from "@/lib/ui/primitives";
 import { useI18n } from "@/lib/i18n";
 
@@ -373,11 +374,10 @@ function PostCard({ post }: { post: FeedPost }) {
 
   const isBusy = updateMutation.isPending || deleteMutation.isPending;
 
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
   function confirmDelete() {
-    Alert.alert(t("feed.confirmDeleteTitle"), t("feed.cannotBeUndone"), [
-      { text: t("common.cancel"), style: "cancel" },
-      { text: t("common.delete"), style: "destructive", onPress: () => deleteMutation.mutate() },
-    ]);
+    setConfirmingDelete(true);
   }
 
   if (isEditing) {
@@ -560,6 +560,18 @@ function PostCard({ post }: { post: FeedPost }) {
           ) : null}
         </View>
       ) : null}
+      <ConfirmDialog
+        visible={confirmingDelete}
+        title={t("feed.confirmDeleteTitle")}
+        message={t("feed.cannotBeUndone")}
+        confirmLabel={t("common.delete")}
+        destructive
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={() => {
+          setConfirmingDelete(false);
+          deleteMutation.mutate();
+        }}
+      />
     </View>
   );
 }

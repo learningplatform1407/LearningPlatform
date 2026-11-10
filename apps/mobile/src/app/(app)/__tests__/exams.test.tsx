@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import { Alert } from "react-native";
 
 import ExamsScreen from "../exams";
 
@@ -201,7 +200,14 @@ test("shows results for a finished attempt", async () => {
 
   renderScreen();
 
-  fireEvent.press(await screen.findByText(/completed · 1\/1 points · 1 question/));
+  // The past-exams summary is derived from this same list client-side, so one
+  // completed attempt at full marks reads 100% for both average and best.
+  expect(await screen.findByText("Taken")).toBeTruthy();
+  expect(screen.getAllByText("100%").length).toBeGreaterThan(0);
+
+  // The attempt card carries the score as a fraction rather than the sentence
+  // this assertion used to match; pressing it still opens the results.
+  fireEvent.press(screen.getByText("1/1"));
 
   expect(await screen.findByText("1 / 1 points")).toBeTruthy();
 });
@@ -249,20 +255,24 @@ test("an out-of-range question count disables Start", async () => {
 });
 
 test("submitting with unanswered questions asks first", async () => {
-  const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
   mockGetCurrentQuizSession.mockResolvedValue(sessionWith({}));
 
   renderScreen();
 
   fireEvent.press(await screen.findByText("Submit quiz"));
 
-  expect(alert).toHaveBeenCalledWith(
-    "Submit the quiz?",
-    "1 question is not answered and will score 0.",
-    expect.any(Array),
-  );
+  // Asserted through the rendered dialog rather than a spy on Alert.alert:
+  // the confirmation is our own component now, so the text on screen is the
+  // thing worth checking -- and it lets the test go on to confirm, which a
+  // stubbed-out native alert never allowed.
+  expect(await screen.findByText("Submit the quiz?")).toBeTruthy();
+  expect(screen.getByText("1 question is not answered and will score 0.")).toBeTruthy();
   expect(mockSubmitQuizSession).not.toHaveBeenCalled();
-  alert.mockRestore();
+
+  // Awaited: react-query invokes the mutationFn asynchronously, so the call
+  // has not happened yet on the tick the press returns.
+  fireEvent.press(screen.getByText("Submit"));
+  await waitFor(() => expect(mockSubmitQuizSession).toHaveBeenCalled());
 });
 
 test("when the time runs out the results are shown", async () => {

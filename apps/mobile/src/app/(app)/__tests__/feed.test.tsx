@@ -2,7 +2,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as WebBrowser from "expo-web-browser";
-import { Alert } from "react-native";
 
 import FeedScreen from "../feed";
 
@@ -93,19 +92,6 @@ const realFetch = globalThis.fetch;
 
 function stubFetchReturning(size: number) {
   globalThis.fetch = jest.fn().mockResolvedValue({ blob: async () => ({ size }) }) as never;
-}
-
-/** Auto-confirms (or dismisses) the delete dialog.
- *
- * Restored in afterEach rather than inline: an inline `mockRestore()` placed
- * after an `await waitFor` never runs if the assertion throws, and this jest
- * config sets no `restoreMocks` -- so one real failure would leave Alert.alert
- * auto-pressing Delete for every later test and cascade into confusing ones.
- */
-function stubAlertPressing(choice: "Delete" | "Cancel") {
-  jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => {
-    buttons?.find((button) => button.text === choice)?.onPress?.();
-  });
 }
 
 afterEach(() => {
@@ -319,10 +305,17 @@ test("an admin deletes a post after confirming", async () => {
   mockGetMe.mockResolvedValue(ADMIN_ME);
   mockListFeed.mockResolvedValue([post({ can_edit: true, can_delete: true })]);
   mockDeleteFeedPost.mockResolvedValue(undefined);
-  stubAlertPressing("Delete");
   renderScreen();
 
   fireEvent.press(await screen.findByText("Delete"));
+
+  // Our own dialog now, so the real one is driven rather than Alert.alert
+  // stubbed out. Its confirm carries the same "Delete" label as the card's
+  // button, so it is taken as the later of the two -- the dialog renders
+  // after the card in the tree.
+  expect(await screen.findByText("Delete this announcement?")).toBeTruthy();
+  const deletes = screen.getAllByText("Delete");
+  fireEvent.press(deletes[deletes.length - 1]!);
 
   await waitFor(() => expect(mockDeleteFeedPost).toHaveBeenCalledWith("p1"));
 });
