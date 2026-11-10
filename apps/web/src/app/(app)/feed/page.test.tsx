@@ -290,25 +290,31 @@ describe("FeedPage", () => {
       );
     });
 
+    // The confirmation is our own dialog rather than window.confirm, so these
+    // drive the real thing instead of stubbing a browser API. Its confirm
+    // button carries the same "Delete" label as the card's, so it is always
+    // reached through the dialog to keep the two apart.
     test("deletes a post after confirming", async () => {
       listFeed.mockResolvedValue([post({ can_edit: true, can_delete: true })]);
       deleteFeedPost.mockResolvedValue(undefined);
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       renderPage();
       const user = userEvent.setup();
 
       await user.click(await screen.findByRole("button", { name: "Delete" }));
+      const dialog = within(await screen.findByRole("dialog"));
+      await user.click(dialog.getByRole("button", { name: "Delete" }));
 
       await waitFor(() => expect(deleteFeedPost).toHaveBeenCalledWith("p1"));
     });
 
     test("does not delete when the confirmation is dismissed", async () => {
       listFeed.mockResolvedValue([post({ can_edit: true, can_delete: true })]);
-      vi.spyOn(window, "confirm").mockReturnValue(false);
       renderPage();
       const user = userEvent.setup();
 
       await user.click(await screen.findByRole("button", { name: "Delete" }));
+      const dialog = within(await screen.findByRole("dialog"));
+      await user.click(dialog.getByRole("button", { name: "Cancel" }));
 
       expect(deleteFeedPost).not.toHaveBeenCalled();
     });
@@ -467,11 +473,12 @@ describe("FeedPage", () => {
     test("surfaces a delete failure", async () => {
       listFeed.mockResolvedValue([post({ can_edit: true, can_delete: true })]);
       deleteFeedPost.mockRejectedValue(new Error("nope"));
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       renderPage();
       const user = userEvent.setup();
 
       await user.click(await screen.findByRole("button", { name: "Delete" }));
+      const dialog = within(await screen.findByRole("dialog"));
+      await user.click(dialog.getByRole("button", { name: "Delete" }));
 
       expect(await screen.findByRole("alert")).toHaveTextContent("nope");
     });

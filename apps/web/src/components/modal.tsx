@@ -26,11 +26,16 @@ export function Modal({
   open,
   onClose,
   title,
+  compact = false,
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
+  /** Centres a narrower panel instead of pinning a wide one near the top. A
+   * confirmation is two lines and two buttons; at the default width, high on
+   * the page, it reads as a page rather than as a question. */
+  compact?: boolean;
   children: ReactNode;
 }) {
   const { t } = useI18n();
@@ -87,7 +92,9 @@ export function Modal({
     // `--z-modal` would be drift its parity test cannot catch. Note `z-*` is
     // not generated from --spacing-*, unlike widths, so no bracket is needed.
     <div
-      className="fixed inset-0 z-30 flex items-start justify-center overflow-y-auto bg-scrim px-md pt-[80px] pb-lg"
+      className={`fixed inset-0 z-30 flex justify-center overflow-y-auto bg-scrim px-md pb-lg ${
+        compact ? "items-center pt-lg" : "items-start pt-[80px]"
+      }`}
       onClick={(event) => {
         // Only a click on the backdrop itself, not one that bubbled up from
         // inside the panel.
@@ -100,7 +107,9 @@ export function Modal({
         aria-labelledby={titleId}
         // Bracket width: --spacing-* shadows the named width scale, so
         // max-w-lg would silently render 24px.
-        className="w-full max-w-[36rem] rounded-sheet border border-border bg-background p-[30px] pb-lg shadow-card"
+        className={`w-full rounded-sheet border border-border bg-background p-[30px] pb-lg shadow-card ${
+          compact ? "max-w-[26rem]" : "max-w-[36rem]"
+        }`}
       >
         <div className="flex items-start justify-between gap-md">
           <h2 id={titleId} className="text-heading leading-[1.25] font-extrabold text-foreground">

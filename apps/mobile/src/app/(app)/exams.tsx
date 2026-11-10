@@ -1,11 +1,19 @@
 import type { QuizQuestionResult, QuizSession, QuizSessionQuestion } from "@lp/api-client";
 import { ApiClientError } from "@lp/api-client";
-import { outcomeLabel, quizStatusLabel, revealModeLabel, type Translator } from "@lp/ui";
+import {
+  attemptPercent,
+  formatPostDate,
+  MAX_FILTER_TAGS,
+  outcomeLabel,
+  quizStatusLabel,
+  revealModeLabel,
+  summarizePastExams,
+  type Translator,
+} from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useEffectEvent, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   Switch,
@@ -17,9 +25,13 @@ import {
 import { getApiClient } from "@/lib/api-client";
 import { OptionChoice, OptionResultRow, QuestionRevealPanel } from "@/lib/question-reveal";
 import { ExpandableRow } from "@/lib/expandable-row";
-import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, radii, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
-import { ScreenHeader } from "@/lib/ui/primitives";
+import { Overlay } from "@/lib/overlay";
+import { ProgressBar } from "@/lib/progress-bar";
+import { StatTile } from "@/lib/stat-tile";
+import { ConfirmDialog } from "@/lib/ui/confirm-dialog";
+import { Chip, ScreenHeader, Tag } from "@/lib/ui/primitives";
 import { useI18n } from "@/lib/i18n";
 
 function describeError(t: Translator["t"], err: unknown): string {
@@ -268,24 +280,8 @@ function StartForm({ onStarted }: { onStarted: () => void }) {
       <TopicPicker topics={topics} onChange={setTopics} />
 
       <View style={styles.field}>
-        <Text style={styles.label}>{t("exams.tagsLegend")}</Text>
-        <View style={styles.tagRow}>
-          {(tags.data ?? []).map((tag) => (
-            <Pressable
-              key={tag.id}
-              style={[styles.tagPill, tagIds.includes(tag.id) && styles.tagPillActive]}
-              onPress={() => toggleTag(tag.id)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: tagIds.includes(tag.id) }}
-            >
-              <Text
-                style={[styles.tagPillText, tagIds.includes(tag.id) && styles.tagPillTextActive]}
-              >
-                {tag.label} ({tag.question_count})
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <Text style={styles.label}>{t("exams.tags")}</Text>
+        <TagPicker tags={tags.data ?? []} selected={tagIds} onToggle={toggleTag} />
         {tagIds.length > 1 && <Text style={styles.hint}>{t("exams.tagsNarrow")}</Text>}
         {availableCount !== undefined && (
           <Text style={styles.hint}>
@@ -585,22 +581,22 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
 
   const unanswered = session.questions.filter((question) => question.answered_at === null).length;
 
+  // Which confirmation is open, rather than two booleans: only one question
+  // can be on screen at a time, and the dialog derives everything it shows
+  // from this one value.
+  const [confirming, setConfirming] = useState<"submit" | "cancel" | null>(null);
+
   function confirmSubmit() {
+    // Nothing to warn about when every question has an answer.
     if (unanswered === 0) {
       submit.mutate();
       return;
     }
-    Alert.alert(t("exams.submitTitle"), t("exams.unansweredWarning", { count: unanswered }), [
-      { text: t("exams.keepGoing"), style: "cancel" },
-      { text: t("exams.submit"), onPress: () => submit.mutate() },
-    ]);
+    setConfirming("submit");
   }
 
   function confirmCancel() {
-    Alert.alert(t("exams.confirmCancelTitle"), t("exams.cannotResume"), [
-      { text: t("exams.keepGoing"), style: "cancel" },
-      { text: t("exams.cancelAttempt"), style: "destructive", onPress: () => cancel.mutate() },
-    ]);
+    setConfirming("cancel");
   }
 
   return (
@@ -667,6 +663,28 @@ function Runner({ session, onFinished }: { session: QuizSession; onFinished: () 
           <Text style={styles.buttonPrimaryText}>{t("exams.submitQuiz")}</Text>
         )}
       </Pressable>
+
+      <ConfirmDialog
+        visible={confirming !== null}
+        title={confirming === "cancel" ? t("exams.confirmCancelTitle") : t("exams.submitTitle")}
+        message={
+          confirming === "cancel"
+            ? t("exams.cannotResume")
+            : t("exams.unansweredWarning", { count: unanswered })
+        }
+        confirmLabel={confirming === "cancel" ? t("exams.cancelAttempt") : t("exams.submit")}
+        cancelLabel={t("exams.keepGoing")}
+        destructive={confirming === "cancel"}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => {
+          // Read before clearing: the dialog closes on the same tick, and the
+          // mutation to fire depends on which question was asked.
+          const kind = confirming;
+          setConfirming(null);
+          if (kind === "cancel") cancel.mutate();
+          else submit.mutate();
+        }}
+      />
     </View>
   );
 }
@@ -727,8 +745,116 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
 
 // --- history -----------------------------------------------------------------
 
-function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
+/** A searchable tag filter behind a summary button.
+ *
+ * Replaces a flexWrap row that rendered every tag the backend returned, with
+ * no search, no scroll and no way to collapse it -- `listTags()` takes no
+ * params and the server applies no LIMIT, so the wall grew without bound and
+ * was the single biggest reason this screen read as crowded. Web had a
+ * searchable dropdown already; mobile had nothing, which is why "tags are not
+ * searchable" was a missing feature rather than a styling complaint.
+ *
+ * Built on the existing Overlay sheet and Chip rather than a new overlay: the
+ * sheet is the shape this app already uses for "pick from a long list", and a
+ * phone has nowhere to float a dropdown panel anyway.
+ */
+function TagPicker({
+  tags,
+  selected,
+  onToggle,
+}: {
+  tags: readonly { id: string; label: string; question_count: number }[];
+  selected: string[];
+  onToggle: (tagId: string) => void;
+}) {
   const { t } = useI18n();
+  const styles = useStyles();
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const needle = search.trim().toLowerCase();
+  const matching = needle ? tags.filter((tag) => tag.label.toLowerCase().includes(needle)) : tags;
+  const atLimit = selected.length >= MAX_FILTER_TAGS;
+
+  return (
+    <>
+      <Pressable style={styles.tagSummary} onPress={() => setOpen(true)} accessibilityRole="button">
+        <Text style={styles.tagSummaryText}>
+          {selected.length === 0
+            ? t("exams.anyTag")
+            : t("exams.tagsSelected", { count: selected.length })}
+        </Text>
+        <Text style={styles.tagSummaryChevron}>›</Text>
+      </Pressable>
+
+      <Overlay
+        visible={open}
+        title={t("exams.tags")}
+        onClose={() => setOpen(false)}
+        footer={
+          <View style={styles.tagFooter}>
+            {/* Clearing is reachable without hunting for selected chips among
+                hundreds, which is the whole point of collapsing the list. */}
+            <Pressable
+              onPress={() => selected.forEach(onToggle)}
+              accessibilityRole="button"
+              style={styles.button}
+            >
+              <Text style={styles.buttonText}>{t("exams.clearTags")}</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setOpen(false)}
+              accessibilityRole="button"
+              style={[styles.button, styles.buttonPrimary]}
+            >
+              <Text style={styles.buttonPrimaryText}>{t("exams.doneTags")}</Text>
+            </Pressable>
+          </View>
+        }
+      >
+        <TextInput
+          style={styles.input}
+          value={search}
+          onChangeText={setSearch}
+          placeholder={t("exams.searchTags")}
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel={t("exams.searchTags")}
+        />
+        {atLimit && (
+          <Text style={styles.hint}>{t("exams.tagLimitReached", { max: MAX_FILTER_TAGS })}</Text>
+        )}
+        {matching.length === 0 && <Text style={styles.hint}>{t("exams.noMatchingTags")}</Text>}
+        <View style={styles.tagRow}>
+          {matching.map((tag) => {
+            const isSelected = selected.includes(tag.id);
+            return (
+              <Chip
+                key={tag.id}
+                selected={isSelected}
+                // At the cap, selected chips still deselect -- only adding is
+                // blocked, so the picker never becomes a dead end.
+                onPress={isSelected || !atLimit ? () => onToggle(tag.id) : undefined}
+              >
+                {`${tag.label} (${tag.question_count})`}
+              </Chip>
+            );
+          })}
+        </View>
+      </Overlay>
+    </>
+  );
+}
+
+/** Past exams: three summary tiles over a card per attempt.
+ *
+ * Mirrors apps/web/src/app/(app)/exams/page.tsx -- see the note there for why
+ * the single-sentence row went. The summary numbers come from @lp/ui's
+ * `summarizePastExams`, so the two platforms cannot come to disagree about
+ * what "average" means.
+ */
+function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
+  const { t, language } = useI18n();
   const styles = useStyles();
   const api = getApiClient();
   const history = useQuery({
@@ -738,27 +864,64 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
 
   if (!history.data || history.data.length === 0) return null;
 
+  const summary = summarizePastExams(history.data);
+
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionHeading}>{t("exams.recentAttempts")}</Text>
-      <View style={styles.list}>
-        {history.data.map((item) => (
-          <Pressable
-            key={item.id}
-            style={styles.historyRow}
-            onPress={() => onOpen(item.id)}
-            accessibilityRole="button"
-          >
-            <Text style={styles.optionText}>
-              {t("exams.historyRow", {
-                status: quizStatusLabel(t, item.status),
-                awarded: item.points_awarded ?? "—",
-                possible: item.points_possible ?? "—",
-                questions: t("questions.count", { count: item.question_count }),
-              })}
-            </Text>
-          </Pressable>
-        ))}
+      <Text style={styles.sectionHeading}>{t("exams.pastExams")}</Text>
+
+      <View style={styles.statRow}>
+        <View style={styles.statCell}>
+          <StatTile label={t("exams.statTaken")} value={String(summary.taken)} />
+        </View>
+        <View style={styles.statCell}>
+          <StatTile
+            label={t("exams.statAverage")}
+            value={summary.averagePercent === null ? "—" : `${summary.averagePercent}%`}
+          />
+        </View>
+        <View style={styles.statCell}>
+          <StatTile
+            label={t("exams.statBest")}
+            value={summary.bestPercent === null ? "—" : `${summary.bestPercent}%`}
+            emphasis
+          />
+        </View>
+      </View>
+
+      <View style={styles.attemptList}>
+        {history.data.map((item) => {
+          const percent = attemptPercent(item);
+          return (
+            <Pressable
+              key={item.id}
+              style={({ pressed }) => [styles.attemptCard, pressed && styles.attemptCardPressed]}
+              onPress={() => onOpen(item.id)}
+              accessibilityRole="button"
+            >
+              <View style={styles.attemptTopRow}>
+                <Text style={styles.attemptDate}>{formatPostDate(item.created_at, language)}</Text>
+                <Tag active={item.status === "completed"}>{quizStatusLabel(t, item.status)}</Tag>
+              </View>
+              <View style={styles.attemptTopRow}>
+                <Text style={styles.attemptScore}>
+                  {percent === null
+                    ? t("exams.notScored")
+                    : t("exams.scoreFraction", {
+                        awarded: item.points_awarded ?? 0,
+                        possible: item.points_possible ?? 0,
+                      })}
+                </Text>
+                <Text style={styles.attemptMeta}>
+                  {t("questions.count", { count: item.question_count })}
+                </Text>
+              </View>
+              {/* Renders nothing when the attempt never scored -- that is
+                  ProgressBar's own contract for a null percent. */}
+              <ProgressBar percent={percent} label={percent === null ? undefined : `${percent}%`} />
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
@@ -882,23 +1045,32 @@ const useStyles = makeStyles((colors) => ({
     flexWrap: "wrap",
     gap: spacing.sm,
   },
-  tagPill: {
+  // The collapsed tag control: one row saying how many are selected, which
+  // replaced the unbounded pill wall. The pills themselves are `Chip` now,
+  // inside the picker sheet, so the hand-rolled tagPill styles are gone.
+  tagSummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 999,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
   },
-  tagPillActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  tagPillText: {
+  tagSummaryText: {
     fontSize: fontSizes.sm,
     color: colors.foreground,
   },
-  tagPillTextActive: {
-    color: colors.primaryForeground,
+  tagSummaryChevron: {
+    fontSize: fontSizes.lg,
+    fontWeight: fontWeights.semibold,
+    color: colors.mutedForeground,
+  },
+  tagFooter: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: spacing.sm,
   },
   input: {
     borderWidth: 1,
@@ -1063,13 +1235,51 @@ const useStyles = makeStyles((colors) => ({
     textTransform: "uppercase",
     color: colors.mutedForeground,
   },
-  historyRow: {
-    borderWidth: 0,
-    borderRadius: 0,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: 0,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+  // Past exams. The three tiles share the row evenly via flexBasis: 0 with
+  // flexGrow 1 -- `flex: 1` alone resolves to a basis of 0 on native in some
+  // Yoga versions, the same trap lib/overlay.tsx documents for side panels.
+  statRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  statCell: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+  },
+  attemptList: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  attemptCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    backgroundColor: colors.background,
+  },
+  attemptCardPressed: {
+    backgroundColor: colors.muted,
+  },
+  attemptTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  attemptDate: {
+    fontSize: fontSizes.sm,
+    color: colors.mutedForeground,
+  },
+  attemptScore: {
+    fontSize: fontSizes.base,
+    fontWeight: fontWeights.bold,
+    color: colors.foreground,
+    fontVariant: ["tabular-nums"],
+  },
+  attemptMeta: {
+    fontSize: fontSizes.sm,
+    color: colors.mutedForeground,
   },
   hidden: {
     display: "none",

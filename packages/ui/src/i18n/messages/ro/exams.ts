@@ -22,6 +22,10 @@ export const exams: Messages["exams"] = {
   noMatchingTags: "Nicio etichetă potrivită.",
   tagsLegend: "Etichete — fără selecție înseamnă fără filtru de etichete",
   tagsNarrow: "Etichetele restrâng setul — o grilă trebuie să aibă toate etichetele selectate.",
+  anyTag: "Orice etichetă",
+  tagLimitReached: "Cel mult {max} etichete.",
+  clearTags: "Șterge",
+  doneTags: "Gata",
   noneAvailable: "Nicio grilă publicată nu se potrivește acestui filtru.",
   available: plural({
     one: "{count} grilă disponibilă",
@@ -52,7 +56,6 @@ export const exams: Messages["exams"] = {
     few: "{count} grile nu au răspuns și vor primi 0 puncte.",
     other: "{count} de grile nu au răspuns și vor primi 0 puncte.",
   }),
-  submitAnyway: "Trimiți totuși?",
   submitTitle: "Trimiți testul?",
   keepGoing: "Continuă",
   submit: "Trimite",
@@ -60,7 +63,6 @@ export const exams: Messages["exams"] = {
   paused: " (în pauză)",
   resume: "Reia",
   pause: "Pauză",
-  confirmCancel: "Anulezi această încercare? Nu va mai putea fi reluată.",
   confirmCancelTitle: "Anulezi această încercare?",
   cannotResume: "Nu va mai putea fi reluată.",
   cancelAttempt: "Anulează încercarea",
@@ -71,8 +73,14 @@ export const exams: Messages["exams"] = {
   attemptCancelled: "Încercare anulată",
   score: "{awarded} / {possible} puncte",
   backToQuizzes: "Înapoi la teste",
-  recentAttempts: "Încercări recente",
-  historyRow: "{status} · {awarded}/{possible} puncte · {questions}",
+  // Vezi nota din ../en/exams.ts: rândurile arată data, scorul și o bară, nu
+  // o singură propoziție interpolată.
+  pastExams: "Examene anterioare",
+  statTaken: "Susținute",
+  statAverage: "Medie",
+  statBest: "Cel mai bun",
+  scoreFraction: "{awarded}/{possible}",
+  notScored: "Nepunctat",
   revealModes: {
     immediate: "imediat",
     on_finish: "la final",

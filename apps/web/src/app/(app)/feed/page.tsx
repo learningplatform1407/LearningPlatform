@@ -15,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/button";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Card } from "@/components/card";
 import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
@@ -339,6 +340,7 @@ function PostCard({ post }: { post: FeedPost }) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [title, setTitle] = useState(post.title);
   const [body, setBody] = useState(post.body);
   const [error, setError] = useState<string | null>(null);
@@ -521,10 +523,7 @@ function PostCard({ post }: { post: FeedPost }) {
                 <Button
                   variant="danger"
                   disabled={isBusy}
-                  onClick={() => {
-                    if (!window.confirm(t("feed.confirmDelete"))) return;
-                    deleteMutation.mutate();
-                  }}
+                  onClick={() => setConfirmingDelete(true)}
                 >
                   {deleteMutation.isPending ? t("feed.deleting") : t("common.delete")}
                 </Button>
@@ -538,6 +537,18 @@ function PostCard({ post }: { post: FeedPost }) {
           {error}
         </p>
       ) : null}
+      <ConfirmDialog
+        open={confirmingDelete}
+        title={t("feed.confirmDeleteTitle")}
+        message={t("feed.cannotBeUndone")}
+        confirmLabel={t("common.delete")}
+        destructive
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={() => {
+          setConfirmingDelete(false);
+          deleteMutation.mutate();
+        }}
+      />
     </article>
   );
 }

@@ -16,6 +16,12 @@ export const exams = {
   noMatchingTags: "No matching tags.",
   tagsLegend: "Tags — none selected means no tag filter",
   tagsNarrow: "Tags narrow the pool — a question must carry every tag you select.",
+  /** The summary button when nothing is selected. */
+  anyTag: "Any tag",
+  /** Shown at the cap, so the limit is met in the picker and not as a 400. */
+  tagLimitReached: "Up to {max} tags.",
+  clearTags: "Clear",
+  doneTags: "Done",
   noneAvailable: "No published questions match this filter.",
   available: plural({ one: "{count} question available", other: "{count} questions available" }),
   youGetAll: " — you'll get all {count}",
@@ -41,7 +47,6 @@ export const exams = {
     one: "{count} question is not answered and will score 0.",
     other: "{count} questions are not answered and will score 0.",
   }),
-  submitAnyway: "Submit anyway?",
   submitTitle: "Submit the quiz?",
   keepGoing: "Keep going",
   submit: "Submit",
@@ -49,7 +54,6 @@ export const exams = {
   paused: " (paused)",
   resume: "Resume",
   pause: "Pause",
-  confirmCancel: "Cancel this attempt? It cannot be resumed.",
   confirmCancelTitle: "Cancel this attempt?",
   cannotResume: "It cannot be resumed.",
   cancelAttempt: "Cancel attempt",
@@ -60,8 +64,15 @@ export const exams = {
   attemptCancelled: "Attempt cancelled",
   score: "{awarded} / {possible} points",
   backToQuizzes: "Back to quizzes",
-  recentAttempts: "Recent attempts",
-  historyRow: "{status} · {awarded}/{possible} points · {questions}",
+  // Past exams. The attempt rows show a date, a score and a bar rather than
+  // one interpolated sentence, so the old `historyRow` template is gone.
+  pastExams: "Past exams",
+  statTaken: "Taken",
+  statAverage: "Average",
+  statBest: "Best",
+  scoreFraction: "{awarded}/{possible}",
+  /** An attempt that was cancelled or expired, so it never scored. */
+  notScored: "Not scored",
   revealModes: {
     immediate: "immediate",
     on_finish: "on finish",
