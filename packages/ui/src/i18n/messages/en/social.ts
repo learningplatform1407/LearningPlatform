@@ -1,0 +1,33 @@
+import { plural } from "../../plural";
+
+export const social = {
+  findPeople: "Find people",
+  peopleTitle: "People",
+  learner: "Learner",
+  tabs: {
+    search: "Search",
+    following: "Following",
+    followers: "Followers",
+  },
+  searchLabel: "Search learners by name",
+  searchPlaceholder: "Search by name",
+  searchHint: "Type at least 2 letters. Only learners with a public profile appear.",
+  searching: "Searching...",
+  noResults: "No one found for “{query}”.",
+  followersCount: plural({ one: "{count} follower", other: "{count} followers" }),
+  followingCount: "{count} following",
+  follow: "Follow",
+  following: "Following",
+  followName: "Follow {name}",
+  unfollowName: "Unfollow {name}",
+  followsYou: "Follows you",
+  remove: "Remove",
+  removeFollowerName: "Remove {name} from your followers",
+  emptyFollowing: "You're not following anyone yet. Search for people to follow.",
+  emptyFollowers: "No followers yet.",
+  privateNotice: "Your profile is private, so others can't find or follow you.",
+  privateNoticeLink: "Change this in Privacy settings",
+  notFound: "This profile is private or doesn't exist.",
+  loadFailed: "Couldn't load: {message}",
+  actionFailed: "That didn't work: {message}",
+};

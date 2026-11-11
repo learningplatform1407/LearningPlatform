@@ -43,6 +43,7 @@ def test_me_creates_profile_on_first_access(
         "theme": "system",
         "notifications_enabled": True,
         "language": "en",
+        "profile_public": False,
     }
 
     assert db_session.get(Profile, authenticated_user.id) is not None
@@ -91,6 +92,7 @@ def test_me_patch_updates_settings_fields(authed_client: TestClient) -> None:
         "theme": "dark",
         "notifications_enabled": False,
         "language": "ro",
+        "profile_public": False,
     }
 
 

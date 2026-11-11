@@ -127,6 +127,11 @@ classDiagram
         +UUID user_id
         +string theme
         +bool notifications_enabled
+        +bool profile_public
+    }
+    class Follow {
+        +UUID follower_id
+        +UUID followee_id
     }
     class Subscription {
         +UUID id
@@ -374,4 +379,7 @@ classDiagram
     Profile "0..1" -- "*" DailyQuestion : selected_by, SET NULL
     DailyQuestion "1" -- "*" DailyQuestionAttempt : composite FK, RESTRICT
     Profile "1" -- "*" DailyQuestionAttempt : one row per day
+
+    Profile "1" -- "*" Follow : follower, CASCADE
+    Profile "1" -- "*" Follow : followee, CASCADE (only public counts)
 ```

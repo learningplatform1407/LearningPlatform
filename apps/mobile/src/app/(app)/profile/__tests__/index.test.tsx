@@ -1,14 +1,21 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
-import ProfileScreen from "../profile";
+import ProfileScreen from "../index";
 
 const mockGetMe = jest.fn();
 const mockGetMyStats = jest.fn();
+const mockListFollowing = jest.fn();
+const mockListFollowers = jest.fn();
 const mockPush = jest.fn();
 
 jest.mock("@/lib/api-client", () => ({
-  getApiClient: () => ({ getMe: mockGetMe, getMyStats: mockGetMyStats }),
+  getApiClient: () => ({
+    getMe: mockGetMe,
+    getMyStats: mockGetMyStats,
+    listFollowing: mockListFollowing,
+    listFollowers: mockListFollowers,
+  }),
 }));
 
 // Each focus of the tab runs the effect again; `mockFocus` replays it.
@@ -58,7 +65,31 @@ const zeroStats = {
 beforeEach(() => {
   mockGetMe.mockReset().mockResolvedValue(me);
   mockGetMyStats.mockReset().mockResolvedValue(zeroStats);
+  mockListFollowing.mockReset().mockResolvedValue([]);
+  mockListFollowers.mockReset().mockResolvedValue([]);
   mockPush.mockReset();
+});
+
+test("shows follower counts that open the People screen, and a way to find people", async () => {
+  const someone = {
+    id: "u2",
+    display_name: "Bea",
+    avatar_url: null,
+    university: null,
+    is_following: true,
+    follows_you: true,
+  };
+  mockListFollowers.mockResolvedValue([someone, { ...someone, id: "u3" }]);
+  mockListFollowing.mockResolvedValue([someone]);
+
+  renderScreen();
+
+  fireEvent.press(await screen.findByText("2 followers"));
+  expect(mockPush).toHaveBeenLastCalledWith("/profile/people?tab=followers");
+  fireEvent.press(screen.getByText("1 following"));
+  expect(mockPush).toHaveBeenLastCalledWith("/profile/people?tab=following");
+  fireEvent.press(screen.getByText("Find people"));
+  expect(mockPush).toHaveBeenLastCalledWith("/profile/people");
 });
 
 test("shows the read-only header: display name and joined date", async () => {

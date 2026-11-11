@@ -1,13 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { computeProfileBadges } from "@lp/api-client";
-import { badgeText, formatMonthYear } from "@lp/ui";
+import { formatMonthYear } from "@lp/ui";
 import Link from "next/link";
 
-import { MetricBarChart } from "@/components/metric-bar-chart";
 import { PageMain } from "@/components/page-main";
-import { StatTile } from "@/components/stat-tile";
+import { ProfileStats } from "@/components/profile-stats";
+import { UserAvatar } from "@/components/user-avatar";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { useI18n } from "@/lib/i18n";
 
@@ -25,6 +24,14 @@ export default function ProfilePage() {
   const statsQuery = useQuery({
     queryKey: ["me-stats"],
     queryFn: () => getBrowserApiClient().getMyStats(),
+  });
+  const following = useQuery({
+    queryKey: ["following"],
+    queryFn: () => getBrowserApiClient().listFollowing(),
+  });
+  const followers = useQuery({
+    queryKey: ["followers"],
+    queryFn: () => getBrowserApiClient().listFollowers(),
   });
 
   if (isPending) {
@@ -45,23 +52,11 @@ export default function ProfilePage() {
     );
   }
 
-  // Derived with English text in api-client; shown in the reader's language.
-  const badges = statsQuery.data
-    ? computeProfileBadges(statsQuery.data).map((badge) => ({ ...badge, ...badgeText(t, badge) }))
-    : null;
-
   return (
     <PageMain width="reading">
       <div className="flex items-end justify-between pt-[30px]">
         <div className="flex items-end gap-md">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-lg font-medium text-muted-foreground">
-            {data.avatar_url ? (
-              // eslint-disable-next-line @next/next/no-img-element -- external Supabase Storage URL, not worth next/image config for a 64px thumbnail
-              <img src={data.avatar_url} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <span>{(data.display_name ?? data.email ?? "?").slice(0, 1).toUpperCase()}</span>
-            )}
-          </div>
+          <UserAvatar url={data.avatar_url} name={data.display_name ?? data.email} size="lg" />
           <div className="flex min-w-0 flex-col">
             <p className="label-caps m-0">{t("profile.title")}</p>
             <h1 className="mt-1 text-[clamp(26px,4vw,34px)] leading-[1.15] font-extrabold break-words text-foreground">
@@ -101,94 +96,37 @@ export default function ProfilePage() {
         </Link>
       </div>
 
-      <Link
-        href="/settings/profile"
-        className="mt-md inline-block w-fit rounded-md border border-border bg-background px-md py-[9px] text-ui font-bold text-foreground hover:bg-muted"
-      >
-        {t("profile.editProfile")}
-      </Link>
+      {following.data && followers.data && (
+        <p className="mt-sm flex gap-md text-toc font-semibold text-muted-foreground">
+          <Link href="/profile/people?tab=followers" className="hover:text-foreground">
+            {t("social.followersCount", { count: followers.data.length })}
+          </Link>
+          <Link href="/profile/people?tab=following" className="hover:text-foreground">
+            {t("social.followingCount", { count: following.data.length })}
+          </Link>
+        </p>
+      )}
+
+      <div className="mt-md flex flex-wrap gap-sm">
+        <Link
+          href="/settings/profile"
+          className="inline-block w-fit rounded-md border border-border bg-background px-md py-[9px] text-ui font-bold text-foreground hover:bg-muted"
+        >
+          {t("profile.editProfile")}
+        </Link>
+        <Link
+          href="/profile/people"
+          className="inline-block w-fit rounded-md border border-border bg-background px-md py-[9px] text-ui font-bold text-foreground hover:bg-muted"
+        >
+          {t("social.findPeople")}
+        </Link>
+      </div>
 
       <section className="mt-xl">
         {statsQuery.isPending && (
           <p className="text-sm text-muted-foreground">{t("profile.loadingStats")}</p>
         )}
-        {statsQuery.data && (
-          <div className="flex flex-col gap-lg">
-            <div className="grid grid-cols-2 gap-md sm:grid-cols-3">
-              <StatTile
-                emphasis
-                label={t("profile.streak")}
-                value={
-                  statsQuery.data.current_streak_days > 0
-                    ? t("profile.streakDays", { count: statsQuery.data.current_streak_days })
-                    : t("profile.noStreak")
-                }
-              />
-              <StatTile
-                emphasis
-                label={t("profile.lessonsCompleted")}
-                value={t("profile.lessonsOf", {
-                  completed: statsQuery.data.lessons_completed,
-                  eligible: statsQuery.data.lessons_eligible,
-                })}
-              />
-              <StatTile
-                emphasis
-                label={t("profile.examsCompleted")}
-                value={`${statsQuery.data.exams_completed}`}
-              />
-            </div>
-
-            <div>
-              <h2 className="label-caps mb-sm">{t("profile.accuracy")}</h2>
-              <MetricBarChart
-                metrics={[
-                  {
-                    label: t("profile.examAverage"),
-                    percent: statsQuery.data.exam_average_score_percent,
-                  },
-                  {
-                    label: t("profile.questionAccuracy"),
-                    percent: statsQuery.data.question_accuracy_percent,
-                  },
-                ]}
-              />
-            </div>
-
-            {badges && (
-              <div>
-                <h2 className="label-caps mb-sm">{t("profile.badgesTitle")}</h2>
-                <div className="flex flex-wrap gap-lg border-t border-border pt-md">
-                  {badges.map((badge) => (
-                    <div
-                      key={badge.id}
-                      role="group"
-                      aria-label={t("profile.badgeState", {
-                        badge: badge.label,
-                        state: badge.earned ? t("profile.earned") : t("profile.locked"),
-                      })}
-                      className="flex w-20 flex-col items-center gap-xs text-center"
-                    >
-                      <div
-                        className={`flex h-16 w-16 items-center justify-center rounded-full border-2 text-2xl ${
-                          badge.earned ? "border-accent bg-cloze-bg" : "border-border opacity-40"
-                        }`}
-                      >
-                        <span aria-hidden="true">{badge.emoji}</span>
-                      </div>
-                      <span className="text-caption leading-tight font-bold text-foreground">
-                        {badge.label}
-                      </span>
-                      <span className="text-xs leading-snug text-muted-foreground">
-                        {badge.description}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        {statsQuery.data && <ProfileStats stats={statsQuery.data} />}
       </section>
     </PageMain>
   );

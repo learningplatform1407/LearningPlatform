@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, String, false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -36,6 +36,9 @@ class AccountSettings(Base):
     theme: Mapped[str] = mapped_column(String, default="system")
     notifications_enabled: Mapped[bool] = mapped_column(default=True)
     language: Mapped[str] = mapped_column(String, default="en")
+    # Opt-in: off, nobody can find, follow or open this profile
+    # (docs/architecture/social.md). Turning it on needs a display name.
+    profile_public: Mapped[bool] = mapped_column(default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

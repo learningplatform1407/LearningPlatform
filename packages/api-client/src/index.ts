@@ -53,6 +53,8 @@ import type {
   UploadUrlResponse,
   LecturePdf,
   UpsertLecturePdfRequest,
+  PublicProfile,
+  UserSummary,
 } from "@lp/contracts";
 
 // Minimal quiz-session types, defined inline here rather than threaded
@@ -560,6 +562,16 @@ export function createApiClient(config: ApiClientConfig) {
       request<RecentLesson[]>(`/v1/me/recent-lessons${limit ? `?limit=${limit}` : ""}`),
     getReviewSummary: () => request<ReviewSummaryResponse>("/v1/me/review-summary"),
     getMyStats: () => request<ProfileStatsResponse>("/v1/me/stats"),
+    searchUsers: (query: string) =>
+      request<UserSummary[]>(`/v1/users/search?q=${encodeURIComponent(query)}`),
+    getUserProfile: (userId: string) => request<PublicProfile>(`/v1/users/${userId}`),
+    followUser: (userId: string) => request<void>(`/v1/users/${userId}/follow`, { method: "POST" }),
+    unfollowUser: (userId: string) =>
+      request<void>(`/v1/users/${userId}/follow`, { method: "DELETE" }),
+    removeFollower: (userId: string) =>
+      request<void>(`/v1/me/followers/${userId}`, { method: "DELETE" }),
+    listFollowing: () => request<UserSummary[]>("/v1/me/following"),
+    listFollowers: () => request<UserSummary[]>("/v1/me/followers"),
     listSubChapters: (chapterId: string) =>
       request<SubChapter[]>(`/v1/chapters/${chapterId}/sub-chapters`),
     createSubChapter: (chapterId: string, data: SubChapterCreateRequest) =>

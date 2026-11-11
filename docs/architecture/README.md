@@ -27,6 +27,10 @@ the system grows.
   type-checked catalogue in `@lp/ui`, how each app picks the language (saved
   setting, cookie / `Accept-Language` on web, device language on mobile), and
   how to add a string.
+- [`social.md`](./social.md) — following other learners: the opt-in
+  `profile_public` rule that decides who can be found, followed and seen, why
+  following is one-way with no requests, and why private and unknown users get
+  the same 404.
 - [`lecture-pdf-ink.md`](./lecture-pdf-ink.md) — the official reference PDF a
   lesson carries alongside its lecture text, and per-learner freehand ink on
   it. Records why it is a separate table rather than a `DocumentVersion`

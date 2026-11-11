@@ -1,13 +1,11 @@
-import { computeProfileBadges } from "@lp/api-client";
-import { badgeText, formatMonthYear } from "@lp/ui";
+import { formatMonthYear } from "@lp/ui";
 import { useQuery } from "@tanstack/react-query";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
-import { MetricBarChart } from "@/lib/metric-bar-chart";
-import { StatTile } from "@/lib/stat-tile";
+import { ProfileStats } from "@/lib/profile-stats";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
 import { SettingsIcon } from "@/lib/ui/icons";
@@ -36,10 +34,20 @@ export default function ProfileScreen() {
   // then only showed after restarting the app. Re-read whenever the tab
   // comes back into view.
   const { refetch: refetchStats } = statsQuery;
+  const following = useQuery({
+    queryKey: ["following"],
+    queryFn: () => getApiClient().listFollowing(),
+  });
+  const followers = useQuery({
+    queryKey: ["followers"],
+    queryFn: () => getApiClient().listFollowers(),
+  });
+  const { refetch: refetchFollowers } = followers;
   useFocusEffect(
     useCallback(() => {
       refetchStats();
-    }, [refetchStats]),
+      refetchFollowers();
+    }, [refetchStats, refetchFollowers]),
   );
 
   if (isPending) {
@@ -59,11 +67,6 @@ export default function ProfileScreen() {
       </View>
     );
   }
-
-  // Derived with English text in api-client; shown in the reader's language.
-  const badges = statsQuery.data
-    ? computeProfileBadges(statsQuery.data).map((badge) => ({ ...badge, ...badgeText(t, badge) }))
-    : null;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -95,87 +98,47 @@ export default function ProfileScreen() {
         </Dot>
       </View>
 
-      <Pressable
-        style={styles.editButton}
-        onPress={() => router.push("/settings/profile")}
-        accessibilityRole="button"
-      >
-        <Text style={styles.editButtonText}>{t("profile.editProfile")}</Text>
-      </Pressable>
+      {following.data && followers.data && (
+        <View style={styles.counts}>
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => router.push("/profile/people?tab=followers")}
+          >
+            <Text style={styles.count}>
+              {t("social.followersCount", { count: followers.data.length })}
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => router.push("/profile/people?tab=following")}
+          >
+            <Text style={styles.count}>
+              {t("social.followingCount", { count: following.data.length })}
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
+      <View style={styles.actions}>
+        <Pressable
+          style={styles.editButton}
+          onPress={() => router.push("/settings/profile")}
+          accessibilityRole="button"
+        >
+          <Text style={styles.editButtonText}>{t("profile.editProfile")}</Text>
+        </Pressable>
+        <Pressable
+          style={styles.editButton}
+          onPress={() => router.push("/profile/people")}
+          accessibilityRole="button"
+        >
+          <Text style={styles.editButtonText}>{t("social.findPeople")}</Text>
+        </Pressable>
+      </View>
 
       <View style={styles.statsSection}>
         {statsQuery.isPending && <Text style={styles.loading}>{t("profile.loadingStats")}</Text>}
-        {statsQuery.data && (
-          <>
-            <View style={styles.statsGrid}>
-              <StatTile
-                emphasis
-                label={t("profile.streak")}
-                value={
-                  statsQuery.data.current_streak_days > 0
-                    ? t("profile.streakDays", { count: statsQuery.data.current_streak_days })
-                    : t("profile.noStreak")
-                }
-              />
-              <StatTile
-                emphasis
-                label={t("profile.lessonsCompleted")}
-                value={t("profile.lessonsOf", {
-                  completed: statsQuery.data.lessons_completed,
-                  eligible: statsQuery.data.lessons_eligible,
-                })}
-              />
-              <StatTile
-                emphasis
-                label={t("profile.examsCompleted")}
-                value={`${statsQuery.data.exams_completed}`}
-              />
-            </View>
-
-            <View>
-              <Text style={styles.sectionTitle}>{t("profile.accuracy")}</Text>
-              <MetricBarChart
-                metrics={[
-                  {
-                    label: t("profile.examAverage"),
-                    percent: statsQuery.data.exam_average_score_percent,
-                  },
-                  {
-                    label: t("profile.questionAccuracy"),
-                    percent: statsQuery.data.question_accuracy_percent,
-                  },
-                ]}
-              />
-            </View>
-
-            {badges && (
-              <View>
-                <Text style={styles.sectionTitle}>{t("profile.badgesTitle")}</Text>
-                <View style={styles.badgeCell}>
-                  {badges.map((badge) => (
-                    <View key={badge.id} style={styles.badge}>
-                      <View
-                        accessibilityRole="summary"
-                        accessibilityLabel={t("profile.badgeState", {
-                          badge: badge.label,
-                          state: badge.earned ? t("profile.earned") : t("profile.locked"),
-                        })}
-                        style={[
-                          styles.badgeCircle,
-                          badge.earned ? styles.badgeCircleEarned : styles.badgeCircleLocked,
-                        ]}
-                      >
-                        <Text style={styles.badgeEmoji}>{badge.emoji}</Text>
-                      </View>
-                      <Text style={styles.badgeLabel}>{badge.label}</Text>
-                      <Text style={styles.badgeDescription}>{badge.description}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-          </>
-        )}
+        {statsQuery.data && <ProfileStats stats={statsQuery.data} />}
       </View>
     </ScrollView>
   );
@@ -244,6 +207,21 @@ const useStyles = makeStyles((colors) => ({
     fontSize: fontSizes.sm,
     color: colors.mutedForeground,
   },
+  counts: {
+    flexDirection: "row",
+    gap: spacing.md,
+    marginTop: -spacing.sm,
+  },
+  count: {
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.semibold,
+    color: colors.mutedForeground,
+  },
+  actions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
   editButton: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -260,63 +238,6 @@ const useStyles = makeStyles((colors) => ({
   },
   statsSection: {
     gap: spacing.lg,
-  },
-  statsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  sectionTitle: {
-    marginBottom: spacing.xs,
-    fontSize: fontSizes.xs,
-    fontWeight: fontWeights.bold,
-    letterSpacing: 1.4,
-    textTransform: "uppercase",
-    color: colors.mutedForeground,
-  },
-  badgeCell: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: spacing.md,
-  },
-  badge: {
-    width: 80,
-    alignItems: "center",
-    gap: spacing.xs / 2,
-  },
-  badgeCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  badgeCircleEarned: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary + "1a",
-  },
-  badgeCircleLocked: {
-    borderColor: colors.border,
-    opacity: 0.4,
-  },
-  badgeEmoji: {
-    fontSize: fontSizes["2xl"],
-  },
-  badgeLabel: {
-    fontSize: fontSizes.xs,
-    fontWeight: fontWeights.medium,
-    color: colors.foreground,
-    textAlign: "center",
-  },
-  badgeDescription: {
-    fontSize: fontSizes.xs,
-    color: colors.mutedForeground,
-    textAlign: "center",
   },
   error: {
     color: colors.danger,

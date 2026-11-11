@@ -14,6 +14,7 @@ import { colors, notebook } from "./notebook";
 import { profile } from "./profile";
 import { daily, questions } from "./questions";
 import { settings } from "./settings";
+import { social } from "./social";
 import { study } from "./study";
 
 export const ro: Messages = {
@@ -32,6 +33,7 @@ export const ro: Messages = {
   notebook,
   colors,
   profile,
+  social,
   feed,
   exams,
   lesson,

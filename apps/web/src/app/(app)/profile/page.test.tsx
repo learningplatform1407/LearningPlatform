@@ -6,9 +6,11 @@ import ProfilePage from "./page";
 
 const getMe = vi.fn();
 const getMyStats = vi.fn();
+const listFollowing = vi.fn();
+const listFollowers = vi.fn();
 
 vi.mock("@/lib/api-client.browser", () => ({
-  getBrowserApiClient: () => ({ getMe, getMyStats }),
+  getBrowserApiClient: () => ({ getMe, getMyStats, listFollowing, listFollowers }),
 }));
 
 function renderPage() {
@@ -29,7 +31,7 @@ const me = {
   role: "student",
   created_at: "2026-01-15T00:00:00Z",
   updated_at: "2026-01-15T00:00:00Z",
-  settings: { theme: "system", notifications_enabled: true, language: "en" },
+  settings: { theme: "system", notifications_enabled: true, language: "en", profile_public: true },
 };
 
 const zeroStats = {
@@ -47,6 +49,36 @@ const zeroStats = {
 beforeEach(() => {
   getMe.mockReset().mockResolvedValue(me);
   getMyStats.mockReset().mockResolvedValue(zeroStats);
+  listFollowing.mockReset().mockResolvedValue([]);
+  listFollowers.mockReset().mockResolvedValue([]);
+});
+
+test("shows follower counts linking to the People page, and a way to find people", async () => {
+  const someone = {
+    id: "u2",
+    display_name: "Bea",
+    avatar_url: null,
+    university: null,
+    is_following: false,
+    follows_you: true,
+  };
+  listFollowers.mockResolvedValue([someone, { ...someone, id: "u3" }]);
+  listFollowing.mockResolvedValue([someone]);
+
+  renderPage();
+
+  expect(await screen.findByRole("link", { name: "2 followers" })).toHaveAttribute(
+    "href",
+    "/profile/people?tab=followers",
+  );
+  expect(screen.getByRole("link", { name: "1 following" })).toHaveAttribute(
+    "href",
+    "/profile/people?tab=following",
+  );
+  expect(screen.getByRole("link", { name: "Find people" })).toHaveAttribute(
+    "href",
+    "/profile/people",
+  );
 });
 
 test("shows the read-only header: display name and joined date", async () => {

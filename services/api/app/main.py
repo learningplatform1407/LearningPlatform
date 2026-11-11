@@ -27,6 +27,7 @@ from app.plans.router import router as plans_router
 from app.questions.router import bank_router, tags_router
 from app.questions.router import router as questions_router
 from app.quizzes.router import router as quiz_sessions_router
+from app.social.router import router as social_router
 from app.sub_chapters.router import router as sub_chapters_router
 from app.users.router import router as users_router
 
@@ -64,6 +65,7 @@ app.include_router(quiz_sessions_router)
 app.include_router(feed_router)
 app.include_router(daily_router)
 app.include_router(daily_admin_router)
+app.include_router(social_router)
 
 
 @app.exception_handler(ApiError)

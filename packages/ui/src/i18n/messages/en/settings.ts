@@ -34,7 +34,10 @@ export const settings = {
     wrongCurrent: "That is not your current password.",
   },
   privacy: {
-    empty: "Nothing to configure yet.",
+    publicProfile: "Public profile",
+    publicHint:
+      "When on, other learners can find you by name, follow you, and see your profile: name, photo, university, join date and study stats. Your notes, highlights and answers are never shared.",
+    needsName: "Add a display name in Profile settings first: people search by name.",
   },
   notifications: {
     enable: "Enable notifications",

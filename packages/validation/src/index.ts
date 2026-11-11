@@ -4,6 +4,7 @@ export const accountSettingsSchema = z.object({
   theme: z.string(),
   notifications_enabled: z.boolean(),
   language: z.string(),
+  profile_public: z.boolean(),
 });
 
 export const meResponseSchema = z.object({
@@ -26,6 +27,8 @@ export const profileUpdateRequestSchema = z.object({
   notifications_enabled: z.boolean().optional(),
   // The languages the apps ship catalogues for; the API refuses others.
   language: z.enum(["en", "ro"]).optional(),
+  // Refused (422 display_name_required) without a display name.
+  profile_public: z.boolean().optional(),
 });
 
 export const profileStatsResponseSchema = z.object({
@@ -38,6 +41,24 @@ export const profileStatsResponseSchema = z.object({
   questions_attempted: z.number(),
   questions_answered_lifetime: z.number(),
   question_accuracy_percent: z.number().nullable(),
+});
+
+/** Another learner, as a search result or a follow-list row. The flags are
+ * from the caller's point of view. */
+export const userSummarySchema = z.object({
+  id: z.string(),
+  display_name: z.string().nullable(),
+  avatar_url: z.string().nullable(),
+  university: z.string().nullable(),
+  is_following: z.boolean(),
+  follows_you: z.boolean(),
+});
+
+export const publicProfileResponseSchema = userSummarySchema.extend({
+  created_at: z.string(),
+  followers_count: z.number(),
+  following_count: z.number(),
+  stats: profileStatsResponseSchema,
 });
 
 export const entitlementResponseSchema = z.object({
