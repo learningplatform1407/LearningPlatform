@@ -1,14 +1,23 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
-import ProfileScreen from "../profile";
+import ProfileScreen from "../index";
 
 const mockGetMe = jest.fn();
 const mockGetMyStats = jest.fn();
+const mockListFollowing = jest.fn();
+const mockListFollowers = jest.fn();
+const mockListFollowingActivity = jest.fn();
 const mockPush = jest.fn();
 
 jest.mock("@/lib/api-client", () => ({
-  getApiClient: () => ({ getMe: mockGetMe, getMyStats: mockGetMyStats }),
+  getApiClient: () => ({
+    getMe: mockGetMe,
+    getMyStats: mockGetMyStats,
+    listFollowing: mockListFollowing,
+    listFollowers: mockListFollowers,
+    listFollowingActivity: mockListFollowingActivity,
+  }),
 }));
 
 // Each focus of the tab runs the effect again; `mockFocus` replays it.
@@ -58,7 +67,73 @@ const zeroStats = {
 beforeEach(() => {
   mockGetMe.mockReset().mockResolvedValue(me);
   mockGetMyStats.mockReset().mockResolvedValue(zeroStats);
+  mockListFollowing.mockReset().mockResolvedValue([]);
+  mockListFollowers.mockReset().mockResolvedValue([]);
+  mockListFollowingActivity.mockReset().mockResolvedValue([]);
   mockPush.mockReset();
+});
+
+test("shows what the people you follow did lately once you follow someone", async () => {
+  mockListFollowing.mockResolvedValue([
+    {
+      id: "u2",
+      display_name: "Bea",
+      avatar_url: null,
+      university: null,
+      is_following: true,
+      follows_you: false,
+    },
+  ]);
+  mockListFollowingActivity.mockResolvedValue([
+    {
+      id: "e1",
+      kind: "streak_milestone",
+      created_at: "2026-10-09T12:00:00Z",
+      user: { id: "u2", display_name: "Bea", avatar_url: null },
+      document_id: null,
+      document_title: null,
+      score_percent: null,
+      question_count: null,
+      streak_days: 3,
+    },
+  ]);
+
+  renderScreen();
+
+  expect(await screen.findByText("People you follow")).toBeTruthy();
+  expect(await screen.findByText("Bea is on a 3-day streak")).toBeTruthy();
+  fireEvent.press(screen.getByText("See all activity"));
+  expect(mockPush).toHaveBeenLastCalledWith("/profile/people?tab=activity");
+});
+
+test("hides the activity section while you follow nobody", async () => {
+  renderScreen();
+
+  await screen.findByText("Ada");
+  expect(screen.queryByText("People you follow")).toBeNull();
+  expect(mockListFollowingActivity).not.toHaveBeenCalled();
+});
+
+test("shows follower counts that open the People screen, and a way to find people", async () => {
+  const someone = {
+    id: "u2",
+    display_name: "Bea",
+    avatar_url: null,
+    university: null,
+    is_following: true,
+    follows_you: true,
+  };
+  mockListFollowers.mockResolvedValue([someone, { ...someone, id: "u3" }]);
+  mockListFollowing.mockResolvedValue([someone]);
+
+  renderScreen();
+
+  fireEvent.press(await screen.findByText("2 followers"));
+  expect(mockPush).toHaveBeenLastCalledWith("/profile/people?tab=followers");
+  fireEvent.press(screen.getByText("1 following"));
+  expect(mockPush).toHaveBeenLastCalledWith("/profile/people?tab=following");
+  fireEvent.press(screen.getByText("Find people"));
+  expect(mockPush).toHaveBeenLastCalledWith("/profile/people");
 });
 
 test("shows the read-only header: display name and joined date", async () => {

@@ -2,11 +2,14 @@ import type { z } from "zod";
 
 import type {
   accountSettingsSchema,
+  activityEventSchema,
   annotationCreateRequestSchema,
   annotationUpdateRequestSchema,
   annotationResponseSchema,
   bookCreateRequestSchema,
   bookResponseSchema,
+  challengeCreateRequestSchema,
+  challengeResponseSchema,
   chapterCreateRequestSchema,
   chapterResponseSchema,
   clozeCardResponseSchema,
@@ -54,6 +57,7 @@ import type {
   notebookEntryResponseSchema,
   notebookEntryUpdateRequestSchema,
   profileStatsResponseSchema,
+  publicProfileResponseSchema,
   profileUpdateRequestSchema,
   questionCreateRequestSchema,
   questionOptionSchema,
@@ -75,12 +79,18 @@ import type {
   uploadUrlRequestSchema,
   uploadUrlResponseSchema,
   upsertLecturePdfRequestSchema,
+  userSummarySchema,
 } from "@lp/validation";
 
 export type AccountSettings = z.infer<typeof accountSettingsSchema>;
 export type MeResponse = z.infer<typeof meResponseSchema>;
 export type ProfileUpdateRequest = z.infer<typeof profileUpdateRequestSchema>;
 export type ProfileStatsResponse = z.infer<typeof profileStatsResponseSchema>;
+export type UserSummary = z.infer<typeof userSummarySchema>;
+export type PublicProfile = z.infer<typeof publicProfileResponseSchema>;
+export type ActivityEvent = z.infer<typeof activityEventSchema>;
+export type ChallengeCreateRequest = z.infer<typeof challengeCreateRequestSchema>;
+export type Challenge = z.infer<typeof challengeResponseSchema>;
 export type EntitlementResponse = z.infer<typeof entitlementResponseSchema>;
 export type ExtractedContent = z.infer<typeof extractedContentSchema>;
 export type DocumentVersionResponse = z.infer<typeof documentVersionResponseSchema>;

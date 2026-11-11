@@ -2,6 +2,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.schemas import AuthenticatedUser
+from app.common.errors import ApiError
 from app.plans.constants import PlanCode
 from app.plans.models import Subscription
 from app.users.models import AccountSettings, Profile
@@ -45,7 +46,7 @@ def get_or_create_profile(db: Session, user: AuthenticatedUser) -> Profile:
     return profile
 
 
-SETTINGS_FIELDS = {"theme", "notifications_enabled", "language"}
+SETTINGS_FIELDS = {"theme", "notifications_enabled", "language", "profile_public"}
 
 
 def update_profile(db: Session, profile: Profile, data: ProfileUpdateRequest) -> Profile:
@@ -53,6 +54,13 @@ def update_profile(db: Session, profile: Profile, data: ProfileUpdateRequest) ->
     for field, value in updates.items():
         target = profile.settings if field in SETTINGS_FIELDS else profile
         setattr(target, field, value)
+    # Search is by name only, so a public profile without one could never be
+    # found and would show up nameless to its followers. Checked after the
+    # updates so turning it on and setting a name in one PATCH works, and
+    # clearing the name of a public profile is refused the same way.
+    if profile.settings.profile_public and not (profile.display_name or "").strip():
+        db.rollback()
+        raise ApiError(422, "display_name_required", "A public profile needs a display name")
     db.commit()
     db.refresh(profile)
     return profile

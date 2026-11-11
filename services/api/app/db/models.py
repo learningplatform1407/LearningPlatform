@@ -5,8 +5,10 @@ domain's models module individually) before calling anything that relies on
 Base.metadata being complete.
 """
 
+from app.activity.models import ActivityEvent
 from app.annotations.models import DocumentAnnotation
 from app.books.models import Book
+from app.challenges.models import Challenge
 from app.chapters.models import Chapter
 from app.cloze.models import ClozeCard, ClozeReviewState
 from app.daily.models import DailyQuestion, DailyQuestionAttempt
@@ -20,12 +22,15 @@ from app.plans.models import Subscription
 from app.progress.models import QuestionProgress
 from app.questions.models import Question, QuestionTag, Tag
 from app.quizzes.models import QuizSession, QuizSessionQuestion
+from app.social.models import Follow
 from app.sub_chapters.models import SubChapter
 from app.users.models import AccountSettings, Consent, Profile
 
 __all__ = [
     "AccountSettings",
+    "ActivityEvent",
     "Book",
+    "Challenge",
     "Chapter",
     "ClozeCard",
     "ClozeReviewState",
@@ -38,6 +43,7 @@ __all__ = [
     "FeedPost",
     "Flashcard",
     "FlashcardReviewState",
+    "Follow",
     "LecturePdf",
     "LessonPageInk",
     "LessonView",

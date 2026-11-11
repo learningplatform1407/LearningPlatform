@@ -16,6 +16,7 @@ class AccountSettingsResponse(BaseModel):
     theme: str
     notifications_enabled: bool
     language: str
+    profile_public: bool
 
 
 class MeResponse(BaseModel):
@@ -39,6 +40,7 @@ class ProfileUpdateRequest(BaseModel):
     theme: str | None = None
     notifications_enabled: bool | None = None
     language: InterfaceLanguage | None = None
+    profile_public: bool | None = None
 
 
 class ProfileStatsResponse(BaseModel):

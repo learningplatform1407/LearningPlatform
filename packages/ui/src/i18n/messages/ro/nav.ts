@@ -19,4 +19,5 @@ export const nav: Messages["nav"] = {
   collapseSidebar: "Restrânge bara laterală",
   darkTheme: "Temă întunecată",
   lightTheme: "Temă luminoasă",
+  withPending: "{label}, {count} în așteptare",
 };

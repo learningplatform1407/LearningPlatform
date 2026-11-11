@@ -23,6 +23,12 @@ import {
 } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
+import {
+  CHALLENGES_KEY,
+  ChallengeResult,
+  ChallengeSender,
+  ChallengesSection,
+} from "@/lib/challenges";
 import { OptionChoice, OptionResultRow, QuestionRevealPanel } from "@/lib/question-reveal";
 import { ExpandableRow } from "@/lib/expandable-row";
 import { fontSizes, fontWeights, radii, spacing } from "@/lib/theme";
@@ -732,6 +738,7 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
           {question.explanation && <Text style={styles.rationale}>{question.explanation}</Text>}
         </View>
       ))}
+      {data.status !== "cancelled" && <ChallengeSender sessionId={sessionId} />}
       <Pressable
         style={[styles.button, styles.buttonPrimary]}
         onPress={onDone}
@@ -941,10 +948,13 @@ export default function ExamsScreen() {
   });
 
   const [viewingResultsFor, setViewingResultsFor] = useState<string | null>(null);
+  const [viewingChallenge, setViewingChallenge] = useState<string | null>(null);
 
   function refreshCurrent() {
     queryClient.invalidateQueries({ queryKey: ["quiz-session-current"] });
     queryClient.invalidateQueries({ queryKey: ["quiz-session-history"] });
+    // Finishing an exam can complete a challenge.
+    queryClient.invalidateQueries({ queryKey: CHALLENGES_KEY });
   }
 
   function attemptEnded(sessionId: string) {
@@ -959,7 +969,9 @@ export default function ExamsScreen() {
       <ScreenHeader kicker={t("exams.kicker")} title={t("exams.title")} />
       <Text style={styles.hint}>{t("exams.intro")}</Text>
 
-      {viewingResultsFor ? (
+      {viewingChallenge ? (
+        <ChallengeResult challengeId={viewingChallenge} onDone={() => setViewingChallenge(null)} />
+      ) : viewingResultsFor ? (
         <Results
           sessionId={viewingResultsFor}
           onDone={() => {
@@ -977,6 +989,7 @@ export default function ExamsScreen() {
         />
       ) : (
         <>
+          <ChallengesSection onAccepted={refreshCurrent} onOpen={setViewingChallenge} />
           <StartForm onStarted={refreshCurrent} />
           <History onOpen={setViewingResultsFor} />
         </>

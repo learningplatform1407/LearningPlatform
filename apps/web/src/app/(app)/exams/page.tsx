@@ -28,6 +28,8 @@ import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { useI18n } from "@/lib/i18n";
 
+import { ChallengeResult, ChallengeSender, ChallengesSection } from "./challenges";
+
 function describeError(t: Translator["t"], err: unknown): string {
   if (err instanceof ApiClientError) {
     const body = err.body as { message?: string } | null;
@@ -783,6 +785,7 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
           <QuestionRevealPanel reveal={question} />
         </div>
       ))}
+      {data.status !== "cancelled" && <ChallengeSender sessionId={sessionId} />}
       <Button type="button" onClick={onDone}>
         {t("exams.backToQuizzes")}
       </Button>
@@ -889,10 +892,13 @@ export default function QuizzesPage() {
   });
 
   const [viewingResultsFor, setViewingResultsFor] = useState<string | null>(null);
+  const [viewingChallenge, setViewingChallenge] = useState<string | null>(null);
 
   function refreshCurrent() {
     queryClient.invalidateQueries({ queryKey: ["quiz-session-current"] });
     queryClient.invalidateQueries({ queryKey: ["quiz-session-history"] });
+    // Finishing an exam can complete a challenge.
+    queryClient.invalidateQueries({ queryKey: ["challenges"] });
   }
 
   return (
@@ -900,7 +906,9 @@ export default function QuizzesPage() {
       <PageHeader kicker={t("exams.kicker")} title={t("exams.title")} />
       <p className="text-toc text-muted-foreground">{t("exams.intro")}</p>
 
-      {viewingResultsFor ? (
+      {viewingChallenge ? (
+        <ChallengeResult challengeId={viewingChallenge} onDone={() => setViewingChallenge(null)} />
+      ) : viewingResultsFor ? (
         <Results
           sessionId={viewingResultsFor}
           onDone={() => {
@@ -926,6 +934,7 @@ export default function QuizzesPage() {
         })()
       ) : (
         <>
+          <ChallengesSection onAccepted={refreshCurrent} onOpen={setViewingChallenge} />
           <StartForm onStarted={refreshCurrent} />
           <History onOpen={setViewingResultsFor} />
         </>

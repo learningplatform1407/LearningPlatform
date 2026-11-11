@@ -6,8 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.activity.router import router as activity_router
 from app.annotations.router import router as annotations_router
 from app.books.router import router as books_router
+from app.challenges.router import router as challenges_router
 from app.chapters.router import router as chapters_router
 from app.cloze.router import router as cloze_router
 from app.common.errors import ApiError, ErrorResponse, FieldError
@@ -27,6 +29,7 @@ from app.plans.router import router as plans_router
 from app.questions.router import bank_router, tags_router
 from app.questions.router import router as questions_router
 from app.quizzes.router import router as quiz_sessions_router
+from app.social.router import router as social_router
 from app.sub_chapters.router import router as sub_chapters_router
 from app.users.router import router as users_router
 
@@ -64,6 +67,9 @@ app.include_router(quiz_sessions_router)
 app.include_router(feed_router)
 app.include_router(daily_router)
 app.include_router(daily_admin_router)
+app.include_router(social_router)
+app.include_router(activity_router)
+app.include_router(challenges_router)
 
 
 @app.exception_handler(ApiError)

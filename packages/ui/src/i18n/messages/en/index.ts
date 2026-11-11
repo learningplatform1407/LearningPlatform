@@ -12,6 +12,7 @@ import { colors, notebook } from "./notebook";
 import { profile } from "./profile";
 import { daily, questions } from "./questions";
 import { settings } from "./settings";
+import { social } from "./social";
 import { study } from "./study";
 
 /** The English catalogue, and the shape every other language must match:
@@ -32,6 +33,7 @@ export const en = {
   notebook,
   colors,
   profile,
+  social,
   feed,
   exams,
   lesson,

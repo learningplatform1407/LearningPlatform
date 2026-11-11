@@ -4,6 +4,7 @@ export const accountSettingsSchema = z.object({
   theme: z.string(),
   notifications_enabled: z.boolean(),
   language: z.string(),
+  profile_public: z.boolean(),
 });
 
 export const meResponseSchema = z.object({
@@ -26,6 +27,8 @@ export const profileUpdateRequestSchema = z.object({
   notifications_enabled: z.boolean().optional(),
   // The languages the apps ship catalogues for; the API refuses others.
   language: z.enum(["en", "ro"]).optional(),
+  // Refused (422 display_name_required) without a display name.
+  profile_public: z.boolean().optional(),
 });
 
 export const profileStatsResponseSchema = z.object({
@@ -38,6 +41,78 @@ export const profileStatsResponseSchema = z.object({
   questions_attempted: z.number(),
   questions_answered_lifetime: z.number(),
   question_accuracy_percent: z.number().nullable(),
+});
+
+/** Another learner, as a search result or a follow-list row. The flags are
+ * from the caller's point of view. */
+export const userSummarySchema = z.object({
+  id: z.string(),
+  display_name: z.string().nullable(),
+  avatar_url: z.string().nullable(),
+  university: z.string().nullable(),
+  is_following: z.boolean(),
+  follows_you: z.boolean(),
+});
+
+export const publicProfileResponseSchema = userSummarySchema.extend({
+  created_at: z.string(),
+  followers_count: z.number(),
+  following_count: z.number(),
+  stats: profileStatsResponseSchema,
+});
+
+/** One line of the activity feed. Flat: each kind fills its own fields and
+ * leaves the rest null; the clients build the sentence from `kind`. */
+const activityActorSchema = z.object({
+  id: z.string(),
+  display_name: z.string().nullable(),
+  avatar_url: z.string().nullable(),
+});
+
+export const activityEventSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["exam_completed", "lesson_completed", "streak_milestone", "challenge_completed"]),
+  created_at: z.string(),
+  user: activityActorSchema,
+  document_id: z.string().nullable(),
+  document_title: z.string().nullable(),
+  score_percent: z.number().nullable(),
+  question_count: z.number().nullable(),
+  streak_days: z.number().nullable(),
+  // challenge_completed; `score_percent` is the author's own.
+  opponent: activityActorSchema.nullable(),
+  opponent_score_percent: z.number().nullable(),
+});
+
+export const challengeCreateRequestSchema = z.object({
+  session_id: z.string(),
+  user_id: z.string(),
+});
+
+/** A challenge from the caller's side. The opponent's score and the
+ * per-question comparison stay null until both have finished. */
+export const challengeResponseSchema = z.object({
+  id: z.string(),
+  status: z.enum(["pending", "accepted", "completed", "declined", "expired"]),
+  direction: z.enum(["incoming", "sent"]),
+  opponent: activityActorSchema,
+  question_count: z.number(),
+  duration_seconds: z.number().nullable(),
+  created_at: z.string(),
+  expires_at: z.string(),
+  completed_at: z.string().nullable(),
+  your_session_id: z.string().nullable(),
+  your_score_percent: z.number().nullable(),
+  opponent_score_percent: z.number().nullable(),
+  questions: z
+    .array(
+      z.object({
+        position: z.number(),
+        your_outcome: z.string().nullable(),
+        opponent_outcome: z.string().nullable(),
+      }),
+    )
+    .nullable(),
 });
 
 export const entitlementResponseSchema = z.object({

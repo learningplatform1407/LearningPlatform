@@ -36,7 +36,11 @@ export const settings: Messages["settings"] = {
     wrongCurrent: "Aceasta nu este parola ta actuală.",
   },
   privacy: {
-    empty: "Nimic de configurat deocamdată.",
+    publicProfile: "Profil public",
+    publicHint:
+      "Când este activat, ceilalți cursanți te pot găsi după nume, te pot urmări și îți pot vedea profilul: numele, fotografia, universitatea, data înscrierii și statisticile de studiu. Notițele, evidențierile și răspunsurile tale nu sunt niciodată partajate.",
+    needsName:
+      "Adaugă mai întâi un nume afișat în setările profilului: persoanele sunt căutate după nume.",
   },
   notifications: {
     enable: "Activează notificările",

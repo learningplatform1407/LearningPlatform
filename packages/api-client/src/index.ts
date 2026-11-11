@@ -53,6 +53,11 @@ import type {
   UploadUrlResponse,
   LecturePdf,
   UpsertLecturePdfRequest,
+  ActivityEvent,
+  Challenge,
+  ChallengeCreateRequest,
+  PublicProfile,
+  UserSummary,
 } from "@lp/contracts";
 
 // Minimal quiz-session types, defined inline here rather than threaded
@@ -383,6 +388,17 @@ export interface DailyQuestionPrompt {
   options: QuizQuestionOption[];
 }
 
+/** How the people you follow did on today's question: correct or not, never
+ * what they picked. Served only once you've answered (403 `answer_first`). */
+export interface DailyFollowing {
+  answered_count: number;
+  correct_count: number;
+  answers: {
+    user: { id: string; display_name: string | null; avatar_url: string | null };
+    outcome: string;
+  }[];
+}
+
 export interface DailyQuestion {
   for_date: string;
   /** The institution's today. Never compute this from the device clock — a
@@ -560,6 +576,34 @@ export function createApiClient(config: ApiClientConfig) {
       request<RecentLesson[]>(`/v1/me/recent-lessons${limit ? `?limit=${limit}` : ""}`),
     getReviewSummary: () => request<ReviewSummaryResponse>("/v1/me/review-summary"),
     getMyStats: () => request<ProfileStatsResponse>("/v1/me/stats"),
+    searchUsers: (query: string) =>
+      request<UserSummary[]>(`/v1/users/search?q=${encodeURIComponent(query)}`),
+    getUserProfile: (userId: string) => request<PublicProfile>(`/v1/users/${userId}`),
+    followUser: (userId: string) => request<void>(`/v1/users/${userId}/follow`, { method: "POST" }),
+    unfollowUser: (userId: string) =>
+      request<void>(`/v1/users/${userId}/follow`, { method: "DELETE" }),
+    removeFollower: (userId: string) =>
+      request<void>(`/v1/me/followers/${userId}`, { method: "DELETE" }),
+    listFollowing: () => request<UserSummary[]>("/v1/me/following"),
+    listFollowers: () => request<UserSummary[]>("/v1/me/followers"),
+    /** The people you follow, newest first. Page back with the last event's `created_at`. */
+    listFollowingActivity: (page: { before?: string; limit?: number } = {}) => {
+      const query = new URLSearchParams();
+      if (page.before) query.set("before", page.before);
+      if (page.limit) query.set("limit", String(page.limit));
+      const suffix = query.size ? `?${query}` : "";
+      return request<ActivityEvent[]>(`/v1/me/activity${suffix}`);
+    },
+    createChallenge: (data: ChallengeCreateRequest) =>
+      request<Challenge>("/v1/challenges", { method: "POST", body: JSON.stringify(data) }),
+    listChallenges: () => request<Challenge[]>("/v1/me/challenges"),
+    getChallenge: (id: string) => request<Challenge>(`/v1/challenges/${id}`),
+    /** Starts your attempt: the challenger's questions, order and timer. */
+    acceptChallenge: (id: string) =>
+      request<QuizSession>(`/v1/challenges/${id}/accept`, { method: "POST" }),
+    declineChallenge: (id: string) =>
+      request<Challenge>(`/v1/challenges/${id}/decline`, { method: "POST" }),
+    listUserActivity: (userId: string) => request<ActivityEvent[]>(`/v1/users/${userId}/activity`),
     listSubChapters: (chapterId: string) =>
       request<SubChapter[]>(`/v1/chapters/${chapterId}/sub-chapters`),
     createSubChapter: (chapterId: string, data: SubChapterCreateRequest) =>
@@ -653,6 +697,7 @@ export function createApiClient(config: ApiClientConfig) {
       request<void>(`/v1/question-bank/${questionId}/favourite`, { method: "DELETE" }),
     /** Today's question, drawn server-side on first read of the day. */
     getDailyQuestion: () => request<DailyQuestion>("/v1/daily-question"),
+    getDailyFollowing: () => request<DailyFollowing>("/v1/daily-question/following"),
     getDailyQuestionCalendar: (params: { start: string; end: string }) => {
       const query = new URLSearchParams({ start: params.start, end: params.end });
       return request<DailyQuestionCalendar>(`/v1/daily-question/calendar?${query}`);
