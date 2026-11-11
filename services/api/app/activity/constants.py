@@ -5,6 +5,7 @@ class ActivityKind(StrEnum):
     EXAM_COMPLETED = "exam_completed"
     LESSON_COMPLETED = "lesson_completed"
     STREAK_MILESTONE = "streak_milestone"
+    CHALLENGE_COMPLETED = "challenge_completed"
 
 
 # Streak lengths worth telling your followers about. Past the last one,

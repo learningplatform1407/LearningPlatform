@@ -8,6 +8,8 @@ import type {
   annotationResponseSchema,
   bookCreateRequestSchema,
   bookResponseSchema,
+  challengeCreateRequestSchema,
+  challengeResponseSchema,
   chapterCreateRequestSchema,
   chapterResponseSchema,
   clozeCardResponseSchema,
@@ -87,6 +89,8 @@ export type ProfileStatsResponse = z.infer<typeof profileStatsResponseSchema>;
 export type UserSummary = z.infer<typeof userSummarySchema>;
 export type PublicProfile = z.infer<typeof publicProfileResponseSchema>;
 export type ActivityEvent = z.infer<typeof activityEventSchema>;
+export type ChallengeCreateRequest = z.infer<typeof challengeCreateRequestSchema>;
+export type Challenge = z.infer<typeof challengeResponseSchema>;
 export type EntitlementResponse = z.infer<typeof entitlementResponseSchema>;
 export type ExtractedContent = z.infer<typeof extractedContentSchema>;
 export type DocumentVersionResponse = z.infer<typeof documentVersionResponseSchema>;

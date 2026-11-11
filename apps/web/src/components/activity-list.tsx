@@ -38,6 +38,24 @@ function ActivityItem({ event }: { event: ActivityEvent }) {
         : t("social.activity.examCompleted", { score: event.score_percent }),
       { name },
     );
+  } else if (event.kind === "challenge_completed" && event.opponent) {
+    sentence = rich(
+      t("social.activity.challengeCompleted", {
+        score: event.score_percent ?? 0,
+        opponentScore: event.opponent_score_percent ?? 0,
+      }),
+      {
+        name,
+        opponent: (
+          <Link
+            href={`/profile/${event.opponent.id}`}
+            className="font-bold text-foreground hover:underline"
+          >
+            {event.opponent.display_name ?? t("profile.unnamed")}
+          </Link>
+        ),
+      },
+    );
   } else {
     sentence = rich(t("social.activity.streak", { count: event.streak_days ?? 0 }), { name });
   }

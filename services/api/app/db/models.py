@@ -8,6 +8,7 @@ Base.metadata being complete.
 from app.activity.models import ActivityEvent
 from app.annotations.models import DocumentAnnotation
 from app.books.models import Book
+from app.challenges.models import Challenge
 from app.chapters.models import Chapter
 from app.cloze.models import ClozeCard, ClozeReviewState
 from app.daily.models import DailyQuestion, DailyQuestionAttempt
@@ -29,6 +30,7 @@ __all__ = [
     "AccountSettings",
     "ActivityEvent",
     "Book",
+    "Challenge",
     "Chapter",
     "ClozeCard",
     "ClozeReviewState",

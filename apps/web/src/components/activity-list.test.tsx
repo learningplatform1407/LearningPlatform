@@ -14,6 +14,8 @@ const base = {
   score_percent: null,
   question_count: null,
   streak_days: null,
+  opponent: null,
+  opponent_score_percent: null,
 };
 
 const events: ActivityEvent[] = [
@@ -26,6 +28,14 @@ const events: ActivityEvent[] = [
   },
   { ...base, id: "e2", kind: "exam_completed", score_percent: 87.5, question_count: 20 },
   { ...base, id: "e3", kind: "streak_milestone", streak_days: 7 },
+  {
+    ...base,
+    id: "e4",
+    kind: "challenge_completed",
+    score_percent: 80,
+    opponent: { id: "u3", display_name: "Cris", avatar_url: null },
+    opponent_score_percent: 70,
+  },
 ];
 
 test("each kind reads as a sentence, with the name and lesson as links", () => {
@@ -37,6 +47,8 @@ test("each kind reads as a sentence, with the name and lesson as links", () => {
   expect(screen.getAllByRole("link", { name: "Bea" })[0]).toHaveAttribute("href", "/profile/u2");
   expect(items[1]).toHaveTextContent("Bea finished an exam with 87.5%");
   expect(items[2]).toHaveTextContent("Bea is on a 7-day streak");
+  expect(items[3]).toHaveTextContent("Bea took on Cris in a challenge: 80% to 70%");
+  expect(screen.getByRole("link", { name: "Cris" })).toHaveAttribute("href", "/profile/u3");
 });
 
 test("in Romanian, with Romanian numbers and plurals", () => {

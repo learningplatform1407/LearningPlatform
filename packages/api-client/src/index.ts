@@ -54,6 +54,8 @@ import type {
   LecturePdf,
   UpsertLecturePdfRequest,
   ActivityEvent,
+  Challenge,
+  ChallengeCreateRequest,
   PublicProfile,
   UserSummary,
 } from "@lp/contracts";
@@ -581,6 +583,15 @@ export function createApiClient(config: ApiClientConfig) {
       const suffix = query.size ? `?${query}` : "";
       return request<ActivityEvent[]>(`/v1/me/activity${suffix}`);
     },
+    createChallenge: (data: ChallengeCreateRequest) =>
+      request<Challenge>("/v1/challenges", { method: "POST", body: JSON.stringify(data) }),
+    listChallenges: () => request<Challenge[]>("/v1/me/challenges"),
+    getChallenge: (id: string) => request<Challenge>(`/v1/challenges/${id}`),
+    /** Starts your attempt: the challenger's questions, order and timer. */
+    acceptChallenge: (id: string) =>
+      request<QuizSession>(`/v1/challenges/${id}/accept`, { method: "POST" }),
+    declineChallenge: (id: string) =>
+      request<Challenge>(`/v1/challenges/${id}/decline`, { method: "POST" }),
     listUserActivity: (userId: string) => request<ActivityEvent[]>(`/v1/users/${userId}/activity`),
     listSubChapters: (chapterId: string) =>
       request<SubChapter[]>(`/v1/chapters/${chapterId}/sub-chapters`),

@@ -30,3 +30,6 @@ class ActivityEventResponse(BaseModel):
     question_count: int | None = None
     # streak_milestone
     streak_days: int | None = None
+    # challenge_completed; `score_percent` is the author's own.
+    opponent: ActivityActorResponse | None = None
+    opponent_score_percent: float | None = None

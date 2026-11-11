@@ -9,6 +9,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.activity.router import router as activity_router
 from app.annotations.router import router as annotations_router
 from app.books.router import router as books_router
+from app.challenges.router import router as challenges_router
 from app.chapters.router import router as chapters_router
 from app.cloze.router import router as cloze_router
 from app.common.errors import ApiError, ErrorResponse, FieldError
@@ -68,6 +69,7 @@ app.include_router(daily_router)
 app.include_router(daily_admin_router)
 app.include_router(social_router)
 app.include_router(activity_router)
+app.include_router(challenges_router)
 
 
 @app.exception_handler(ApiError)

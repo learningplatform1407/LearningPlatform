@@ -17,4 +17,5 @@ export const nav = {
   collapseSidebar: "Collapse sidebar",
   darkTheme: "Dark theme",
   lightTheme: "Light theme",
+  withPending: "{label}, {count} waiting",
 };

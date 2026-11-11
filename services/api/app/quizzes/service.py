@@ -7,7 +7,7 @@ test suite runs on SQLite)."""
 
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.activity.constants import ActivityKind
 from app.activity.recording import record_event
+from app.challenges.completion import on_session_finished
 from app.common.errors import ApiError, FieldError
 from app.progress.service import grade_and_record
 from app.questions.constants import Outcome
@@ -137,6 +138,8 @@ def _finalize(
     session.finished_at = now
     session.resumed_at = None
     session.expires_at = None
+    # A challenge answered with this session ends with it.
+    on_session_finished(db, session, now=now)
 
 
 def _refresh_session_state(db: Session, session: QuizSession, *, now: datetime) -> None:
@@ -167,6 +170,12 @@ def _refresh_open_session(db: Session, user_id: uuid.UUID, *, now: datetime) -> 
         return None
     _refresh_session_state(db, session, now=now)
     return session
+
+
+def expire_open_session(db: Session, user_id: uuid.UUID, *, now: datetime) -> None:
+    """Lazy expiry before starting a session from outside this module
+    (accepting a challenge), for the same reason `start_session` applies it."""
+    _refresh_open_session(db, user_id, now=now)
 
 
 def _validate_bounds(data: QuizSessionCreateRequest) -> None:
@@ -293,10 +302,13 @@ def start_session(
     if not questions:
         raise ApiError(400, "no_questions_match", "No published questions match this filter")
 
-    session = QuizSession(
-        user_id=user_id,
-        status=SessionStatus.ACTIVE,
+    session = create_session_from_questions(
+        db,
+        user_id,
+        question_ids=[question.id for question in questions],
+        scoring_schemes=[question.scoring_scheme for question in questions],
         reveal_mode=data.reveal_mode,
+        duration_seconds=data.duration_seconds,
         # Selection verbatim *and* the expansion it produced: the first is
         # intent, the second is what was actually drawn from. `tag_match`
         # versions the semantics, so sessions saved before tags became AND
@@ -309,8 +321,34 @@ def start_session(
             "tag_ids": [str(i) for i in data.tag_ids],
             "tag_match": "all",
         },
-        question_count=len(questions),
-        duration_seconds=data.duration_seconds,
+        now=now,
+    )
+    return _session_response(db, session, now=now)
+
+
+def create_session_from_questions(
+    db: Session,
+    user_id: uuid.UUID,
+    *,
+    question_ids: list[uuid.UUID],
+    scoring_schemes: list[str],
+    reveal_mode: str,
+    duration_seconds: int | None,
+    filter_spec: dict[str, Any],
+    now: datetime,
+) -> QuizSession:
+    """Starts a session over exactly these questions, in this order, and
+    commits it. Shared by a normal start (a random draw) and by accepting a
+    challenge (the challenger's own draw, replayed). The caller has already
+    applied lazy expiry to any open session, which the one-open-session index
+    then enforces."""
+    session = QuizSession(
+        user_id=user_id,
+        status=SessionStatus.ACTIVE,
+        reveal_mode=reveal_mode,
+        filter_spec=filter_spec,
+        question_count=len(question_ids),
+        duration_seconds=duration_seconds,
         accumulated_seconds=0,
         resumed_at=now,
         last_activity_at=now,
@@ -328,20 +366,21 @@ def start_session(
             409, "session_already_open", "You already have a quiz session in progress"
         ) from exc
 
-    for position, question in enumerate(questions):
-        scheme = get_scheme(question.scoring_scheme)
+    for position, (question_id, scoring_scheme) in enumerate(
+        zip(question_ids, scoring_schemes, strict=True)
+    ):
         db.add(
             QuizSessionQuestion(
                 session_id=session.id,
-                question_id=question.id,
+                question_id=question_id,
                 position=position,
-                scoring_scheme=question.scoring_scheme,
-                points_possible=scheme.max_points,
+                scoring_scheme=scoring_scheme,
+                points_possible=get_scheme(scoring_scheme).max_points,
             )
         )
     db.commit()
     db.refresh(session)
-    return _session_response(db, session, now=now)
+    return session
 
 
 def get_current_session(db: Session, user_id: uuid.UUID) -> QuizSessionResponse | None:

@@ -90,11 +90,12 @@ of its own (it's the 80% ratio over `question_progress`), and rebuilding a feed
 from several tables for every person you follow on every read would be the
 slow way round. So `activity_events` is written as a side effect of the action:
 
-| Kind               | Written by                                                                                                      | Once per          |
-| ------------------ | --------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `exam_completed`   | `quizzes/service.py::_finalize` (submit, timer expiry and the sweep; not cancel)                                | quiz session      |
-| `lesson_completed` | `progress/service.py::grade_and_record`, when a correct answer takes the lesson from not completed to completed | lesson, ever      |
-| `streak_milestone` | `daily/service.py::answer_today`                                                                                | milestone reached |
+| Kind                  | Written by                                                                                                      | Once per          |
+| --------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `exam_completed`      | `quizzes/service.py::_finalize` (submit, timer expiry and the sweep; not cancel)                                | quiz session      |
+| `lesson_completed`    | `progress/service.py::grade_and_record`, when a correct answer takes the lesson from not completed to completed | lesson, ever      |
+| `streak_milestone`    | `daily/service.py::answer_today`                                                                                | milestone reached |
+| `challenge_completed` | `challenges/completion.py`, for both participants                                                               | challenge         |
 
 - `app/activity/recording.py::record_event` never commits and swallows a
   duplicate: the action already happened, and a missing feed line must not
@@ -119,3 +120,43 @@ slow way round. So `activity_events` is written as a side effect of the action:
 is flat (`document_title`, `score_percent`, `streak_days`, …) and the clients
 build the sentence from `kind`, with the name and the lesson spliced in as links
 by `rich()` so a translation can reorder them.
+
+## Challenges
+
+From a finished exam's results you can send that exact exam to someone: the
+same questions, in the same order, with the same timer and reveal mode. Only
+**mutual follows** can challenge each other (both public, both following),
+which is the consent rule: nobody receives a challenge from a stranger.
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: POST /v1/challenges
+    pending --> accepted: accept (starts their quiz session)
+    pending --> declined: decline
+    pending --> expired: 7 days, applied lazily on read
+    accepted --> completed: their session is submitted or times out
+    accepted --> declined: their session is cancelled
+```
+
+- **The questions are read from the challenger's session**, not copied.
+  Accepting calls `quizzes/service.py::create_session_from_questions`, the same
+  builder a normal start now uses after drawing its random questions, so a
+  challenge can't drift from what the challenger actually answered. The usual
+  one-open-session rule applies (409 `session_already_open`).
+- **Finishing the session completes the challenge.** `_finalize` calls
+  `challenges/completion.py::on_session_finished`, which imports models only
+  (`challenges/service.py` imports the quiz service, so the reverse would be a
+  cycle). It records a `challenge_completed` event for both participants;
+  followers see it only while **both** are public, since the opponent's name is
+  theirs to show.
+- **No peeking.** `opponent_score_percent` and the per-question comparison are
+  null until the challenge is completed, so the challengee can't see the score
+  to beat before answering.
+- A finished exam can be sent to the same person once (unique on
+  `(source_session_id, challengee_id)`). Expired sessions count as finished:
+  they were graded.
+- There are no push notifications yet. Incoming challenges show on the Exam
+  Hub, with a count on its sidebar entry (web) and tab (mobile).
+- Time taken isn't compared: a session's clock fields don't record active
+  answering time reliably across pauses, so only scores and per-question
+  outcomes are shown.

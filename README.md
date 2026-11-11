@@ -133,6 +133,15 @@ classDiagram
         +UUID follower_id
         +UUID followee_id
     }
+    class Challenge {
+        +UUID id
+        +UUID challenger_id
+        +UUID challengee_id
+        +UUID source_session_id
+        +UUID challengee_session_id
+        +string status
+        +datetime expires_at
+    }
     class ActivityEvent {
         +UUID id
         +UUID user_id
@@ -390,4 +399,6 @@ classDiagram
     Profile "1" -- "*" Follow : follower, CASCADE
     Profile "1" -- "*" Follow : followee, CASCADE (only public counts)
     Profile "1" -- "*" ActivityEvent : shown only while public; subject_id has no FK
+    Profile "1" -- "*" Challenge : challenger / challengee, mutual follows only
+    QuizSession "1" -- "*" Challenge : source (CASCADE); answer (SET NULL)
 ```

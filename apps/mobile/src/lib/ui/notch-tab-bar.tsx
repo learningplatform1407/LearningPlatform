@@ -81,6 +81,8 @@ export function NotchTabBar({
           const focused = route.key === activeKey;
           const { options } = descriptors[route.key]!;
           const label = typeof options.title === "string" ? options.title : route.name;
+          // A count asking for attention (challenges waiting for you).
+          const badge = typeof options.tabBarBadge === "number" ? options.tabBarBadge : 0;
           const Icon = ICONS[route.name];
           const color = focused ? colors.foreground : colors.mutedForeground;
           return (
@@ -88,7 +90,7 @@ export function NotchTabBar({
               key={route.key}
               accessibilityRole="tab"
               accessibilityState={{ selected: focused }}
-              accessibilityLabel={label}
+              accessibilityLabel={options.tabBarAccessibilityLabel ?? label}
               onLayout={(event) => {
                 const layout = event.nativeEvent.layout;
                 setLayouts((current) => ({ ...current, [route.key]: layout }));
@@ -107,7 +109,14 @@ export function NotchTabBar({
               }}
               style={styles.tab}
             >
-              {Icon ? <Icon color={color} size={20} /> : null}
+              <View>
+                {Icon ? <Icon color={color} size={20} /> : null}
+                {badge > 0 ? (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{badge}</Text>
+                  </View>
+                ) : null}
+              </View>
               <Text numberOfLines={1} style={[styles.label, focused && styles.labelActive]}>
                 {label}
               </Text>
@@ -157,5 +166,23 @@ const useStyles = makeStyles((colors) => ({
   labelActive: {
     fontWeight: fontWeights.extrabold,
     color: colors.foreground,
+  },
+  badge: {
+    position: "absolute",
+    top: -4,
+    right: -8,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accent,
+  },
+  badgeText: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: fontWeights.bold,
+    color: colors.background,
   },
 }));

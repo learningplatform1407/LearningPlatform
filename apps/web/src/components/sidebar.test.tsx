@@ -14,14 +14,16 @@ vi.mock("next/navigation", () => ({
 }));
 
 const getMe = vi.fn();
+const listChallenges = vi.fn();
 
 vi.mock("@/lib/api-client.browser", () => ({
-  getBrowserApiClient: () => ({ getMe }),
+  getBrowserApiClient: () => ({ getMe, listChallenges }),
 }));
 
 beforeEach(() => {
   pathname.current = "/learn";
   getMe.mockReset().mockResolvedValue({ id: "u1", email: "a@b.c", role: "student" });
+  listChallenges.mockReset().mockResolvedValue([]);
 });
 
 function renderSidebar() {
@@ -136,5 +138,21 @@ describe("Sidebar", () => {
     await user.keyboard("{Escape}");
 
     expect(screen.queryByRole("navigation", { name: "Mobile menu" })).not.toBeInTheDocument();
+  });
+
+  test("counts the challenges waiting for you on Exam Hub", async () => {
+    const challenge = { direction: "incoming", status: "pending" };
+    listChallenges.mockResolvedValue([
+      { ...challenge, id: "c1" },
+      { ...challenge, id: "c2" },
+      { ...challenge, id: "c3", status: "completed" },
+      { ...challenge, id: "c4", direction: "sent" },
+    ]);
+    renderSidebar();
+
+    expect(await screen.findByRole("link", { name: "Exam Hub, 2 waiting" })).toHaveAttribute(
+      "href",
+      "/exams",
+    );
   });
 });

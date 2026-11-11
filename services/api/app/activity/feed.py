@@ -26,9 +26,16 @@ def _page(
 
 
 def _to_responses(db: Session, events: Sequence[ActivityEvent]) -> list[ActivityEventResponse]:
-    """Two lookups for the whole page: who did it, and the lesson titles.
-    An event whose lesson has since been deleted is dropped."""
-    user_ids = {event.user_id for event in events}
+    """Two lookups for the whole page: everyone named in it, and the lesson
+    titles. An event whose lesson has since been deleted is dropped, and so
+    is a challenge whose opponent has gone private -- their name is theirs to
+    show, not their follower's."""
+    opponent_ids = {
+        uuid.UUID(event.payload["opponent_id"])
+        for event in events
+        if event.kind == ActivityKind.CHALLENGE_COMPLETED and "opponent_id" in event.payload
+    }
+    user_ids = {event.user_id for event in events} | opponent_ids
     actors = {
         profile.id: profile
         for profile in db.scalars(select(Profile).where(Profile.id.in_(user_ids)))
@@ -69,6 +76,15 @@ def _to_responses(db: Session, events: Sequence[ActivityEvent]) -> list[Activity
             response.question_count = event.payload.get("question_count")
         elif event.kind == ActivityKind.STREAK_MILESTONE:
             response.streak_days = event.payload.get("days")
+        elif event.kind == ActivityKind.CHALLENGE_COMPLETED:
+            opponent = actors.get(uuid.UUID(event.payload["opponent_id"]))
+            if opponent is None or not opponent.settings.profile_public:
+                continue
+            response.opponent = ActivityActorResponse(
+                id=opponent.id, display_name=opponent.display_name, avatar_url=opponent.avatar_url
+            )
+            response.score_percent = event.payload.get("score_percent")
+            response.opponent_score_percent = event.payload.get("opponent_score_percent")
         responses.append(response)
     return responses
 

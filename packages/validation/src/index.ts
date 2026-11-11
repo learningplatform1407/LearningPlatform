@@ -63,20 +63,56 @@ export const publicProfileResponseSchema = userSummarySchema.extend({
 
 /** One line of the activity feed. Flat: each kind fills its own fields and
  * leaves the rest null; the clients build the sentence from `kind`. */
+const activityActorSchema = z.object({
+  id: z.string(),
+  display_name: z.string().nullable(),
+  avatar_url: z.string().nullable(),
+});
+
 export const activityEventSchema = z.object({
   id: z.string(),
-  kind: z.enum(["exam_completed", "lesson_completed", "streak_milestone"]),
+  kind: z.enum(["exam_completed", "lesson_completed", "streak_milestone", "challenge_completed"]),
   created_at: z.string(),
-  user: z.object({
-    id: z.string(),
-    display_name: z.string().nullable(),
-    avatar_url: z.string().nullable(),
-  }),
+  user: activityActorSchema,
   document_id: z.string().nullable(),
   document_title: z.string().nullable(),
   score_percent: z.number().nullable(),
   question_count: z.number().nullable(),
   streak_days: z.number().nullable(),
+  // challenge_completed; `score_percent` is the author's own.
+  opponent: activityActorSchema.nullable(),
+  opponent_score_percent: z.number().nullable(),
+});
+
+export const challengeCreateRequestSchema = z.object({
+  session_id: z.string(),
+  user_id: z.string(),
+});
+
+/** A challenge from the caller's side. The opponent's score and the
+ * per-question comparison stay null until both have finished. */
+export const challengeResponseSchema = z.object({
+  id: z.string(),
+  status: z.enum(["pending", "accepted", "completed", "declined", "expired"]),
+  direction: z.enum(["incoming", "sent"]),
+  opponent: activityActorSchema,
+  question_count: z.number(),
+  duration_seconds: z.number().nullable(),
+  created_at: z.string(),
+  expires_at: z.string(),
+  completed_at: z.string().nullable(),
+  your_session_id: z.string().nullable(),
+  your_score_percent: z.number().nullable(),
+  opponent_score_percent: z.number().nullable(),
+  questions: z
+    .array(
+      z.object({
+        position: z.number(),
+        your_outcome: z.string().nullable(),
+        opponent_outcome: z.string().nullable(),
+      }),
+    )
+    .nullable(),
 });
 
 export const entitlementResponseSchema = z.object({

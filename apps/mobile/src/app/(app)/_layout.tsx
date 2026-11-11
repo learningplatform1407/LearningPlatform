@@ -2,6 +2,7 @@ import { Drawer, DrawerContentScrollView, DrawerItem } from "expo-router/drawer"
 import { Tabs } from "expo-router/tabs";
 import { useWindowDimensions, View } from "react-native";
 
+import { usePendingChallengeCount } from "@/lib/challenges";
 import { useI18n } from "@/lib/i18n";
 import { fontWeights, spacing } from "@/lib/theme";
 
@@ -80,6 +81,11 @@ const useStyles = makeStyles((colors) => ({
 
 export default function AppLayout() {
   const { t } = useI18n();
+  const pendingChallenges = usePendingChallengeCount();
+  const examsLabel =
+    pendingChallenges > 0
+      ? t("nav.withPending", { label: t("nav.exams"), count: pendingChallenges })
+      : t("nav.exams");
   const colors = useThemeColors();
   const { width } = useWindowDimensions();
   const isTablet = width >= TABLET_BREAKPOINT;
@@ -103,7 +109,7 @@ export default function AppLayout() {
             out of the visible items. */}
         <Drawer.Screen name="index" />
         <Drawer.Screen name="learn" options={{ drawerLabel: t("nav.learn") }} />
-        <Drawer.Screen name="exams" options={{ drawerLabel: t("nav.exams") }} />
+        <Drawer.Screen name="exams" options={{ drawerLabel: examsLabel }} />
         <Drawer.Screen name="assistant" options={{ drawerLabel: t("nav.assistant") }} />
         <Drawer.Screen name="roadmap" options={{ drawerLabel: t("nav.roadmap") }} />
         <Drawer.Screen name="feed" options={{ drawerLabel: t("nav.feed") }} />
@@ -128,7 +134,14 @@ export default function AppLayout() {
       {/* Answers `/` and redirects to Learn — not a tab of its own. */}
       <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen name="learn" options={{ title: t("nav.learn") }} />
-      <Tabs.Screen name="exams" options={{ title: t("nav.exams") }} />
+      <Tabs.Screen
+        name="exams"
+        options={{
+          title: t("nav.exams"),
+          tabBarBadge: pendingChallenges || undefined,
+          tabBarAccessibilityLabel: examsLabel,
+        }}
+      />
       <Tabs.Screen name="assistant" options={{ title: t("nav.assistant") }} />
       <Tabs.Screen name="roadmap" options={{ title: t("nav.roadmap") }} />
       <Tabs.Screen name="feed" options={{ title: t("nav.feed") }} />

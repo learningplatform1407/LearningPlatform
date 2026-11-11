@@ -21,6 +21,7 @@ import {
   WrenchIcon,
 } from "@/components/icons";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
+import { usePendingChallengeCount } from "@/lib/challenges";
 import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import { useDismissableOverlay } from "@/lib/use-dismissable-overlay";
@@ -142,6 +143,7 @@ function NavList({
   isAdmin: boolean;
   pathname: string;
 }) {
+  const pendingChallenges = usePendingChallengeCount();
   return (
     <>
       <ul className="flex flex-col gap-0.5">
@@ -151,6 +153,7 @@ function NavList({
             item={item}
             collapsed={collapsed}
             active={pathname.startsWith(item.href)}
+            badge={item.href === "/exams" ? pendingChallenges : 0}
           />
         ))}
         {/* Appended conditionally rather than added to NAV_ITEMS, which is
@@ -187,20 +190,24 @@ function NavLink({
   item,
   collapsed,
   active,
+  badge = 0,
 }: {
   item: NavItem;
   collapsed: boolean;
   active: boolean;
+  /** A count asking for attention (challenges waiting for you). */
+  badge?: number;
 }) {
   const { t } = useI18n();
   const { Icon } = item;
-  const label = t(item.label);
+  const label =
+    badge > 0 ? t("nav.withPending", { label: t(item.label), count: badge }) : t(item.label);
   return (
     <li>
       <Link
         href={item.href}
         title={collapsed ? label : undefined}
-        aria-label={collapsed ? label : undefined}
+        aria-label={collapsed || badge > 0 ? label : undefined}
         aria-current={active ? "page" : undefined}
         className={`${ITEM_CLASSES} ${collapsed ? "justify-center" : ""} ${
           active
@@ -208,8 +215,24 @@ function NavLink({
             : "text-muted-foreground hover:bg-muted hover:text-foreground"
         }`}
       >
-        <Icon />
-        {!collapsed && label}
+        <span className="relative flex">
+          <Icon />
+          {badge > 0 && collapsed && (
+            <span
+              aria-hidden="true"
+              className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-accent"
+            />
+          )}
+        </span>
+        {!collapsed && t(item.label)}
+        {badge > 0 && !collapsed && (
+          <span
+            aria-hidden="true"
+            className="ml-auto rounded-full bg-accent px-1.5 text-xs leading-5 font-bold text-background tabular-nums"
+          >
+            {badge}
+          </span>
+        )}
       </Link>
     </li>
   );
