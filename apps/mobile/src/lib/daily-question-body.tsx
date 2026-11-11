@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
+import { DailyFollowing } from "@/lib/daily-following";
 import { QuestionRevealPanel } from "@/lib/question-reveal";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
@@ -78,6 +79,8 @@ export function DailyQuestionBody({
       <View style={styles.body}>
         <Text style={styles.prompt}>{question.prompt}</Text>
         <QuestionRevealPanel reveal={day.attempt} />
+        {/* Today only: a past day's answers are history, not company. */}
+        {day.for_date === day.server_today && <DailyFollowing />}
       </View>
     );
   }

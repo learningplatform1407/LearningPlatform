@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.activity.schemas import ActivityActorResponse
 from app.questions.schemas import OptionSchema, QuestionRevealResponse
 
 
@@ -122,3 +123,19 @@ class DailyQuestionAdminResponse(BaseModel):
     #: cannot disagree about how far ahead the schedule runs.
     horizon_days: int
     days: list[DailyQuestionAdminDay]
+
+
+class DailyFollowingAnswer(BaseModel):
+    user: ActivityActorResponse
+    # correct / partial / incorrect. Never the options they picked.
+    outcome: str
+
+
+class DailyFollowingResponse(BaseModel):
+    """How the people you follow did on today's question. Only served once
+    you've answered it yourself -- the same rule that keeps the answer key
+    back until then."""
+
+    answered_count: int
+    correct_count: int
+    answers: list[DailyFollowingAnswer]

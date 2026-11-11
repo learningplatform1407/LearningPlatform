@@ -3,6 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.activity.schemas import ActivityActorResponse
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
 from app.common.errors import ApiError
@@ -11,6 +12,8 @@ from app.daily.dependencies import Clock, get_clock
 from app.daily.models import DailyQuestion, DailyQuestionAttempt
 from app.daily.schemas import (
     DailyAnswerRequest,
+    DailyFollowingAnswer,
+    DailyFollowingResponse,
     DailyQuestionAdminDay,
     DailyQuestionAdminResponse,
     DailyQuestionCalendarResponse,
@@ -26,6 +29,7 @@ from app.daily.service import (
     get_day,
     list_admin_days,
     list_calendar,
+    list_following_attempts,
     load_question,
     set_day_question,
     upcoming_range,
@@ -145,6 +149,33 @@ def read_calendar(
                 outcome=attempt.outcome if attempt is not None else None,
             )
             for day, attempt in rows
+        ],
+    )
+
+
+# Declared before /{for_date}, which would otherwise read "following" as a date.
+@router.get("/following", response_model=DailyFollowingResponse)
+def read_following_answers(
+    user: AuthenticatedUser = Depends(get_current_user),
+    clock: Clock = Depends(get_clock),
+    db: Session = Depends(get_db),
+) -> DailyFollowingResponse:
+    """How the people you follow did today: correct or not, never their picks.
+    Refused until you've answered, so it can't hint at the answer."""
+    if get_attempt(db, user_id=user.id, for_date=clock.today) is None:
+        raise ApiError(403, "answer_first", "Answer today's question first")
+    rows = list_following_attempts(db, user_id=user.id, for_date=clock.today)
+    return DailyFollowingResponse(
+        answered_count=len(rows),
+        correct_count=sum(1 for _, attempt in rows if attempt.outcome == "correct"),
+        answers=[
+            DailyFollowingAnswer(
+                user=ActivityActorResponse(
+                    id=profile.id, display_name=profile.display_name, avatar_url=profile.avatar_url
+                ),
+                outcome=attempt.outcome,
+            )
+            for profile, attempt in rows
         ],
     )
 

@@ -160,3 +160,19 @@ stateDiagram-v2
 - Time taken isn't compared: a session's clock fields don't record active
   answering time reliably across pauses, so only scores and per-question
   outcomes are shown.
+
+## The question of the day, with the people you follow
+
+Once you've answered today's question, the reveal also shows which of the
+people you follow answered it and whether they got it right ("3 of 5 got it
+right"), from `GET /v1/daily-question/following`.
+
+- **Only after you answer** (403 `answer_first` before). It's the same rule
+  that keeps the answer key back until then: knowing that everyone you follow
+  got it right, or wrong, is a hint.
+- **Outcome only, never the options they picked.**
+- Public people only, as everywhere else. Today only: a past day's answers
+  aren't shown, since the point is company on the day, not a record of
+  other people's history.
+- The route is declared before `/{for_date}`, which would otherwise try to read
+  "following" as a date.

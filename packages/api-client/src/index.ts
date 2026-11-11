@@ -388,6 +388,17 @@ export interface DailyQuestionPrompt {
   options: QuizQuestionOption[];
 }
 
+/** How the people you follow did on today's question: correct or not, never
+ * what they picked. Served only once you've answered (403 `answer_first`). */
+export interface DailyFollowing {
+  answered_count: number;
+  correct_count: number;
+  answers: {
+    user: { id: string; display_name: string | null; avatar_url: string | null };
+    outcome: string;
+  }[];
+}
+
 export interface DailyQuestion {
   for_date: string;
   /** The institution's today. Never compute this from the device clock — a
@@ -686,6 +697,7 @@ export function createApiClient(config: ApiClientConfig) {
       request<void>(`/v1/question-bank/${questionId}/favourite`, { method: "DELETE" }),
     /** Today's question, drawn server-side on first read of the day. */
     getDailyQuestion: () => request<DailyQuestion>("/v1/daily-question"),
+    getDailyFollowing: () => request<DailyFollowing>("/v1/daily-question/following"),
     getDailyQuestionCalendar: (params: { start: string; end: string }) => {
       const query = new URLSearchParams({ start: params.start, end: params.end });
       return request<DailyQuestionCalendar>(`/v1/daily-question/calendar?${query}`);

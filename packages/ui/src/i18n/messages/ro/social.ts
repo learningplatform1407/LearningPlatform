@@ -54,6 +54,10 @@ export const social: Messages["social"] = {
     challengeCompleted:
       "{name} și {opponent} au terminat o provocare: {score}% la {opponentScore}%",
   },
+  daily: {
+    title: "Persoane pe care le urmărești",
+    summary: "{correct} din {count} au răspuns corect",
+  },
   challenges: {
     title: "Provocări",
     challengeSomeone: "Provoacă pe cineva",

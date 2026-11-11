@@ -7,6 +7,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Button } from "@/components/button";
+import { DailyFollowing } from "@/components/daily-following";
 import { QuestionRevealPanel } from "@/components/question-reveal";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { useI18n } from "@/lib/i18n";
@@ -80,6 +81,8 @@ export function DailyQuestionBody({
       <>
         <p className="text-sm font-medium text-foreground">{question.prompt}</p>
         <QuestionRevealPanel reveal={day.attempt} />
+        {/* Today only: a past day's answers are history, not company. */}
+        {day.for_date === day.server_today && <DailyFollowing />}
       </>
     );
   }

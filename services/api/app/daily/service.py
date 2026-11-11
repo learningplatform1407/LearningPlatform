@@ -15,6 +15,9 @@ from app.questions.grading import grade_answer, validate_selection
 from app.questions.models import Question
 from app.questions.scoring import get_scheme
 from app.questions.service import apply_published_filter
+from app.social.models import Follow
+from app.social.visibility import is_public
+from app.users.models import Profile
 
 
 def _draw(db: Session, *, exclude: uuid.UUID | None = None) -> Question | None:
@@ -112,6 +115,26 @@ def get_day(db: Session, for_date: date, *, today: date) -> DailyQuestion | None
 
 def get_attempt(db: Session, *, user_id: uuid.UUID, for_date: date) -> DailyQuestionAttempt | None:
     return db.get(DailyQuestionAttempt, (user_id, for_date))
+
+
+def list_following_attempts(
+    db: Session, *, user_id: uuid.UUID, for_date: date
+) -> list[tuple[Profile, DailyQuestionAttempt]]:
+    """Today's attempts by the people `user_id` follows who are public now,
+    in the order they answered. One query; the caller decides whether the
+    viewer may see them (only after answering themselves)."""
+    rows = db.execute(
+        select(Profile, DailyQuestionAttempt)
+        .join(DailyQuestionAttempt, DailyQuestionAttempt.user_id == Profile.id)
+        .join(Follow, Follow.followee_id == Profile.id)
+        .where(
+            Follow.follower_id == user_id,
+            DailyQuestionAttempt.for_date == for_date,
+            is_public(Profile.id),
+        )
+        .order_by(DailyQuestionAttempt.answered_at, Profile.id)
+    ).tuples()
+    return list(rows.all())
 
 
 def _answer_count(db: Session, for_date: date) -> int:

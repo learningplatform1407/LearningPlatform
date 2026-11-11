@@ -47,6 +47,10 @@ export const social = {
     loadMore: "Load more",
     challengeCompleted: "{name} took on {opponent} in a challenge: {score}% to {opponentScore}%",
   },
+  daily: {
+    title: "People you follow",
+    summary: "{correct} of {count} got it right",
+  },
   challenges: {
     title: "Challenges",
     challengeSomeone: "Challenge someone",
