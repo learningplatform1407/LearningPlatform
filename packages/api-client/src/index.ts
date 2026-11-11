@@ -53,6 +53,7 @@ import type {
   UploadUrlResponse,
   LecturePdf,
   UpsertLecturePdfRequest,
+  ActivityEvent,
   PublicProfile,
   UserSummary,
 } from "@lp/contracts";
@@ -572,6 +573,15 @@ export function createApiClient(config: ApiClientConfig) {
       request<void>(`/v1/me/followers/${userId}`, { method: "DELETE" }),
     listFollowing: () => request<UserSummary[]>("/v1/me/following"),
     listFollowers: () => request<UserSummary[]>("/v1/me/followers"),
+    /** The people you follow, newest first. Page back with the last event's `created_at`. */
+    listFollowingActivity: (page: { before?: string; limit?: number } = {}) => {
+      const query = new URLSearchParams();
+      if (page.before) query.set("before", page.before);
+      if (page.limit) query.set("limit", String(page.limit));
+      const suffix = query.size ? `?${query}` : "";
+      return request<ActivityEvent[]>(`/v1/me/activity${suffix}`);
+    },
+    listUserActivity: (userId: string) => request<ActivityEvent[]>(`/v1/users/${userId}/activity`),
     listSubChapters: (chapterId: string) =>
       request<SubChapter[]>(`/v1/chapters/${chapterId}/sub-chapters`),
     createSubChapter: (chapterId: string, data: SubChapterCreateRequest) =>

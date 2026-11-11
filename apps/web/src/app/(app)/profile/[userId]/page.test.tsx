@@ -10,9 +10,16 @@ const getMe = vi.fn();
 const getUserProfile = vi.fn();
 const followUser = vi.fn();
 const unfollowUser = vi.fn();
+const listUserActivity = vi.fn();
 
 vi.mock("@/lib/api-client.browser", () => ({
-  getBrowserApiClient: () => ({ getMe, getUserProfile, followUser, unfollowUser }),
+  getBrowserApiClient: () => ({
+    getMe,
+    getUserProfile,
+    followUser,
+    unfollowUser,
+    listUserActivity,
+  }),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -68,6 +75,28 @@ beforeEach(() => {
   getUserProfile.mockReset().mockResolvedValue(bea);
   followUser.mockReset().mockResolvedValue(undefined);
   unfollowUser.mockReset().mockResolvedValue(undefined);
+  listUserActivity.mockReset().mockResolvedValue([]);
+});
+
+test("shows their recent activity", async () => {
+  listUserActivity.mockResolvedValue([
+    {
+      id: "e1",
+      kind: "exam_completed",
+      created_at: "2026-10-09T12:00:00Z",
+      user: { id: "u2", display_name: "Bea", avatar_url: null },
+      document_id: null,
+      document_title: null,
+      score_percent: 90,
+      question_count: 10,
+      streak_days: null,
+    },
+  ]);
+  renderPage();
+
+  expect(await screen.findByText("Recent activity")).toBeInTheDocument();
+  expect(await screen.findByText(/finished an exam with 90%/)).toBeInTheDocument();
+  expect(listUserActivity).toHaveBeenCalledWith("u2");
 });
 
 test("shows who they are, their counts and their stats", async () => {

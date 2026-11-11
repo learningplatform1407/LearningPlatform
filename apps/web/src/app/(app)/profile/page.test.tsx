@@ -8,9 +8,16 @@ const getMe = vi.fn();
 const getMyStats = vi.fn();
 const listFollowing = vi.fn();
 const listFollowers = vi.fn();
+const listFollowingActivity = vi.fn();
 
 vi.mock("@/lib/api-client.browser", () => ({
-  getBrowserApiClient: () => ({ getMe, getMyStats, listFollowing, listFollowers }),
+  getBrowserApiClient: () => ({
+    getMe,
+    getMyStats,
+    listFollowing,
+    listFollowers,
+    listFollowingActivity,
+  }),
 }));
 
 function renderPage() {
@@ -51,6 +58,48 @@ beforeEach(() => {
   getMyStats.mockReset().mockResolvedValue(zeroStats);
   listFollowing.mockReset().mockResolvedValue([]);
   listFollowers.mockReset().mockResolvedValue([]);
+  listFollowingActivity.mockReset().mockResolvedValue([]);
+});
+
+test("shows what the people you follow did lately, only once you follow someone", async () => {
+  listFollowingActivity.mockResolvedValue([
+    {
+      id: "e1",
+      kind: "streak_milestone",
+      created_at: "2026-10-09T12:00:00Z",
+      user: { id: "u2", display_name: "Bea", avatar_url: null },
+      document_id: null,
+      document_title: null,
+      score_percent: null,
+      question_count: null,
+      streak_days: 3,
+    },
+  ]);
+  const { unmount } = renderPage();
+  await screen.findByText("Ada");
+  expect(screen.queryByText("People you follow")).not.toBeInTheDocument();
+  expect(listFollowingActivity).not.toHaveBeenCalled();
+  unmount();
+
+  listFollowing.mockResolvedValue([
+    {
+      id: "u2",
+      display_name: "Bea",
+      avatar_url: null,
+      university: null,
+      is_following: true,
+      follows_you: false,
+    },
+  ]);
+  renderPage();
+
+  expect(await screen.findByText("People you follow")).toBeInTheDocument();
+  expect(await screen.findByText(/is on a 3-day streak/)).toBeInTheDocument();
+  expect(listFollowingActivity).toHaveBeenCalledWith({ limit: 5 });
+  expect(screen.getByRole("link", { name: "See all activity" })).toHaveAttribute(
+    "href",
+    "/profile/people?tab=activity",
+  );
 });
 
 test("shows follower counts linking to the People page, and a way to find people", async () => {

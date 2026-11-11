@@ -9,6 +9,7 @@ export const social: Messages["social"] = {
     search: "Caută",
     following: "Urmărești",
     followers: "Urmăritori",
+    activity: "Activitate",
   },
   searchLabel: "Caută cursanți după nume",
   searchPlaceholder: "Caută după nume",
@@ -35,4 +36,20 @@ export const social: Messages["social"] = {
   notFound: "Acest profil este privat sau nu există.",
   loadFailed: "Nu s-a putut încărca: {message}",
   actionFailed: "Nu a funcționat: {message}",
+  activity: {
+    title: "Persoane pe care le urmărești",
+    seeAll: "Vezi toată activitatea",
+    recent: "Activitate recentă",
+    lessonCompleted: "{name} a terminat lecția {lesson}",
+    examCompleted: "{name} a terminat un examen cu {score}%",
+    examFinished: "{name} a terminat un examen",
+    streak: plural({
+      one: "{name} are o serie de {count} zi",
+      few: "{name} are o serie de {count} zile la rând",
+      other: "{name} are o serie de {count} de zile la rând",
+    }),
+    empty: "Nimic încă de la persoanele pe care le urmărești.",
+    emptyUser: "Nicio activitate încă.",
+    loadMore: "Încarcă mai multe",
+  },
 };

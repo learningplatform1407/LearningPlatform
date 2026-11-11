@@ -133,6 +133,13 @@ classDiagram
         +UUID follower_id
         +UUID followee_id
     }
+    class ActivityEvent {
+        +UUID id
+        +UUID user_id
+        +string kind
+        +UUID subject_id
+        +json payload
+    }
     class Subscription {
         +UUID id
         +string plan_code
@@ -382,4 +389,5 @@ classDiagram
 
     Profile "1" -- "*" Follow : follower, CASCADE
     Profile "1" -- "*" Follow : followee, CASCADE (only public counts)
+    Profile "1" -- "*" ActivityEvent : shown only while public; subject_id has no FK
 ```

@@ -8,6 +8,7 @@ export const social = {
     search: "Search",
     following: "Following",
     followers: "Followers",
+    activity: "Activity",
   },
   searchLabel: "Search learners by name",
   searchPlaceholder: "Search by name",
@@ -30,4 +31,19 @@ export const social = {
   notFound: "This profile is private or doesn't exist.",
   loadFailed: "Couldn't load: {message}",
   actionFailed: "That didn't work: {message}",
+  activity: {
+    title: "People you follow",
+    seeAll: "See all activity",
+    recent: "Recent activity",
+    lessonCompleted: "{name} completed {lesson}",
+    examCompleted: "{name} finished an exam with {score}%",
+    examFinished: "{name} finished an exam",
+    streak: plural({
+      one: "{name} is on a {count}-day streak",
+      other: "{name} is on a {count}-day streak",
+    }),
+    empty: "Nothing yet from the people you follow.",
+    emptyUser: "No activity yet.",
+    loadMore: "Load more",
+  },
 };

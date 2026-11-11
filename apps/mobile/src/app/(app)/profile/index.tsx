@@ -4,6 +4,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useCallback } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 
+import { ActivityList } from "@/lib/activity-list";
 import { getApiClient } from "@/lib/api-client";
 import { ProfileStats } from "@/lib/profile-stats";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
@@ -43,11 +44,19 @@ export default function ProfileScreen() {
     queryFn: () => getApiClient().listFollowers(),
   });
   const { refetch: refetchFollowers } = followers;
+  const followsAnyone = (following.data?.length ?? 0) > 0;
+  const activity = useQuery({
+    queryKey: ["activity", "recent"],
+    queryFn: () => getApiClient().listFollowingActivity({ limit: 5 }),
+    enabled: followsAnyone,
+  });
+  const { refetch: refetchActivity } = activity;
   useFocusEffect(
     useCallback(() => {
       refetchStats();
       refetchFollowers();
-    }, [refetchStats, refetchFollowers]),
+      if (followsAnyone) refetchActivity();
+    }, [refetchStats, refetchFollowers, refetchActivity, followsAnyone]),
   );
 
   if (isPending) {
@@ -140,6 +149,26 @@ export default function ProfileScreen() {
         {statsQuery.isPending && <Text style={styles.loading}>{t("profile.loadingStats")}</Text>}
         {statsQuery.data && <ProfileStats stats={statsQuery.data} />}
       </View>
+
+      {followsAnyone && (
+        <View>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{t("social.activity.title")}</Text>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => router.push("/profile/people?tab=activity")}
+            >
+              <Text style={styles.link}>{t("social.activity.seeAll")}</Text>
+            </Pressable>
+          </View>
+          {activity.data &&
+            (activity.data.length > 0 ? (
+              <ActivityList events={activity.data} />
+            ) : (
+              <Text style={styles.loading}>{t("social.activity.empty")}</Text>
+            ))}
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -235,6 +264,24 @@ const useStyles = makeStyles((colors) => ({
     color: colors.foreground,
     fontWeight: fontWeights.medium,
     fontSize: fontSizes.sm,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    marginBottom: spacing.xs,
+  },
+  sectionTitle: {
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    color: colors.mutedForeground,
+  },
+  link: {
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.bold,
+    color: colors.accent,
   },
   statsSection: {
     gap: spacing.lg,

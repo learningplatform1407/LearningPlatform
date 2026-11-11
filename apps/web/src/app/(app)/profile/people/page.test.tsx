@@ -12,6 +12,7 @@ const listFollowers = vi.fn();
 const followUser = vi.fn();
 const unfollowUser = vi.fn();
 const removeFollower = vi.fn();
+const listFollowingActivity = vi.fn();
 let searchParams = new URLSearchParams();
 
 vi.mock("@/lib/api-client.browser", () => ({
@@ -23,6 +24,7 @@ vi.mock("@/lib/api-client.browser", () => ({
     followUser,
     unfollowUser,
     removeFollower,
+    listFollowingActivity,
   }),
 }));
 
@@ -69,6 +71,39 @@ beforeEach(() => {
   followUser.mockReset().mockResolvedValue(undefined);
   unfollowUser.mockReset().mockResolvedValue(undefined);
   removeFollower.mockReset().mockResolvedValue(undefined);
+  listFollowingActivity.mockReset().mockResolvedValue([]);
+});
+
+function streakEvent(index: number) {
+  return {
+    id: `e${index}`,
+    kind: "streak_milestone",
+    created_at: `2026-10-${String(30 - index).padStart(2, "0")}T12:00:00Z`,
+    user: { id: "u2", display_name: "Bea", avatar_url: null },
+    document_id: null,
+    document_title: null,
+    score_percent: null,
+    question_count: null,
+    streak_days: 3,
+  };
+}
+
+test("the activity tab pages back through older events", async () => {
+  searchParams = new URLSearchParams("tab=activity");
+  const firstPage = Array.from({ length: 20 }, (_, index) => streakEvent(index));
+  listFollowingActivity.mockResolvedValueOnce(firstPage).mockResolvedValueOnce([streakEvent(20)]);
+  const user = userEvent.setup();
+  renderPage();
+
+  expect(await screen.findAllByText(/is on a 3-day streak/)).toHaveLength(20);
+  await user.click(screen.getByRole("button", { name: "Load more" }));
+
+  expect(await screen.findAllByText(/is on a 3-day streak/)).toHaveLength(21);
+  expect(listFollowingActivity).toHaveBeenLastCalledWith({
+    before: firstPage.at(-1)?.created_at,
+    limit: 20,
+  });
+  expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
 });
 
 test("searching by name and following someone", async () => {

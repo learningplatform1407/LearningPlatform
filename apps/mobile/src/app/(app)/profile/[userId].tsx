@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
+import { ActivityList } from "@/lib/activity-list";
 import { getApiClient } from "@/lib/api-client";
 import { useI18n } from "@/lib/i18n";
 import { ProfileStats } from "@/lib/profile-stats";
@@ -25,6 +26,11 @@ export default function PublicProfileScreen() {
     queryFn: () => getApiClient().getUserProfile(userId),
     retry: (count, error) =>
       !(error instanceof ApiClientError && error.status === 404) && count < 3,
+  });
+  const activity = useQuery({
+    queryKey: ["user-activity", userId],
+    queryFn: () => getApiClient().listUserActivity(userId),
+    enabled: profile.isSuccess,
   });
 
   if (profile.isPending) {
@@ -90,6 +96,16 @@ export default function PublicProfileScreen() {
       </View>
 
       <ProfileStats stats={user.stats} />
+
+      <View>
+        <Text style={styles.sectionTitle}>{t("social.activity.recent")}</Text>
+        {activity.data &&
+          (activity.data.length > 0 ? (
+            <ActivityList events={activity.data} />
+          ) : (
+            <Text style={styles.muted}>{t("social.activity.emptyUser")}</Text>
+          ))}
+      </View>
     </ScrollView>
   );
 }
@@ -142,6 +158,14 @@ const useStyles = makeStyles((colors) => ({
   count: {
     fontSize: fontSizes.sm,
     fontWeight: fontWeights.semibold,
+    color: colors.mutedForeground,
+  },
+  sectionTitle: {
+    marginBottom: spacing.xs,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
     color: colors.mutedForeground,
   },
   muted: {

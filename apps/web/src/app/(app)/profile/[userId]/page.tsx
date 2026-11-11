@@ -6,6 +6,7 @@ import { ApiClientError } from "@lp/api-client";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
+import { ActivityList } from "@/components/activity-list";
 import { Tag } from "@/components/chip";
 import { PageMain } from "@/components/page-main";
 import { ProfileStats } from "@/components/profile-stats";
@@ -26,6 +27,11 @@ export default function PublicProfilePage() {
     queryFn: () => getBrowserApiClient().getUserProfile(userId),
     retry: (count, error) =>
       !(error instanceof ApiClientError && error.status === 404) && count < 3,
+  });
+  const activity = useQuery({
+    queryKey: ["user-activity", userId],
+    queryFn: () => getBrowserApiClient().listUserActivity(userId),
+    enabled: profile.isSuccess,
   });
 
   if (profile.isPending) {
@@ -91,6 +97,16 @@ export default function PublicProfilePage() {
 
       <section className="mt-xl">
         <ProfileStats stats={user.stats} />
+      </section>
+
+      <section className="mt-xl">
+        <h2 className="label-caps mb-sm">{t("social.activity.recent")}</h2>
+        {activity.data &&
+          (activity.data.length > 0 ? (
+            <ActivityList events={activity.data} />
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("social.activity.emptyUser")}</p>
+          ))}
       </section>
     </PageMain>
   );

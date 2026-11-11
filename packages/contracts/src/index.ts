@@ -2,6 +2,7 @@ import type { z } from "zod";
 
 import type {
   accountSettingsSchema,
+  activityEventSchema,
   annotationCreateRequestSchema,
   annotationUpdateRequestSchema,
   annotationResponseSchema,
@@ -85,6 +86,7 @@ export type ProfileUpdateRequest = z.infer<typeof profileUpdateRequestSchema>;
 export type ProfileStatsResponse = z.infer<typeof profileStatsResponseSchema>;
 export type UserSummary = z.infer<typeof userSummarySchema>;
 export type PublicProfile = z.infer<typeof publicProfileResponseSchema>;
+export type ActivityEvent = z.infer<typeof activityEventSchema>;
 export type EntitlementResponse = z.infer<typeof entitlementResponseSchema>;
 export type ExtractedContent = z.infer<typeof extractedContentSchema>;
 export type DocumentVersionResponse = z.infer<typeof documentVersionResponseSchema>;

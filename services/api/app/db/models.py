@@ -5,6 +5,7 @@ domain's models module individually) before calling anything that relies on
 Base.metadata being complete.
 """
 
+from app.activity.models import ActivityEvent
 from app.annotations.models import DocumentAnnotation
 from app.books.models import Book
 from app.chapters.models import Chapter
@@ -26,6 +27,7 @@ from app.users.models import AccountSettings, Consent, Profile
 
 __all__ = [
     "AccountSettings",
+    "ActivityEvent",
     "Book",
     "Chapter",
     "ClozeCard",

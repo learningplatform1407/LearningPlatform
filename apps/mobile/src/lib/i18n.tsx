@@ -6,7 +6,7 @@ import {
   type Translator,
 } from "@lp/ui";
 import { useQuery } from "@tanstack/react-query";
-import { createContext, useContext, useMemo } from "react";
+import { createContext, Fragment, useContext, useMemo } from "react";
 
 import { getApiClient } from "./api-client";
 import { useAuth } from "./auth-context";
@@ -47,4 +47,15 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 /** `const { t } = useI18n();` -- the translator for the current language. */
 export function useI18n(): Translator {
   return useContext(I18nContext);
+}
+
+/** A translated sentence with elements in it: `{name}` in the message becomes
+ * `parts.name` (a nested <Text>, usually). Same contract as the web's `rich`,
+ * so the markup stays out of the catalogue and the word order stays in it. */
+export function rich(text: string, parts: Record<string, React.ReactNode>): React.ReactNode[] {
+  return text
+    .split(/\{(\w+)\}/g)
+    .map((piece, index) =>
+      index % 2 === 1 ? <Fragment key={index}>{parts[piece] ?? `{${piece}}`}</Fragment> : piece,
+    );
 }

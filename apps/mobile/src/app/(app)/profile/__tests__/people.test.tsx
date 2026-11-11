@@ -10,6 +10,7 @@ const mockListFollowers = jest.fn();
 const mockFollowUser = jest.fn();
 const mockUnfollowUser = jest.fn();
 const mockRemoveFollower = jest.fn();
+const mockListFollowingActivity = jest.fn();
 const mockPush = jest.fn();
 let mockParams: { tab?: string } = {};
 
@@ -22,6 +23,7 @@ jest.mock("@/lib/api-client", () => ({
     followUser: mockFollowUser,
     unfollowUser: mockUnfollowUser,
     removeFollower: mockRemoveFollower,
+    listFollowingActivity: mockListFollowingActivity,
   }),
 }));
 
@@ -69,7 +71,31 @@ beforeEach(() => {
   mockFollowUser.mockReset().mockResolvedValue(undefined);
   mockUnfollowUser.mockReset().mockResolvedValue(undefined);
   mockRemoveFollower.mockReset().mockResolvedValue(undefined);
+  mockListFollowingActivity.mockReset().mockResolvedValue([]);
   mockPush.mockReset();
+});
+
+test("the activity tab lists what the people you follow did", async () => {
+  mockParams = { tab: "activity" };
+  mockListFollowingActivity.mockResolvedValue([
+    {
+      id: "e1",
+      kind: "streak_milestone",
+      created_at: "2026-10-09T12:00:00Z",
+      user: { id: "u2", display_name: "Bea", avatar_url: null },
+      document_id: null,
+      document_title: null,
+      score_percent: null,
+      question_count: null,
+      streak_days: 7,
+    },
+  ]);
+  renderScreen();
+
+  expect(await screen.findByText("Bea is on a 7-day streak")).toBeTruthy();
+  expect(mockListFollowingActivity).toHaveBeenCalledWith({ before: undefined, limit: 20 });
+  // One short page: nothing older to load.
+  expect(screen.queryByText("Load more")).toBeNull();
 });
 
 test("searching by name, following someone and opening their profile", async () => {

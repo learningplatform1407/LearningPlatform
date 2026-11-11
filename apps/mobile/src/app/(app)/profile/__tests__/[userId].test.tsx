@@ -8,6 +8,7 @@ const mockGetMe = jest.fn();
 const mockGetUserProfile = jest.fn();
 const mockFollowUser = jest.fn();
 const mockUnfollowUser = jest.fn();
+const mockListUserActivity = jest.fn();
 
 jest.mock("@/lib/api-client", () => ({
   getApiClient: () => ({
@@ -15,6 +16,7 @@ jest.mock("@/lib/api-client", () => ({
     getUserProfile: mockGetUserProfile,
     followUser: mockFollowUser,
     unfollowUser: mockUnfollowUser,
+    listUserActivity: mockListUserActivity,
   }),
 }));
 
@@ -72,6 +74,27 @@ beforeEach(() => {
   mockGetUserProfile.mockReset().mockResolvedValue(bea);
   mockFollowUser.mockReset().mockResolvedValue(undefined);
   mockUnfollowUser.mockReset().mockResolvedValue(undefined);
+  mockListUserActivity.mockReset().mockResolvedValue([]);
+});
+
+test("shows their recent activity", async () => {
+  mockListUserActivity.mockResolvedValue([
+    {
+      id: "e1",
+      kind: "exam_completed",
+      created_at: "2026-10-09T12:00:00Z",
+      user: { id: "u2", display_name: "Bea", avatar_url: null },
+      document_id: null,
+      document_title: null,
+      score_percent: 90,
+      question_count: 10,
+      streak_days: null,
+    },
+  ]);
+  renderScreen();
+
+  expect(await screen.findByText("Recent activity")).toBeTruthy();
+  expect(await screen.findByText("Bea finished an exam with 90%")).toBeTruthy();
 });
 
 test("shows who they are, their counts and their stats", async () => {

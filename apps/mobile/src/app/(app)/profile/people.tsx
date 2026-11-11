@@ -1,9 +1,10 @@
 import type { UserSummary } from "@lp/contracts";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
+import { ActivityList } from "@/lib/activity-list";
 import { getApiClient } from "@/lib/api-client";
 import { useI18n } from "@/lib/i18n";
 import { UserRow, useRemoveFollower } from "@/lib/social";
@@ -11,8 +12,8 @@ import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
 import { ScreenHeader, SegmentedSwitch } from "@/lib/ui/primitives";
 
-type Tab = "search" | "following" | "followers";
-const TABS: readonly Tab[] = ["search", "following", "followers"];
+type Tab = "search" | "following" | "followers" | "activity";
+const TABS: readonly Tab[] = ["search", "following", "followers", "activity"];
 
 const MIN_QUERY_LENGTH = 2;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -62,6 +63,7 @@ export default function PeopleScreen() {
       {tab === "search" && <SearchTab />}
       {tab === "following" && <FollowingTab />}
       {tab === "followers" && <FollowersTab />}
+      {tab === "activity" && <ActivityTab />}
     </ScrollView>
   );
 }
@@ -160,6 +162,51 @@ function FollowersTab() {
   );
 }
 
+const ACTIVITY_PAGE_SIZE = 20;
+
+function ActivityTab() {
+  const { t } = useI18n();
+  const styles = useStyles();
+  const activity = useInfiniteQuery({
+    queryKey: ["activity", "all"],
+    queryFn: ({ pageParam }) =>
+      getApiClient().listFollowingActivity({ before: pageParam, limit: ACTIVITY_PAGE_SIZE }),
+    initialPageParam: undefined as string | undefined,
+    // A short page means there is nothing older.
+    getNextPageParam: (lastPage) =>
+      lastPage.length < ACTIVITY_PAGE_SIZE ? undefined : lastPage.at(-1)?.created_at,
+  });
+  if (activity.isPending) return <Text style={styles.hint}>{t("common.loading")}</Text>;
+  if (activity.isError) {
+    return (
+      <Text style={styles.error}>
+        {t("social.loadFailed", { message: (activity.error as Error).message })}
+      </Text>
+    );
+  }
+  const events = activity.data.pages.flat();
+  if (events.length === 0) {
+    return <Text style={styles.hint}>{t("social.activity.empty")}</Text>;
+  }
+  return (
+    <View style={styles.tab}>
+      <ActivityList events={events} />
+      {activity.hasNextPage && (
+        <Pressable
+          accessibilityRole="button"
+          disabled={activity.isFetchingNextPage}
+          onPress={() => activity.fetchNextPage()}
+          style={styles.moreButton}
+        >
+          <Text style={styles.moreButtonText}>
+            {activity.isFetchingNextPage ? t("common.loading") : t("social.activity.loadMore")}
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 function UserList({
   users,
   onRemove,
@@ -202,6 +249,19 @@ const useStyles = makeStyles((colors) => ({
   list: {
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  moreButton: {
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
+  moreButtonText: {
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.bold,
+    color: colors.foreground,
   },
   hint: {
     fontSize: fontSizes.sm,

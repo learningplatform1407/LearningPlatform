@@ -76,3 +76,46 @@ The query keys are shared by both apps: `["user-search", q]`, `["following"]`,
 `["followers"]`, `["user", id]`. Following flips every cached copy of the
 button at once and puts it back if the request fails
 (`apps/web/src/lib/use-follow.ts`, `apps/mobile/src/lib/social.tsx`).
+
+## Activity
+
+Followers see a short feed of what the people they follow have done:
+completed a lesson, finished an exam (with the score), reached a streak of 3, 7,
+14, 30, 50 or 100 days and every hundred after that. It shows on your Profile
+(latest five, only once you follow someone), in full on the People screen's
+Activity tab, and per learner on their public profile.
+
+**Recorded when it happens, not derived.** Lesson completion has no timestamp
+of its own (it's the 80% ratio over `question_progress`), and rebuilding a feed
+from several tables for every person you follow on every read would be the
+slow way round. So `activity_events` is written as a side effect of the action:
+
+| Kind               | Written by                                                                                                      | Once per          |
+| ------------------ | --------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `exam_completed`   | `quizzes/service.py::_finalize` (submit, timer expiry and the sweep; not cancel)                                | quiz session      |
+| `lesson_completed` | `progress/service.py::grade_and_record`, when a correct answer takes the lesson from not completed to completed | lesson, ever      |
+| `streak_milestone` | `daily/service.py::answer_today`                                                                                | milestone reached |
+
+- `app/activity/recording.py::record_event` never commits and swallows a
+  duplicate: the action already happened, and a missing feed line must not
+  undo it. The unique index on `(user_id, kind, subject_id)` makes "once per
+  lesson" hold under races too; streak events have no subject, and NULLs never
+  collide.
+- **No backfill.** The table starts empty. A lesson already completed before
+  this shipped produces an event only if it drops below the threshold and
+  crosses it again (and even then, only the first time).
+- **Recorded for everyone, shown only while the author is public.** Going
+  public later shows your recent history; going private hides it at once.
+- `subject_id` has no foreign key, so deleting a lesson doesn't need to reach
+  into this table. The reader drops events whose lesson is gone, and reads the
+  title at read time, so a renamed lesson shows its current name.
+- The recorder lives apart from the feed reader (`app/activity/feed.py`)
+  because quizzes, progress and daily import it, and the reader needs
+  `app.social`, which imports those modules back for profile stats. For the same
+  reason the "is public" check is its own module, `app/social/visibility.py`.
+
+`GET /v1/me/activity?before=&limit=` pages back by `created_at`;
+`GET /v1/users/{id}/activity` has the same visibility as the profile. Each event
+is flat (`document_title`, `score_percent`, `streak_days`, …) and the clients
+build the sentence from `kind`, with the name and the lesson spliced in as links
+by `rich()` so a translation can reorder them.

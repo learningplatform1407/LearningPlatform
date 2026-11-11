@@ -1,44 +1,13 @@
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
-from app.main import app
 from app.social.models import Follow
 from app.users.models import Profile
-from app.users.service import get_or_create_profile
-
-MakeUser = Callable[..., AuthenticatedUser]
-
-
-@pytest.fixture
-def make_user(db_session: Session) -> MakeUser:
-    def _make(name: str | None = None, *, public: bool = True) -> AuthenticatedUser:
-        user = AuthenticatedUser(id=uuid.uuid4(), email=f"{uuid.uuid4().hex}@example.com")
-        profile = get_or_create_profile(db_session, user)
-        profile.display_name = name
-        profile.settings.profile_public = public
-        db_session.commit()
-        return user
-
-    return _make
-
-
-@pytest.fixture
-def act_as(client: TestClient) -> Iterator[Callable[[AuthenticatedUser], TestClient]]:
-    """Switches which user the client is signed in as, mid-test."""
-
-    def _as(user: AuthenticatedUser) -> TestClient:
-        app.dependency_overrides[get_current_user] = lambda: user
-        return client
-
-    yield _as
-    app.dependency_overrides.pop(get_current_user, None)
-
+from tests.conftest import MakeUser
 
 # --- the public-profile setting -------------------------------------------
 

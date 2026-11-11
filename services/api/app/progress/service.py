@@ -15,6 +15,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.activity.constants import ActivityKind
+from app.activity.recording import record_event
 from app.common.hierarchy import load_content_tree
 from app.documents.models import Document
 from app.progress.constants import LESSON_COMPLETION_THRESHOLD
@@ -448,6 +450,10 @@ def grade_and_record(
         [option["id"] for option in question.options],
     )
     if selected_option_ids:
+        # Only a correct answer can lift a lesson over the threshold, so only
+        # then is it worth asking whether this answer completed it.
+        lesson_id = question.document_id if outcome == "correct" else None
+        was_completed = lesson_id is not None and _is_document_completed(db, user_id, lesson_id)
         _record_attempt(
             db,
             user_id=user_id,
@@ -457,7 +463,37 @@ def grade_and_record(
             outcome=outcome,
             now=now,
         )
+        if lesson_id is not None and not was_completed:
+            db.flush()
+            if _is_document_completed(db, user_id, lesson_id):
+                record_event(
+                    db,
+                    user_id=user_id,
+                    kind=ActivityKind.LESSON_COMPLETED,
+                    now=now,
+                    subject_id=lesson_id,
+                )
     return points, outcome
+
+
+def _is_document_completed(db: Session, user_id: uuid.UUID, document_id: uuid.UUID) -> bool:
+    """`_is_lesson_completed` for one lesson, in one query -- what an answer
+    needs to tell whether it just completed the lesson, without the
+    whole-bank counts `_question_counts` builds."""
+    question_count, answered_count, correct_count = db.execute(
+        select(
+            func.count(Question.id),
+            func.count(QuestionProgress.question_id),
+            func.count().filter(QuestionProgress.outcome == "correct"),
+        )
+        .select_from(Question)
+        .outerjoin(
+            QuestionProgress,
+            (QuestionProgress.question_id == Question.id) & (QuestionProgress.user_id == user_id),
+        )
+        .where(Question.document_id == document_id, Question.status == QuestionStatus.PUBLISHED)
+    ).one()
+    return _is_lesson_completed(question_count, answered_count, correct_count)
 
 
 def get_favourite_ids(

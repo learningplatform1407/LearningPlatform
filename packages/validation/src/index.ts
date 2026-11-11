@@ -61,6 +61,24 @@ export const publicProfileResponseSchema = userSummarySchema.extend({
   stats: profileStatsResponseSchema,
 });
 
+/** One line of the activity feed. Flat: each kind fills its own fields and
+ * leaves the rest null; the clients build the sentence from `kind`. */
+export const activityEventSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["exam_completed", "lesson_completed", "streak_milestone"]),
+  created_at: z.string(),
+  user: z.object({
+    id: z.string(),
+    display_name: z.string().nullable(),
+    avatar_url: z.string().nullable(),
+  }),
+  document_id: z.string().nullable(),
+  document_title: z.string().nullable(),
+  score_percent: z.number().nullable(),
+  question_count: z.number().nullable(),
+  streak_days: z.number().nullable(),
+});
+
 export const entitlementResponseSchema = z.object({
   feature_key: z.string(),
   limit_value: z.number().nullable(),

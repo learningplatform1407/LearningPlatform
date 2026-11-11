@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.activity.router import router as activity_router
 from app.annotations.router import router as annotations_router
 from app.books.router import router as books_router
 from app.chapters.router import router as chapters_router
@@ -66,6 +67,7 @@ app.include_router(feed_router)
 app.include_router(daily_router)
 app.include_router(daily_admin_router)
 app.include_router(social_router)
+app.include_router(activity_router)
 
 
 @app.exception_handler(ApiError)

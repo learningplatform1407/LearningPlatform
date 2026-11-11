@@ -7,6 +7,7 @@ const mockGetMe = jest.fn();
 const mockGetMyStats = jest.fn();
 const mockListFollowing = jest.fn();
 const mockListFollowers = jest.fn();
+const mockListFollowingActivity = jest.fn();
 const mockPush = jest.fn();
 
 jest.mock("@/lib/api-client", () => ({
@@ -15,6 +16,7 @@ jest.mock("@/lib/api-client", () => ({
     getMyStats: mockGetMyStats,
     listFollowing: mockListFollowing,
     listFollowers: mockListFollowers,
+    listFollowingActivity: mockListFollowingActivity,
   }),
 }));
 
@@ -67,7 +69,49 @@ beforeEach(() => {
   mockGetMyStats.mockReset().mockResolvedValue(zeroStats);
   mockListFollowing.mockReset().mockResolvedValue([]);
   mockListFollowers.mockReset().mockResolvedValue([]);
+  mockListFollowingActivity.mockReset().mockResolvedValue([]);
   mockPush.mockReset();
+});
+
+test("shows what the people you follow did lately once you follow someone", async () => {
+  mockListFollowing.mockResolvedValue([
+    {
+      id: "u2",
+      display_name: "Bea",
+      avatar_url: null,
+      university: null,
+      is_following: true,
+      follows_you: false,
+    },
+  ]);
+  mockListFollowingActivity.mockResolvedValue([
+    {
+      id: "e1",
+      kind: "streak_milestone",
+      created_at: "2026-10-09T12:00:00Z",
+      user: { id: "u2", display_name: "Bea", avatar_url: null },
+      document_id: null,
+      document_title: null,
+      score_percent: null,
+      question_count: null,
+      streak_days: 3,
+    },
+  ]);
+
+  renderScreen();
+
+  expect(await screen.findByText("People you follow")).toBeTruthy();
+  expect(await screen.findByText("Bea is on a 3-day streak")).toBeTruthy();
+  fireEvent.press(screen.getByText("See all activity"));
+  expect(mockPush).toHaveBeenLastCalledWith("/profile/people?tab=activity");
+});
+
+test("hides the activity section while you follow nobody", async () => {
+  renderScreen();
+
+  await screen.findByText("Ada");
+  expect(screen.queryByText("People you follow")).toBeNull();
+  expect(mockListFollowingActivity).not.toHaveBeenCalled();
 });
 
 test("shows follower counts that open the People screen, and a way to find people", async () => {

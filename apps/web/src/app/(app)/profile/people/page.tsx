@@ -1,11 +1,13 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { UserSummary } from "@lp/contracts";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { ActivityList } from "@/components/activity-list";
+import { Button } from "@/components/button";
 import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { SegmentedSwitch } from "@/components/segmented-switch";
@@ -14,8 +16,8 @@ import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { useI18n } from "@/lib/i18n";
 import { useRemoveFollower } from "@/lib/use-follow";
 
-type Tab = "search" | "following" | "followers";
-const TABS: readonly Tab[] = ["search", "following", "followers"];
+type Tab = "search" | "following" | "followers" | "activity";
+const TABS: readonly Tab[] = ["search", "following", "followers", "activity"];
 
 const MIN_QUERY_LENGTH = 2;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -64,6 +66,7 @@ export default function PeoplePage() {
         {tab === "search" && <SearchTab />}
         {tab === "following" && <FollowingTab />}
         {tab === "followers" && <FollowersTab />}
+        {tab === "activity" && <ActivityTab />}
       </div>
     </PageMain>
   );
@@ -160,6 +163,53 @@ function FollowersTab() {
         </p>
       )}
       <UserList users={followers.data} onRemove={(user) => remove.mutate(user.id)} />
+    </>
+  );
+}
+
+const ACTIVITY_PAGE_SIZE = 20;
+
+function ActivityTab() {
+  const { t } = useI18n();
+  const activity = useInfiniteQuery({
+    queryKey: ["activity", "all"],
+    queryFn: ({ pageParam }) =>
+      getBrowserApiClient().listFollowingActivity({
+        before: pageParam,
+        limit: ACTIVITY_PAGE_SIZE,
+      }),
+    initialPageParam: undefined as string | undefined,
+    // A short page means there is nothing older.
+    getNextPageParam: (lastPage) =>
+      lastPage.length < ACTIVITY_PAGE_SIZE ? undefined : lastPage.at(-1)?.created_at,
+  });
+  if (activity.isPending) {
+    return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
+  }
+  if (activity.isError) {
+    return (
+      <p role="alert" className="text-sm text-danger">
+        {t("social.loadFailed", { message: (activity.error as Error).message })}
+      </p>
+    );
+  }
+  const events = activity.data.pages.flat();
+  if (events.length === 0) {
+    return <p className="text-sm text-muted-foreground">{t("social.activity.empty")}</p>;
+  }
+  return (
+    <>
+      <ActivityList events={events} />
+      {activity.hasNextPage && (
+        <Button
+          variant="secondary"
+          className="mt-md"
+          disabled={activity.isFetchingNextPage}
+          onClick={() => activity.fetchNextPage()}
+        >
+          {activity.isFetchingNextPage ? t("common.loading") : t("social.activity.loadMore")}
+        </Button>
+      )}
     </>
   );
 }

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { formatMonthYear } from "@lp/ui";
 import Link from "next/link";
 
+import { ActivityList } from "@/components/activity-list";
 import { PageMain } from "@/components/page-main";
 import { ProfileStats } from "@/components/profile-stats";
 import { UserAvatar } from "@/components/user-avatar";
@@ -32,6 +33,12 @@ export default function ProfilePage() {
   const followers = useQuery({
     queryKey: ["followers"],
     queryFn: () => getBrowserApiClient().listFollowers(),
+  });
+  const followsAnyone = (following.data?.length ?? 0) > 0;
+  const activity = useQuery({
+    queryKey: ["activity", "recent"],
+    queryFn: () => getBrowserApiClient().listFollowingActivity({ limit: 5 }),
+    enabled: followsAnyone,
   });
 
   if (isPending) {
@@ -128,6 +135,26 @@ export default function ProfilePage() {
         )}
         {statsQuery.data && <ProfileStats stats={statsQuery.data} />}
       </section>
+
+      {followsAnyone && (
+        <section className="mt-xl">
+          <div className="mb-sm flex items-baseline justify-between gap-md">
+            <h2 className="label-caps m-0">{t("social.activity.title")}</h2>
+            <Link
+              href="/profile/people?tab=activity"
+              className="text-caption font-bold text-accent hover:underline"
+            >
+              {t("social.activity.seeAll")}
+            </Link>
+          </div>
+          {activity.data &&
+            (activity.data.length > 0 ? (
+              <ActivityList events={activity.data} />
+            ) : (
+              <p className="text-sm text-muted-foreground">{t("social.activity.empty")}</p>
+            ))}
+        </section>
+      )}
     </PageMain>
   );
 }

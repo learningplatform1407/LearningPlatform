@@ -13,6 +13,8 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.activity.constants import ActivityKind
+from app.activity.recording import record_event
 from app.common.errors import ApiError, FieldError
 from app.progress.service import grade_and_record
 from app.questions.constants import Outcome
@@ -117,6 +119,19 @@ def _finalize(
             total_possible += sq.points_possible
         session.points_awarded = total_awarded
         session.points_possible = total_possible
+        record_event(
+            db,
+            user_id=session.user_id,
+            kind=ActivityKind.EXAM_COMPLETED,
+            now=now,
+            subject_id=session.id,
+            payload={
+                "score_percent": (
+                    round(100 * total_awarded / total_possible, 1) if total_possible else None
+                ),
+                "question_count": len(session.questions),
+            },
+        )
 
     session.status = status
     session.finished_at = now

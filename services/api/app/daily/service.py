@@ -5,6 +5,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.activity.constants import ActivityKind
+from app.activity.recording import is_streak_milestone, record_event
 from app.common.errors import ApiError
 from app.daily.constants import MAX_BOOKING_DAYS, MAX_CALENDAR_SPAN_DAYS
 from app.daily.models import DailyQuestion, DailyQuestionAttempt
@@ -254,6 +256,16 @@ def answer_today(
             raise
         return raced, question
     savepoint.commit()
+
+    current_streak, _ = get_streak_stats(db, user_id, today)
+    if is_streak_milestone(current_streak):
+        record_event(
+            db,
+            user_id=user_id,
+            kind=ActivityKind.STREAK_MILESTONE,
+            now=now,
+            payload={"days": current_streak},
+        )
     return attempt, question
 
 
