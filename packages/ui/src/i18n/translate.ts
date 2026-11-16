@@ -1,5 +1,5 @@
 import { LOCALE_TAGS, type Language } from "./languages";
-import type { Plural } from "./plural";
+import { selectPluralForm, type Plural } from "./plural";
 import { en, type Messages } from "./messages/en";
 import { ro } from "./messages/ro";
 
@@ -34,7 +34,6 @@ function lookup(messages: Messages, key: string): string | Plural | undefined {
 
 function create(language: Language): Translator {
   const locale = LOCALE_TAGS[language];
-  const rules = new Intl.PluralRules(locale);
   const numbers = new Intl.NumberFormat(locale);
 
   function t(key: MessageKey, params?: MessageParams): string {
@@ -46,7 +45,7 @@ function create(language: Language): Translator {
       text = entry;
     } else {
       const count = typeof params?.count === "number" ? params.count : 0;
-      const form = rules.select(count);
+      const form = selectPluralForm(language, count);
       text = (form === "one" ? entry.one : form === "few" ? entry.few : undefined) ?? entry.other;
     }
     if (!params) return text;

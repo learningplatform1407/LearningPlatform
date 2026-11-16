@@ -6,7 +6,14 @@ import { ro } from "./messages/ro";
 import { buildMonthGrid, formatCalendarDate, weekdayLabels } from "../calendar";
 import { describeInterval, formatInterval, formatMonthYear, formatPostDate } from "../format";
 
-import { authErrorMessage, getTranslator, resolveLanguage } from ".";
+import {
+  authErrorMessage,
+  getTranslator,
+  LANGUAGES,
+  LOCALE_TAGS,
+  resolveLanguage,
+  selectPluralForm,
+} from ".";
 
 /** Every leaf path of a catalogue, plural forms collapsed to their key. */
 function paths(node: object, prefix = ""): string[] {
@@ -65,6 +72,33 @@ describe("resolveLanguage", () => {
     expect(resolveLanguage("fr-FR,ro;q=0.9,en;q=0.8")).toBe("ro");
     expect(resolveLanguage("de-DE,de;q=0.9")).toBe("en");
     expect(resolveLanguage(undefined)).toBe("en");
+  });
+});
+
+describe("selectPluralForm", () => {
+  // The rules are written out in plural.ts because Hermes (React Native) has
+  // no Intl.PluralRules; Node's ICU does, so it can referee them here.
+  test("agrees with Intl.PluralRules on every count a message can show", () => {
+    for (const language of LANGUAGES) {
+      const rules = new Intl.PluralRules(LOCALE_TAGS[language]);
+      const counts = [...Array(1201).keys(), 0.5, 1.0, 1.5, 2.5, 20.5, -1, -3, -20];
+      const ours = counts.map((count) => `${count}=${selectPluralForm(language, count)}`);
+      const icu = counts.map((count) => `${count}=${rules.select(count)}`);
+      expect({ language, forms: ours }).toEqual({ language, forms: icu });
+    }
+  });
+
+  test("Romanian's three forms at their boundaries", () => {
+    const ro = (count: number) => selectPluralForm("ro", count);
+    expect([ro(0), ro(1), ro(2), ro(19)]).toEqual(["few", "one", "few", "few"]);
+    // 20–100 take "de", then 101–119 are few again ("101 lecții").
+    expect([ro(20), ro(100), ro(101), ro(119), ro(120)]).toEqual([
+      "other",
+      "other",
+      "few",
+      "few",
+      "other",
+    ]);
   });
 });
 
