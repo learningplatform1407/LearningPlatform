@@ -330,29 +330,40 @@ function PdfPage({
       accessibilityLabel={t("lesson.pdfView.page", { number: page })}
       testID={`pdf-page-${page}`}
     >
+      {/* The page image takes no touches at all.
+
+          `scrollEnabled={false}` stops the native viewer from scrolling, but
+          not from *claiming* the gesture: on iOS, PDFKit's own scroll view
+          still swallows every drag that starts over a page, so dragging on
+          the lesson scrolled nothing and only the gaps beside the pages
+          worked. Nothing here wants the viewer's gestures -- zoom and paging
+          are off, and marking and ink are the sibling layers below -- so the
+          whole subtree opts out and drags reach the lesson's ScrollView. */}
       {rendered ? (
-        <Pdf
-          source={source}
-          page={page}
-          singlePage
-          fitPolicy={0}
-          spacing={0}
-          scrollEnabled={false}
-          enableDoubleTapZoom={false}
-          // react-native-pdf defaults this to true, which on Android routes
-          // the download through an all-trusting client that throws ("Use of
-          // own trust manager but none defined") and never loads. Off is the
-          // fix and the right posture for a signed HTTPS URL.
-          trustAllCerts={false}
-          style={[styles.pdf, { width, height }]}
-          onLoadComplete={(_pages, _path, size) => onLoaded(size)}
-          onError={(error) => {
-            // Logged, since the native view's message is the only account
-            // of what went wrong; the learner sees the generic one.
-            console.warn("[lecture-pdf] native render failed:", page, error);
-            onFailed();
-          }}
-        />
+        <View style={styles.layer} pointerEvents="none">
+          <Pdf
+            source={source}
+            page={page}
+            singlePage
+            fitPolicy={0}
+            spacing={0}
+            scrollEnabled={false}
+            enableDoubleTapZoom={false}
+            // react-native-pdf defaults this to true, which on Android routes
+            // the download through an all-trusting client that throws ("Use of
+            // own trust manager but none defined") and never loads. Off is the
+            // fix and the right posture for a signed HTTPS URL.
+            trustAllCerts={false}
+            style={[styles.pdf, { width, height }]}
+            onLoadComplete={(_pages, _path, size) => onLoaded(size)}
+            onError={(error) => {
+              // Logged, since the native view's message is the only account
+              // of what went wrong; the learner sees the generic one.
+              console.warn("[lecture-pdf] native render failed:", page, error);
+              onFailed();
+            }}
+          />
+        </View>
       ) : (
         <Text style={styles.placeholder}>{t("lesson.pdfView.page", { number: page })}</Text>
       )}

@@ -47,7 +47,14 @@ export default function NotebookEntryScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    // As on the notebook list: a drag dismisses the keyboard, since the
+    // editor's body is multiline and its return key makes a new line.
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      keyboardDismissMode="interactive"
+      keyboardShouldPersistTaps="handled"
+    >
       {/* As on the web notebook at phone width: back to the list, then the
           page header, then the note itself. */}
       <Pressable onPress={() => router.back()} accessibilityRole="button" hitSlop={8}>

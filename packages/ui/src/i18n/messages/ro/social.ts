@@ -60,10 +60,14 @@ export const social: Messages["social"] = {
   },
   challenges: {
     title: "Provocări",
+    viewAll: "Vezi toate",
+    allTitle: "Toate provocările",
     challengeSomeone: "Provoacă pe cineva",
+    challenge: "Provoacă",
     pickerHint: "Răspunde la aceleași întrebări, în aceeași ordine, cu același cronometru.",
     noMutuals:
       "Provocările sunt între persoane care se urmăresc reciproc. Urmărește pe cineva înapoi ca să-l poți provoca.",
+    noOneLeft: "{name} a ales aceste întrebări, deci nu mai e pe cine să provoci cu ele.",
     challengeName: "Provoacă: {name}",
     sentTo: "Provocare trimisă către {name}.",
     incoming: plural({

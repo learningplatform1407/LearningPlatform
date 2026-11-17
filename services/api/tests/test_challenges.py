@@ -172,6 +172,57 @@ def test_you_cannot_challenge_yourself(
     assert response.status_code == 400
 
 
+def _answer_the_challenge(act_as: ActAs, bea: AuthenticatedUser, challenge_id: str) -> dict:
+    """Bea accepts and finishes the challenge, giving her an attempt of her
+    own on Ana's questions."""
+    session = act_as(bea).post(f"/v1/challenges/{challenge_id}/accept").json()
+    for position in range(3):
+        act_as(bea).put(
+            f"/v1/quiz-sessions/{session['id']}/answers/{position}",
+            json={"selected_option_ids": ["a"]},
+        )
+    act_as(bea).post(f"/v1/quiz-sessions/{session['id']}/submit")
+    return session
+
+
+def test_the_exam_you_answered_cannot_be_sent_back_to_its_sender(
+    pair: tuple[AuthenticatedUser, AuthenticatedUser], act_as: ActAs
+) -> None:
+    """Ana's questions don't come back to Ana: she chose them and has
+    answered them, so there is no score of hers left to beat."""
+    ana, bea = pair
+    sent = _challenge(act_as, ana, bea)
+    answered = _answer_the_challenge(act_as, bea, sent["id"])
+
+    response = act_as(bea).post(
+        "/v1/challenges", json={"session_id": answered["id"], "user_id": str(ana.id)}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "cannot_return_challenge"
+
+
+def test_the_exam_you_answered_can_go_to_anyone_else(
+    pair: tuple[AuthenticatedUser, AuthenticatedUser],
+    act_as: ActAs,
+    make_user: MakeUser,
+) -> None:
+    """Only the sender is barred -- the attempt is Bea's own, with Bea's
+    score, so Cris can be asked to beat it."""
+    ana, bea = pair
+    cris = make_user("Cris")
+    _follow_each_other(act_as, bea, cris)
+    sent = _challenge(act_as, ana, bea)
+    answered = _answer_the_challenge(act_as, bea, sent["id"])
+
+    response = act_as(bea).post(
+        "/v1/challenges", json={"session_id": answered["id"], "user_id": str(cris.id)}
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["opponent"]["display_name"] == "Cris"
+
+
 # --- answering --------------------------------------------------------------
 
 

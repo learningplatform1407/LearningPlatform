@@ -364,7 +364,7 @@ test("renders an existing highlight created on web as a highlighted span", async
   expect(screen.getByText("Hello ")).toBeTruthy();
 });
 
-test("renders a range-anchored margin note (created on web) as a badge, not a highlight", async () => {
+test("renders a range-anchored margin note on its passage, with its marker there", async () => {
   mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
   mockListAnnotations.mockResolvedValue([
     {
@@ -382,10 +382,44 @@ test("renders a range-anchored margin note (created on web) as a badge, not a hi
 
   renderScreen();
 
-  expect(await screen.findByText("note")).toBeTruthy();
-  // Split into segments by the note's offsets, but rendered as plain (unhighlighted) text.
+  // The marker is inline, where the passage ends -- not a badge after the
+  // paragraph, which is where every note used to land however it was
+  // anchored. The passage itself is marked, so it is visible which words
+  // the note is about.
+  const marker = await screen.findByTestId("note-marker-a1");
+  expect(screen.queryByText("note")).toBeNull();
   expect(screen.getByText("Hello ")).toBeTruthy();
   expect(screen.getByText("world")).toBeTruthy();
+
+  fireEvent.press(marker);
+  expect(await screen.findByDisplayValue("Check this later")).toBeTruthy();
+});
+
+test("the note tool anchors a note to the words you pick", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world again"));
+  mockListAnnotations.mockResolvedValue([]);
+
+  renderScreen();
+  await screen.findByText("Hello world again");
+
+  // Notes are picked the way highlights are: first word, then last. Before,
+  // the only note the phone could make covered the whole paragraph.
+  fireEvent.press(screen.getByLabelText("Note"));
+  fireEvent.press(await screen.findByTestId("word-0-0"));
+  fireEvent.press(screen.getByTestId("word-0-6"));
+
+  fireEvent.changeText(await screen.findByPlaceholderText("Note..."), "About the opening");
+  fireEvent.press(screen.getByText("Save"));
+
+  await waitFor(() =>
+    expect(mockCreateAnnotation).toHaveBeenCalledWith("d1", {
+      type: "margin_note",
+      block_index: 0,
+      start_offset: 0,
+      end_offset: 11,
+      note_text: "About the opening",
+    }),
+  );
 });
 
 test("renders an existing margin note as a badge and reveals its text when pressed", async () => {

@@ -38,15 +38,17 @@ beforeEach(() => {
   updateMe.mockReset().mockResolvedValue(me);
 });
 
-test("picking a theme and saving", async () => {
+test("picking a theme writes it, with no Save button", async () => {
   updateMe.mockResolvedValue({ ...me, settings: { ...me.settings, theme: "dark" } });
 
   const user = userEvent.setup();
   renderPage();
 
   await user.click(await screen.findByRole("button", { name: "Dark" }));
-  await user.click(screen.getByRole("button", { name: "Save" }));
 
   expect(updateMe).toHaveBeenCalledWith({ theme: "dark" });
-  expect(await screen.findByText("Saved.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+  // The chosen segment stays chosen: it reads the cache the write updated,
+  // not local state the response could contradict.
+  expect(await screen.findByRole("button", { name: "Dark", pressed: true })).toBeInTheDocument();
 });

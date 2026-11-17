@@ -40,18 +40,15 @@ beforeEach(() => {
   updateMe.mockReset().mockResolvedValue(me);
 });
 
-test("shows the current language and saves on submit", async () => {
-  const user = userEvent.setup();
+test("shows the current language, and asks for no Save", async () => {
   renderPage();
 
   expect(await screen.findByDisplayValue("English")).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Save" }));
-
-  expect(updateMe).toHaveBeenCalledWith({ language: "en" });
-  expect(await screen.findByText("Saved.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+  expect(updateMe).not.toHaveBeenCalled();
 });
 
-test("offers Romanian, and saving it switches the interface", async () => {
+test("offers Romanian, and choosing it switches the interface", async () => {
   const user = userEvent.setup();
   updateMe.mockResolvedValue({ ...me, settings: { ...me.settings, language: "ro" } });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -65,13 +62,11 @@ test("offers Romanian, and saving it switches the interface", async () => {
   );
 
   await user.selectOptions(await screen.findByRole("combobox"), "ro");
-  await user.click(screen.getByRole("button", { name: "Save" }));
 
   expect(updateMe).toHaveBeenCalledWith({ language: "ro" });
   // The saved `me` lands in the cache, LanguageSync adopts it, and the page
   // re-renders in Romanian -- remembered on the browser for the next visit.
-  expect(await screen.findByRole("button", { name: "Salvează" })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Limbi" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Limbi" })).toBeInTheDocument();
   expect(document.documentElement.lang).toBe("ro");
   expect(document.cookie).toContain("lp-language=ro");
 });

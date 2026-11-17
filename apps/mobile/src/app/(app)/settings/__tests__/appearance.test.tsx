@@ -36,13 +36,12 @@ beforeEach(() => {
   mockUpdateMe.mockReset().mockResolvedValue(me);
 });
 
-test("picking a theme and saving", async () => {
+test("picking a theme writes it, with no Save button", async () => {
   mockUpdateMe.mockResolvedValue({ ...me, settings: { ...me.settings, theme: "dark" } });
 
   renderScreen();
   fireEvent.press(await screen.findByText("Dark"));
-  fireEvent.press(screen.getByText("Save"));
 
   await waitFor(() => expect(mockUpdateMe).toHaveBeenCalledWith({ theme: "dark" }));
-  expect(await screen.findByText("Saved.")).toBeTruthy();
+  expect(screen.queryByText("Save")).toBeNull();
 });

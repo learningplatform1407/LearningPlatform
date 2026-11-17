@@ -12,7 +12,7 @@ jest.mock("@/lib/api-client", () => ({
 }));
 
 jest.mock("expo-router", () => ({
-  useRouter: () => ({ push: mockPush }),
+  router: { push: (...args: unknown[]) => mockPush(...args) },
 }));
 
 function renderScreen() {
@@ -42,15 +42,15 @@ beforeEach(() => {
   mockPush.mockReset();
 });
 
-test("making the profile public", async () => {
+test("making the profile public writes on the switch, with no Save button", async () => {
   mockUpdateMe.mockResolvedValue({ ...me, settings: { ...me.settings, profile_public: true } });
 
   renderScreen();
   fireEvent(await screen.findByLabelText("Public profile"), "valueChange", true);
-  fireEvent.press(screen.getByText("Save"));
 
   await waitFor(() => expect(mockUpdateMe).toHaveBeenCalledWith({ profile_public: true }));
-  expect(await screen.findByText("Saved.")).toBeTruthy();
+  expect(screen.queryByText("Save")).toBeNull();
+  expect(screen.getByLabelText("Public profile").props.value).toBe(true);
 });
 
 test("a profile without a display name is sent to add one first", async () => {

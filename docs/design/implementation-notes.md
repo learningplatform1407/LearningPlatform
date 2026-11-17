@@ -35,6 +35,21 @@ follow the theme; it also picks the Figtree family for each weight. The phone ta
 notch, every screen has the kicker + title header, and the lesson screen has the top notch (with
 the title line), the left tool notch, side panels and the review bar.
 
+A round of testing on real devices moved four things off the web's shape, because that shape
+assumed a mouse and a wide screen:
+
+- **Settings is one page**, every section under the last (`lib/settings-sections.tsx`), rather than
+  the web's left nav: seven sections of one or two controls each, behind a menu taking two fifths of
+  the width. The section routes remain, for links that point straight at them.
+- **A toggle has no Save.** Switches, the theme picker and the language dropdown write as they are
+  touched, optimistically, and put the old value back on failure. Both platforms, since a switch
+  that needs confirming lies about the state of things either way. Text fields keep their Save.
+- **Lists stop at a glance's worth.** "Recently opened" is three lessons (`RECENT_LESSONS_SHOWN`),
+  the Exam Hub shows the latest challenge with "View all", and past exams are a view of their own.
+- **Grade buttons follow the design, not the port.** `grade-bar.tsx` puts the grade's colour on the
+  border of a paper button with dark text; mobile had coloured the text instead and given all four
+  the same flat border, and the four could not fit a narrow phone without clipping.
+
 ## Deliberate deviations from the demo
 
 | Demo | What the platform does instead | Why |

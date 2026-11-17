@@ -121,7 +121,12 @@ export function FollowButton({ user }: { user: UserSummary }) {
 }
 
 /** One learner as a ruled row: who they are, opening their profile, and
- * what you can do about them. */
+ * what you can do about them.
+ *
+ * "Follows you" belongs to the identity, not to the actions: it sits beside
+ * the name on the left, where it reads as part of who this person is. It used
+ * to sit between the name and the buttons, which moved Remove and Follow
+ * sideways depending on whether it was there, so no two rows lined up. */
 export function UserRow({ user, onRemove }: { user: UserSummary; onRemove?: () => void }) {
   const { t } = useI18n();
   const styles = useStyles();
@@ -136,9 +141,12 @@ export function UserRow({ user, onRemove }: { user: UserSummary; onRemove?: () =
       >
         <UserAvatar url={user.avatar_url} name={user.display_name} size="sm" />
         <View style={styles.names}>
-          <Text style={styles.name} numberOfLines={1}>
-            {name}
-          </Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.name} numberOfLines={1}>
+              {name}
+            </Text>
+            {user.follows_you && <Tag>{t("social.followsYou")}</Tag>}
+          </View>
           {user.university ? (
             <Text style={styles.university} numberOfLines={1}>
               {user.university}
@@ -146,13 +154,12 @@ export function UserRow({ user, onRemove }: { user: UserSummary; onRemove?: () =
           ) : null}
         </View>
       </Pressable>
-      {user.follows_you && <Tag>{t("social.followsYou")}</Tag>}
       {onRemove && (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("social.removeFollowerName", { name })}
           onPress={onRemove}
-          style={styles.button}
+          style={[styles.button, styles.buttonSecondary]}
         >
           <Text style={[styles.buttonText, styles.buttonTextSecondary]}>{t("social.remove")}</Text>
         </Pressable>
@@ -198,7 +205,15 @@ const useStyles = makeStyles((colors) => ({
     flex: 1,
     minWidth: 0,
   },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
   name: {
+    // Shrinks so the "Follows you" tag beside it is never pushed out of the
+    // row by a long name; the name truncates instead (numberOfLines={1}).
+    flexShrink: 1,
     fontSize: fontSizes.base,
     fontWeight: fontWeights.bold,
     color: colors.foreground,
@@ -207,15 +222,24 @@ const useStyles = makeStyles((colors) => ({
     fontSize: fontSizes.xs,
     color: colors.mutedForeground,
   },
+  // One geometry for every button in the row: Remove and Follow differ only
+  // in fill, so a row with both reads as two buttons of the same kind rather
+  // than one button and one link. `minWidth` also keeps "Follow" and
+  // "Following" -- and their translations -- from resizing the row as the
+  // state flips.
   button: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "transparent",
+    borderColor: colors.border,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
+    minWidth: 92,
+    alignItems: "center",
+    justifyContent: "center",
   },
   buttonPrimary: {
     backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   buttonSecondary: {
     borderColor: colors.border,

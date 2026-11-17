@@ -37,7 +37,14 @@ export default function NotebookScreen() {
   // buttons pinned under it.
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {/* Dragging the list puts the keyboard away: the editor below is a
+          multiline field, whose return key makes a new line instead. */}
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+      >
         <ScreenHeader kicker={t("nav.learn")} title={t("notebook.title")} />
         <Text style={styles.sectionLabel}>{t("notebook.notes")}</Text>
         <NotebookEntryList

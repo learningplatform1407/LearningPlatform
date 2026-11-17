@@ -7,6 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
+    "backgroundColor": "#F7F6F2",
     "ios": {
       "icon": "./assets/expo.icon",
       "bundleIdentifier": "com.mihneaghira.mobile"

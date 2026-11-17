@@ -1,6 +1,7 @@
 import { darkColors, figtreeFamily, lightColors } from "@lp/ui";
 import { useQuery } from "@tanstack/react-query";
-import { createContext, useContext, useMemo } from "react";
+import * as SystemUI from "expo-system-ui";
+import { createContext, useContext, useEffect, useMemo } from "react";
 import { StyleSheet, useColorScheme } from "react-native";
 
 import { getApiClient } from "./api-client";
@@ -46,6 +47,23 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     () => ({ colors: scheme === "dark" ? darkColors : lightColors, scheme, preference }),
     [scheme, preference],
   );
+
+  // The window behind React Native's root view, repainted with the theme.
+  //
+  // This is what the thin strip under the notch was: the app draws
+  // edge-to-edge with a transparent status bar, so the top inset shows
+  // whatever is *behind* the root view -- and that was the Android theme's
+  // own windowBackground (plain white under Theme.AppCompat.DayNight), a
+  // shade off the page's warm #F7F6F2 and a different colour entirely in
+  // dark mode. One hairline band above every screen, on both platforms.
+  // app/_layout.tsx already pads for the inset and paints that padding; this
+  // makes sure there is nothing of a different colour underneath it.
+  useEffect(() => {
+    // Fire-and-forget: the native call is cosmetic, and it is unavailable in
+    // Jest and on web. A failure must not take a screen down with it.
+    void SystemUI.setBackgroundColorAsync(value.colors.background).catch(() => {});
+  }, [value.colors.background]);
+
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 

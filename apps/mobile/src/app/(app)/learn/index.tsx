@@ -1,5 +1,5 @@
 import type { DailyQuestion } from "@lp/api-client";
-import { lessonStatusLabel } from "@lp/ui";
+import { lessonStatusLabel, RECENT_LESSONS_SHOWN } from "@lp/ui";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Pressable, ScrollView, Text, View } from "react-native";
@@ -54,7 +54,7 @@ function LearnContent({
   }
 
   const [continueLesson, ...rest] = recentLessons;
-  const recentlyOpened = rest.slice(0, 5);
+  const recentlyOpened = rest.slice(0, RECENT_LESSONS_SHOWN);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>

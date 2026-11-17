@@ -27,6 +27,7 @@ import {
   CHALLENGES_KEY,
   ChallengeResult,
   ChallengeSender,
+  ChallengesList,
   ChallengesSection,
 } from "@/lib/challenges";
 import { OptionChoice, OptionResultRow, QuestionRevealPanel } from "@/lib/question-reveal";
@@ -853,15 +854,14 @@ function TagPicker({
   );
 }
 
-/** Past exams: three summary tiles over a card per attempt.
+/** The hub's way into the past-exams view: that there are past exams, how
+ * many, and nothing else.
  *
- * Mirrors apps/web/src/app/(app)/exams/page.tsx -- see the note there for why
- * the single-sentence row went. The summary numbers come from @lp/ui's
- * `summarizePastExams`, so the two platforms cannot come to disagree about
- * what "average" means.
- */
-function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
-  const { t, language } = useI18n();
+ * The attempt list used to sit at the bottom of the hub and grow without
+ * bound, so the start form -- the thing the screen is for -- ended up above
+ * an ever-longer history. */
+function PastExamsLink({ onOpen }: { onOpen: () => void }) {
+  const { t } = useI18n();
   const styles = useStyles();
   const api = getApiClient();
   const history = useQuery({
@@ -871,11 +871,66 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
 
   if (!history.data || history.data.length === 0) return null;
 
-  const summary = summarizePastExams(history.data);
+  // The latest attempt's state, when it is not a plain finish.
+  //
+  // docs/architecture/quizzes.md §9.1 requires the landing state to make an
+  // attempt that ended while you were away discoverable: `/current` returns
+  // null for an expired session, so without a word here the screen is an
+  // empty start form and the exam simply vanished. The list moving to its own
+  // view does not excuse that, so the row carries it.
+  const latest = history.data[0];
+  const ended = latest && latest.status !== "completed" ? quizStatusLabel(t, latest.status) : null;
+
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.pastExamsLink, pressed && styles.attemptCardPressed]}
+      onPress={onOpen}
+      accessibilityRole="button"
+      accessibilityLabel={t("exams.openPastExams")}
+    >
+      <View style={styles.pastExamsText}>
+        <Text style={styles.sectionHeading}>{t("exams.pastExams")}</Text>
+        <Text style={styles.attemptMeta}>
+          {t("exams.pastExamsCount", { count: history.data.length })}
+          {ended ? ` · ${ended}` : ""}
+        </Text>
+      </View>
+      <Text style={styles.chevron}>›</Text>
+    </Pressable>
+  );
+}
+
+/** Past exams: three summary tiles over a card per attempt.
+ *
+ * Mirrors apps/web/src/app/(app)/exams/page.tsx -- see the note there for why
+ * the single-sentence row went. The summary numbers come from @lp/ui's
+ * `summarizePastExams`, so the two platforms cannot come to disagree about
+ * what "average" means.
+ */
+function PastExams({
+  onOpen,
+  onDone,
+}: {
+  onOpen: (sessionId: string) => void;
+  onDone: () => void;
+}) {
+  const { t, language } = useI18n();
+  const styles = useStyles();
+  const api = getApiClient();
+  const history = useQuery({
+    queryKey: ["quiz-session-history"],
+    queryFn: () => api.listQuizSessionHistory(),
+  });
+
+  if (history.isPending) return <Text style={styles.hint}>{t("common.loading")}</Text>;
+
+  const summary = summarizePastExams(history.data ?? []);
 
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionHeading}>{t("exams.pastExams")}</Text>
+      <Text style={styles.resultsTitle} accessibilityRole="header">
+        {t("exams.pastExams")}
+      </Text>
 
       <View style={styles.statRow}>
         <View style={styles.statCell}>
@@ -897,7 +952,7 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
       </View>
 
       <View style={styles.attemptList}>
-        {history.data.map((item) => {
+        {(history.data ?? []).map((item) => {
           const percent = attemptPercent(item);
           return (
             <Pressable
@@ -930,11 +985,35 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
           );
         })}
       </View>
+
+      <Pressable
+        style={[styles.button, styles.buttonPrimary]}
+        onPress={onDone}
+        accessibilityRole="button"
+      >
+        <Text style={styles.buttonPrimaryText}>{t("exams.backToHub")}</Text>
+      </Pressable>
     </View>
   );
 }
 
 // --- screen ----------------------------------------------------------------
+
+/** What the Exam Hub is showing instead of the hub itself.
+ *
+ * One value rather than a boolean (or a nullable id) per view: the past
+ * exams, the full challenge list, one attempt's results and one challenge's
+ * comparison are mutually exclusive, and separate flags made that only a
+ * convention -- two of them set at once rendered one view with another's back
+ * button. */
+type ExamsView =
+  | { kind: "hub" }
+  | { kind: "pastExams" }
+  | { kind: "challenges" }
+  | { kind: "results"; sessionId: string }
+  | { kind: "challenge"; challengeId: string };
+
+const HUB: ExamsView = { kind: "hub" };
 
 export default function ExamsScreen() {
   const { t } = useI18n();
@@ -947,8 +1026,7 @@ export default function ExamsScreen() {
     queryFn: () => api.getCurrentQuizSession(),
   });
 
-  const [viewingResultsFor, setViewingResultsFor] = useState<string | null>(null);
-  const [viewingChallenge, setViewingChallenge] = useState<string | null>(null);
+  const [view, setView] = useState<ExamsView>(HUB);
 
   function refreshCurrent() {
     queryClient.invalidateQueries({ queryKey: ["quiz-session-current"] });
@@ -958,26 +1036,36 @@ export default function ExamsScreen() {
   }
 
   function attemptEnded(sessionId: string) {
-    setViewingResultsFor(sessionId);
+    setView({ kind: "results", sessionId });
     refreshCurrent();
     // The profile's exam numbers (and the streak) count finished attempts.
     queryClient.invalidateQueries({ queryKey: ["me-stats"] });
   }
 
+  function backToHub() {
+    setView(HUB);
+    refreshCurrent();
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <ScreenHeader kicker={t("exams.kicker")} title={t("exams.title")} />
-      <Text style={styles.hint}>{t("exams.intro")}</Text>
+      {view.kind === "hub" && <Text style={styles.hint}>{t("exams.intro")}</Text>}
 
-      {viewingChallenge ? (
-        <ChallengeResult challengeId={viewingChallenge} onDone={() => setViewingChallenge(null)} />
-      ) : viewingResultsFor ? (
-        <Results
-          sessionId={viewingResultsFor}
-          onDone={() => {
-            setViewingResultsFor(null);
-            refreshCurrent();
-          }}
+      {view.kind === "challenge" ? (
+        <ChallengeResult challengeId={view.challengeId} onDone={() => setView(HUB)} />
+      ) : view.kind === "results" ? (
+        <Results sessionId={view.sessionId} onDone={backToHub} />
+      ) : view.kind === "pastExams" ? (
+        <PastExams
+          onOpen={(sessionId) => setView({ kind: "results", sessionId })}
+          onDone={() => setView(HUB)}
+        />
+      ) : view.kind === "challenges" ? (
+        <ChallengesList
+          onAccepted={refreshCurrent}
+          onOpen={(challengeId) => setView({ kind: "challenge", challengeId })}
+          onDone={() => setView(HUB)}
         />
       ) : current.isPending ? (
         <Text style={styles.hint}>{t("common.loading")}</Text>
@@ -989,9 +1077,13 @@ export default function ExamsScreen() {
         />
       ) : (
         <>
-          <ChallengesSection onAccepted={refreshCurrent} onOpen={setViewingChallenge} />
+          <ChallengesSection
+            onAccepted={refreshCurrent}
+            onOpen={(challengeId) => setView({ kind: "challenge", challengeId })}
+            onViewAll={() => setView({ kind: "challenges" })}
+          />
           <StartForm onStarted={refreshCurrent} />
-          <History onOpen={setViewingResultsFor} />
+          <PastExamsLink onOpen={() => setView({ kind: "pastExams" })} />
         </>
       )}
     </ScrollView>
@@ -1259,6 +1351,26 @@ const useStyles = makeStyles((colors) => ({
     flexGrow: 1,
     flexShrink: 1,
     flexBasis: 0,
+  },
+  // The hub's row into the past-exams view: the section heading it replaces,
+  // the attempt count, and a chevron -- the same shape as the tag summary
+  // above, so "there is more behind this" reads the same way twice.
+  pastExamsLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
+  },
+  pastExamsText: {
+    gap: spacing.xs,
+  },
+  chevron: {
+    fontSize: fontSizes.xl,
+    fontWeight: fontWeights.semibold,
+    color: colors.mutedForeground,
   },
   attemptList: {
     marginTop: spacing.md,

@@ -36,16 +36,29 @@ beforeEach(() => {
   mockUpdateMe.mockReset().mockResolvedValue(me);
 });
 
-test("saving the notifications toggle", async () => {
+test("the toggle writes as it is switched, with no Save button", async () => {
   mockUpdateMe.mockResolvedValue({
     ...me,
     settings: { ...me.settings, notifications_enabled: false },
   });
 
   renderScreen();
-  fireEvent(await screen.findByRole("switch"), "valueChange", false);
-  fireEvent.press(screen.getByText("Save"));
+  const toggle = await screen.findByRole("switch");
+  fireEvent(toggle, "valueChange", false);
 
   await waitFor(() => expect(mockUpdateMe).toHaveBeenCalledWith({ notifications_enabled: false }));
-  expect(await screen.findByText("Saved.")).toBeTruthy();
+  expect(screen.queryByText("Save")).toBeNull();
+  // The switch shows the new position without waiting for the response (the
+  // optimistic write), and keeps it once the response lands.
+  expect((await screen.findByRole("switch")).props.value).toBe(false);
+});
+
+test("a failed write puts the switch back and says so", async () => {
+  mockUpdateMe.mockRejectedValue(new Error("offline"));
+
+  renderScreen();
+  fireEvent(await screen.findByRole("switch"), "valueChange", false);
+
+  expect(await screen.findByText("Failed to save: offline")).toBeTruthy();
+  expect(screen.getByRole("switch").props.value).toBe(true);
 });

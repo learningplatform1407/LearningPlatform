@@ -64,9 +64,14 @@ export const exams = {
   attemptCancelled: "Attempt cancelled",
   score: "{awarded} / {possible} points",
   backToQuizzes: "Back to quizzes",
-  // Past exams. The attempt rows show a date, a score and a bar rather than
-  // one interpolated sentence, so the old `historyRow` template is gone.
+  // Past exams. They live on a view of their own now -- the hub opens it with
+  // `openPastExams`, and `pastExamsCount` is the reason to.
+  // The attempt rows show a date, a score and a bar rather than one
+  // interpolated sentence, so the old `historyRow` template is gone.
   pastExams: "Past exams",
+  openPastExams: "See past exams",
+  pastExamsCount: plural({ one: "{count} attempt", other: "{count} attempts" }),
+  backToHub: "Back to Exam Hub",
   statTaken: "Taken",
   statAverage: "Average",
   statBest: "Best",

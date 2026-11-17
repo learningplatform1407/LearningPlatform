@@ -146,7 +146,17 @@ export function Overlay({
           so a list longer than the panel overflows it and can never be
           scrolled to the end. learn/notebook/index.tsx gets this right, which
           is why the notebook scrolls there but not in this drawer. */}
-      <ScrollView style={overlayStyles.scroll} contentContainerStyle={overlayStyles.content}>
+      {/* A sheet that holds a text field -- the notebook editor, above all --
+          needs a way to put the keyboard away: a multiline input's return key
+          inserts a newline, so dragging the sheet is the gesture left.
+          `handled` keeps a tap on a button inside working on the first tap
+          rather than being eaten as a dismiss. */}
+      <ScrollView
+        style={overlayStyles.scroll}
+        contentContainerStyle={overlayStyles.content}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+      >
         {children}
       </ScrollView>
       {footer !== undefined && <View style={overlayStyles.footer}>{footer}</View>}

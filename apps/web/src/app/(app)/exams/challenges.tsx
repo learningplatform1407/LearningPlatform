@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Challenge } from "@lp/contracts";
-import { formatPostDate, outcomeLabel } from "@lp/ui";
+import { cannotBeChallengedWith, formatPostDate, latestChallenges, outcomeLabel } from "@lp/ui";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -28,12 +28,15 @@ function errorMessage(error: unknown): string {
 // --- sending, from an exam's results -----------------------------------------
 
 /** "Challenge someone" under a finished exam: lists the people you follow who
- * follow you back, and sends this exam to the one you pick. */
+ * follow you back, and sends this exam to the one you pick.
+ *
+ * Whoever set these questions is left out -- see `cannotBeChallengedWith`. */
 export function ChallengeSender({ sessionId }: { sessionId: string }) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [sentTo, setSentTo] = useState<string[]>([]);
+  const challenges = useChallenges();
   const following = useQuery({
     queryKey: ["following"],
     queryFn: () => getBrowserApiClient().listFollowing(),
@@ -56,12 +59,18 @@ export function ChallengeSender({ sessionId }: { sessionId: string }) {
         className="self-start"
         onClick={() => setOpen(true)}
       >
-        {t("social.challenges.challengeSomeone")}
+        {t("social.challenges.challenge")}
       </Button>
     );
   }
 
   const mutuals = following.data?.filter((user) => user.follows_you) ?? [];
+  const blocked = cannotBeChallengedWith(challenges.data ?? [], sessionId);
+  const candidates = mutuals.filter((user) => !blocked.has(user.id));
+  // Named so the empty state can say who set the questions, rather than
+  // claiming you follow nobody back.
+  const setter = mutuals.find((user) => blocked.has(user.id));
+
   return (
     <section className="border-t border-border pt-md">
       <h3 className="label-caps m-0">{t("social.challenges.challengeSomeone")}</h3>
@@ -79,13 +88,20 @@ export function ChallengeSender({ sessionId }: { sessionId: string }) {
           </Link>
         </p>
       )}
+      {candidates.length === 0 && setter && (
+        <p className="text-sm text-muted-foreground">
+          {t("social.challenges.noOneLeft", {
+            name: setter.display_name ?? t("profile.unnamed"),
+          })}
+        </p>
+      )}
       {send.isError && (
         <p role="alert" className="text-sm text-danger">
           {t("social.actionFailed", { message: errorMessage(send.error) })}
         </p>
       )}
       <ul className="m-0 mt-sm list-none p-0">
-        {mutuals.map((user) => {
+        {candidates.map((user) => {
           const name = user.display_name ?? t("profile.unnamed");
           const sent = sentTo.includes(user.id);
           return (
@@ -105,7 +121,7 @@ export function ChallengeSender({ sessionId }: { sessionId: string }) {
                   disabled={send.isPending}
                   onClick={() => send.mutate(user.id)}
                 >
-                  {t("social.challenges.challengeSomeone")}
+                  {t("social.challenges.challenge")}
                 </Button>
               )}
             </li>
@@ -203,22 +219,42 @@ function ChallengeRow({
   );
 }
 
-/** Challenges you've sent and received, newest first. Hidden until there is one. */
+/**
+ * The Exam Hub's challenge section: the latest one only, with "View all" in
+ * the heading row. Hidden until there is one.
+ *
+ * The hub used to list every challenge the API returns, which pushed the
+ * start form down the page once a few had piled up. The ones already dealt
+ * with belong on `ChallengesList`, a click away.
+ */
 export function ChallengesSection({
   onAccepted,
   onOpen,
+  onViewAll,
 }: {
   onAccepted: () => void;
   onOpen: (id: string) => void;
+  onViewAll: () => void;
 }) {
   const { t } = useI18n();
   const challenges = useChallenges();
   if (!challenges.data || challenges.data.length === 0) return null;
   return (
     <section className="mt-lg">
-      <h2 className="label-caps m-0 mb-sm">{t("social.challenges.title")}</h2>
+      <div className="mb-sm flex items-center justify-between gap-sm">
+        <h2 className="label-caps m-0">{t("social.challenges.title")}</h2>
+        {challenges.data.length > 1 && (
+          <button
+            type="button"
+            onClick={onViewAll}
+            className="text-caption font-bold text-accent hover:underline"
+          >
+            {t("social.challenges.viewAll")}
+          </button>
+        )}
+      </div>
       <ul className="m-0 list-none border-b border-border p-0">
-        {challenges.data.map((challenge) => (
+        {latestChallenges(challenges.data).map((challenge) => (
           <ChallengeRow
             key={challenge.id}
             challenge={challenge}
@@ -228,6 +264,54 @@ export function ChallengesSection({
         ))}
       </ul>
     </section>
+  );
+}
+
+/** Every challenge you've sent and received, newest first -- the view behind
+ * the hub section's "View all". */
+export function ChallengesList({
+  onAccepted,
+  onOpen,
+  onDone,
+}: {
+  onAccepted: () => void;
+  onOpen: (id: string) => void;
+  onDone: () => void;
+}) {
+  const { t } = useI18n();
+  const challenges = useChallenges();
+  return (
+    <div className="mt-lg flex w-full flex-col gap-md">
+      <h2 className="text-heading m-0 font-extrabold text-foreground">
+        {t("social.challenges.allTitle")}
+      </h2>
+      {challenges.isPending && (
+        <p className="m-0 text-sm text-muted-foreground">{t("common.loading")}</p>
+      )}
+      {challenges.isError && (
+        <p role="alert" className="m-0 text-sm text-danger">
+          {t("social.loadFailed", { message: errorMessage(challenges.error) })}
+        </p>
+      )}
+      {challenges.data?.length === 0 && (
+        <p className="m-0 text-sm text-muted-foreground">{t("social.activity.empty")}</p>
+      )}
+      {challenges.data && challenges.data.length > 0 && (
+        <ul className="m-0 list-none border-b border-border p-0">
+          {challenges.data.map((challenge) => (
+            <ChallengeRow
+              key={challenge.id}
+              challenge={challenge}
+              onAccepted={onAccepted}
+              onOpen={onOpen}
+            />
+          ))}
+        </ul>
+      )}
+      <Button type="button" className="self-start" onClick={onDone}>
+        {t("exams.backToHub")}
+      </Button>
+    </div>
   );
 }
 

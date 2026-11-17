@@ -179,6 +179,27 @@ describe("LearnPage", () => {
     expect(screen.getAllByText("Most recent")).toHaveLength(1);
   });
 
+  test("Recently opened stops at three, however many came back", async () => {
+    listRecentLessons.mockResolvedValue(
+      // Seven: the Continue lesson and six behind it.
+      Array.from({ length: 7 }, (_, index) => ({
+        id: `d${index + 1}`,
+        title: `Lesson ${index + 1}`,
+        created_at: "2026-01-01",
+        status: "ready",
+        last_viewed_at: `2026-09-0${7 - index}T12:00:00Z`,
+      })),
+    );
+
+    renderPage();
+
+    await screen.findByText("Continue where you left off");
+    // Lesson 1 is the Continue card; 2-4 are the list; 5 onwards belong to
+    // the Library, not to a shortcut back.
+    expect(screen.getByRole("link", { name: /Lesson 4/ })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Lesson 5/ })).not.toBeInTheDocument();
+  });
+
   test("renders the calendar rail even while the lessons query is still loading", async () => {
     // The rail used to be impossible here: each branch of the page returned its
     // own <main>, so anything outside the success branch simply did not exist.
