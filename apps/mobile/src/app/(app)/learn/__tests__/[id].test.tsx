@@ -1,6 +1,7 @@
 import { lightColors } from "@lp/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { StyleSheet } from "react-native";
 import { router } from "expo-router";
 
 import LectureScreen from "../[id]";
@@ -392,6 +393,42 @@ test("renders a range-anchored margin note on its passage, with its marker there
   expect(screen.getByText("world")).toBeTruthy();
 
   fireEvent.press(marker);
+  expect(await screen.findByDisplayValue("Check this later")).toBeTruthy();
+});
+
+test("a highlight drawn over a note does not hide the note's marker", async () => {
+  // `spliceAnnotations` picks one winner per sub-range, newest first, so a
+  // highlight made after a note used to take the whole run -- marker and all
+  // -- and a phone has nowhere else to reach that note from.
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListAnnotations.mockResolvedValue([
+    {
+      id: "a1",
+      document_version_id: "v1",
+      type: "margin_note",
+      block_index: 0,
+      start_offset: 6,
+      end_offset: 11,
+      note_text: "Check this later",
+      color: null,
+      created_at: "2026-01-01",
+    },
+    {
+      id: "a2",
+      document_version_id: "v1",
+      type: "highlight",
+      block_index: 0,
+      start_offset: 0,
+      end_offset: 11,
+      note_text: null,
+      color: "yellow",
+      created_at: "2026-02-01",
+    },
+  ]);
+
+  renderScreen();
+
+  fireEvent.press(await screen.findByTestId("note-marker-a1"));
   expect(await screen.findByDisplayValue("Check this later")).toBeTruthy();
 });
 
@@ -1071,8 +1108,12 @@ test("a highlight renders with its stored color", async () => {
   renderScreen();
 
   const mark = await screen.findByText("Hello");
-  // Green is the design's fifth marker, from the shared tokens.
-  expect(mark.props.style).toEqual({ backgroundColor: lightColors.highlight4 });
+  // Green is the design's fifth marker, from the shared tokens. Flattened
+  // because a run can carry a note's underline as well as a highlight's
+  // fill, and this test is about the colour, not about the composition.
+  expect(StyleSheet.flatten(mark.props.style)).toEqual({
+    backgroundColor: lightColors.highlight4,
+  });
 });
 
 test("with the yellow highlight armed, tapping a word twice highlights exactly that word", async () => {

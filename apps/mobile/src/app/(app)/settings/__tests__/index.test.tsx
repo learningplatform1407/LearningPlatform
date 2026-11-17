@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 import SettingsIndexScreen from "../index";
 
@@ -95,4 +95,36 @@ test("the account query is made once for the whole page", async () => {
 
   await screen.findByText("Appearance");
   expect(mockGetMe).toHaveBeenCalledTimes(1);
+});
+
+test("a write in another section does not discard what you typed here", async () => {
+  // Every section shares one `me` on this page, and the autosaving ones put a
+  // new object into the cache on each tap. Keyed on object identity, that
+  // reset the Profile fields under the reader's hands.
+  renderScreen();
+
+  const nameInput = await screen.findByLabelText("Display name");
+  fireEvent.changeText(nameInput, "Ada Lovelace");
+  fireEvent(screen.getByLabelText("Enable notifications"), "valueChange", false);
+
+  await waitFor(() => expect(mockUpdateMe).toHaveBeenCalledWith({ notifications_enabled: false }));
+  expect(screen.getByLabelText("Display name").props.value).toBe("Ada Lovelace");
+});
+
+test("a name changed server-side is still adopted", async () => {
+  // The guard above must not freeze the field: a value that really did change
+  // (another device, a refetch) still replaces what is on screen.
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <SettingsIndexScreen />
+    </QueryClientProvider>,
+  );
+  await screen.findByDisplayValue("Ada");
+
+  act(() => {
+    queryClient.setQueryData(["me"], { ...me, display_name: "Ada L." });
+  });
+
+  expect(await screen.findByDisplayValue("Ada L.")).toBeTruthy();
 });

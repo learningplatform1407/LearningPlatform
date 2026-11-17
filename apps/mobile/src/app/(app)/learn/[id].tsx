@@ -173,55 +173,83 @@ function AnnotatedParagraph({
     (a) => a.type === "margin_note" && a.start_offset === null,
   );
 
+  // The paragraph's anchored notes, read on their own rather than taken from
+  // whichever annotation won a segment.
+  //
+  // `spliceAnnotations` picks one winner per sub-range ("most recent paints
+  // over"), so a highlight drawn across a note would otherwise hide the note
+  // *and* its marker -- and on a phone that makes the note unreachable, since
+  // the notes panel lists notebook entries, not a lesson's margin notes. The
+  // note's underline and the highlight's fill both apply instead.
+  const rangeNotes = blockAnnotations.filter(
+    (a): a is Annotation & { start_offset: number; end_offset: number } =>
+      a.type === "margin_note" && a.start_offset !== null && a.end_offset !== null,
+  );
+
+  function noteMarker(note: Annotation) {
+    // A nested `Text` with onPress, because RN's Text takes only more Text as
+    // inline children -- the web's round <button> can't be one, so this is a
+    // small pill of the same colour instead of an icon in a circle.
+    return (
+      <Text
+        key={`note-${note.id}`}
+        testID={`note-marker-${note.id}`}
+        onPress={() => onOpenNote(note)}
+        style={styles.noteMarker}
+        accessibilityRole="button"
+        accessibilityLabel={t("lesson.panel.openNote")}
+      >
+        {" ✎ "}
+      </Text>
+    );
+  }
+
   // Walked with a cursor so each segment knows its absolute offset: that is
-  // the only way to tell which piece of a note's run is its *last* one, and
-  // so where the marker goes. `splitBySources` can cut one annotation into
-  // several segments, so "the segment carrying the note" is not enough.
+  // the only way to tell where a note's run ends, and so where its marker
+  // goes. `splitBySources` can cut one annotation into several segments.
   let cursor = 0;
   const pieces: React.ReactNode[] = [];
+  const marked = new Set<string>();
   segments.forEach((segment, index) => {
-    const end = cursor + segment.text.length;
+    const start = cursor;
+    const end = start + segment.text.length;
     cursor = end;
-    const annotation = segment.annotation;
-    const note = annotation?.type === "margin_note" ? annotation : null;
+    const highlight = segment.annotation?.type === "highlight" ? segment.annotation : null;
+    const noted = rangeNotes.some((note) => note.start_offset <= start && note.end_offset >= end);
 
     pieces.push(
       segment.source ? (
         <Text key={index} testID="quiz-source" style={styles.quizSource}>
           {segment.text}
         </Text>
-      ) : note ? (
-        <Text key={index} style={styles.noteRun}>
-          {segment.text}
-        </Text>
-      ) : annotation?.type === "highlight" ? (
-        <Text key={index} style={{ backgroundColor: highlightMarkColor(colors, annotation.color) }}>
-          {segment.text}
-        </Text>
       ) : (
-        <Text key={index}>{segment.text}</Text>
+        <Text
+          key={index}
+          style={[
+            noted && styles.noteRun,
+            highlight && { backgroundColor: highlightMarkColor(colors, highlight.color) },
+          ]}
+        >
+          {segment.text}
+        </Text>
       ),
     );
 
-    // The note's bubble, inline where the passage ends. A nested `Text` with
-    // onPress, because RN's Text takes only more Text as inline children --
-    // the web's round <button> can't be one, so this is a small pill of the
-    // same colour instead of an icon in a circle.
-    if (note && end === note.end_offset) {
-      pieces.push(
-        <Text
-          key={`note-${note.id}`}
-          testID={`note-marker-${note.id}`}
-          onPress={() => onOpenNote(note)}
-          style={styles.noteMarker}
-          accessibilityRole="button"
-          accessibilityLabel={t("lesson.panel.openNote")}
-        >
-          {" ✎ "}
-        </Text>,
-      );
+    // The note's bubble, inline where its passage ends.
+    for (const note of rangeNotes) {
+      if (marked.has(note.id) || note.end_offset !== end) continue;
+      marked.add(note.id);
+      pieces.push(noteMarker(note));
     }
   });
+
+  // A note whose end offset falls outside the text it is anchored to -- a
+  // paragraph edited shorter under it, say. `spliceAnnotations` clamps its
+  // boundaries, so no segment ends where the note does and the loop above
+  // never reaches it. It still has to be openable, so its marker goes last.
+  for (const note of rangeNotes) {
+    if (!marked.has(note.id)) pieces.push(noteMarker(note));
+  }
 
   return (
     <View onLayout={(event) => onLayoutY?.(event.nativeEvent.layout.y)}>

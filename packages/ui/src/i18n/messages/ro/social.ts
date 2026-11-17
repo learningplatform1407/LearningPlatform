@@ -62,6 +62,7 @@ export const social: Messages["social"] = {
     title: "Provocări",
     viewAll: "Vezi toate",
     allTitle: "Toate provocările",
+    none: "Nicio provocare încă.",
     challengeSomeone: "Provoacă pe cineva",
     challenge: "Provoacă",
     pickerHint: "Răspunde la aceleași întrebări, în aceeași ordine, cu același cronometru.",

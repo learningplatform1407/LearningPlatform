@@ -294,7 +294,7 @@ export function ChallengesList({
         </p>
       )}
       {challenges.data?.length === 0 && (
-        <p className="m-0 text-sm text-muted-foreground">{t("social.activity.empty")}</p>
+        <p className="m-0 text-sm text-muted-foreground">{t("social.challenges.none")}</p>
       )}
       {challenges.data && challenges.data.length > 0 && (
         <ul className="m-0 list-none border-b border-border p-0">

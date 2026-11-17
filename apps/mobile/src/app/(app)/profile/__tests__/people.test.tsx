@@ -111,7 +111,10 @@ test("searching by name, following someone and opening their profile", async () 
   await waitFor(() => expect(mockFollowUser).toHaveBeenCalledWith("u2"));
   expect(await screen.findByLabelText("Unfollow Bea Ionescu")).toBeTruthy();
 
-  fireEvent.press(screen.getByLabelText("Bea Ionescu"));
+  // "Follows you" sits beside the name now, inside the link, and a
+  // Pressable's label replaces what its children say -- so the link's
+  // accessible name carries the tag rather than dropping it.
+  fireEvent.press(screen.getByLabelText("Bea Ionescu, Follows you"));
   expect(mockPush).toHaveBeenCalledWith("/profile/u2");
 });
 

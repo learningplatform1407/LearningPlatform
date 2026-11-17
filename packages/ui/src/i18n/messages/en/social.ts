@@ -57,6 +57,7 @@ export const social = {
      * latest challenge. */
     viewAll: "View all",
     allTitle: "All challenges",
+    none: "No challenges yet.",
     challengeSomeone: "Challenge someone",
     /** The buttons themselves: one word, because the row or heading around
      * them already says who is being challenged to what. */

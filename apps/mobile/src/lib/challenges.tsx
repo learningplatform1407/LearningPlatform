@@ -317,7 +317,7 @@ export function ChallengesList({
         </Text>
       )}
       {challenges.data?.length === 0 && (
-        <Text style={styles.hint}>{t("social.activity.empty")}</Text>
+        <Text style={styles.hint}>{t("social.challenges.none")}</Text>
       )}
       {challenges.data?.map((challenge) => (
         <ChallengeRow

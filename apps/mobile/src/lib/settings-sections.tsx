@@ -346,11 +346,20 @@ export function ProfileSection({ me }: { me: MeResponse }) {
 
   // Render-time state sync from freshly-loaded/refetched data — see the
   // matching web comment for why this isn't a useEffect.
-  const [syncedFrom, setSyncedFrom] = useState<MeResponse | null>(null);
-  if (me !== syncedFrom) {
-    setDisplayName(me.display_name ?? "");
-    setUniversity(me.university ?? "");
-    setSyncedFrom(me);
+  //
+  // Compared by **value**, not by object identity. On the one-page screen
+  // every section shares one `me`, and the sections that write on change put
+  // a new object into the cache on every tap: keyed on identity, flipping the
+  // notifications switch threw away a name typed here but not yet saved.
+  // Comparing the two fields this section actually reads keeps the original
+  // intent — adopt values that genuinely changed server-side — without that.
+  const serverName = me.display_name ?? "";
+  const serverUniversity = me.university ?? "";
+  const [syncedFrom, setSyncedFrom] = useState<{ name: string; university: string } | null>(null);
+  if (syncedFrom?.name !== serverName || syncedFrom.university !== serverUniversity) {
+    setDisplayName(serverName);
+    setUniversity(serverUniversity);
+    setSyncedFrom({ name: serverName, university: serverUniversity });
   }
 
   const saveMutation = useMutation({

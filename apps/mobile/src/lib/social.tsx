@@ -136,7 +136,10 @@ export function UserRow({ user, onRemove }: { user: UserSummary; onRemove?: () =
       <Pressable
         style={styles.identity}
         accessibilityRole="link"
-        accessibilityLabel={name}
+        // The tag sits inside this Pressable now, and a Pressable's own label
+        // replaces whatever its children say -- so "Follows you" has to be
+        // part of the label, or it is announced to nobody.
+        accessibilityLabel={user.follows_you ? `${name}, ${t("social.followsYou")}` : name}
         onPress={() => router.push(`/profile/${user.id}`)}
       >
         <UserAvatar url={user.avatar_url} name={user.display_name} size="sm" />
