@@ -78,7 +78,7 @@ test("shows a load error", async () => {
 
   renderScreen();
 
-  expect(await screen.findByText("Failed to load profile: boom")).toBeTruthy();
+  expect(await screen.findByText("Failed to load settings: boom")).toBeTruthy();
 });
 
 test("saving the display name and university", async () => {

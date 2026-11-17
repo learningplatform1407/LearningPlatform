@@ -1,6 +1,10 @@
 export const settings = {
   title: "Settings",
   sectionsLabel: "Settings sections",
+  /** Said once per section that has no Save button, because every control in
+   * it writes on change. Sections with text fields (Account, Profile) keep
+   * their Save and do not show this. */
+  autosaveHint: "Changes are saved as you make them.",
   sections: {
     account: "Account",
     privacy: "Privacy",
@@ -44,7 +48,9 @@ export const settings = {
   },
   languages: {
     label: "Language",
-    hint: "The interface switches as soon as you save. Lesson content stays in the language it was written in.",
+    hint: "The interface switches as soon as you choose. Lesson content stays in the language it was written in.",
+    /** The mobile picker sheet's own heading. */
+    choose: "Choose a language",
   },
   appearance: {
     theme: "Theme",
@@ -52,7 +58,7 @@ export const settings = {
     dark: "Dark",
     system: "System",
     hintWeb: "System follows your device. The moon button in the sidebar switches it too.",
-    hintMobile: "System follows your device. Saving applies it here and on the web.",
+    hintMobile: "System follows your device. Your choice applies here and on the web.",
   },
   profile: {
     email: "Email",

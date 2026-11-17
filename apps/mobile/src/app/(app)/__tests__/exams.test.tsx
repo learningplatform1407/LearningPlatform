@@ -200,6 +200,12 @@ test("shows results for a finished attempt", async () => {
 
   renderScreen();
 
+  // The hub only says there are past exams; the attempts live on a view of
+  // their own now, so the start form keeps the screen.
+  expect(await screen.findByText("1 attempt")).toBeTruthy();
+  expect(screen.queryByText("Taken")).toBeNull();
+  fireEvent.press(screen.getByLabelText("See past exams"));
+
   // The past-exams summary is derived from this same list client-side, so one
   // completed attempt at full marks reads 100% for both average and best.
   expect(await screen.findByText("Taken")).toBeTruthy();
@@ -210,6 +216,16 @@ test("shows results for a finished attempt", async () => {
   fireEvent.press(screen.getByText("1/1"));
 
   expect(await screen.findByText("1 / 1 points")).toBeTruthy();
+});
+
+test("with no past exams there is no way into the view", async () => {
+  mockGetCurrentQuizSession.mockResolvedValue(null);
+  mockListQuizSessionHistory.mockResolvedValue([]);
+
+  renderScreen();
+
+  expect(await screen.findByText("Start quiz")).toBeTruthy();
+  expect(screen.queryByLabelText("See past exams")).toBeNull();
 });
 
 function sessionWith(overrides: Record<string, unknown>) {

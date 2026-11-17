@@ -26,7 +26,10 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -56,6 +59,7 @@ import {
   BulbOffIcon,
   CardsIcon,
   EraserIcon,
+  NoteIcon,
   PenIcon,
   SparkleIcon,
 } from "@/lib/ui/icons";
@@ -160,37 +164,101 @@ function AnnotatedParagraph({
   const body = useScaledBody();
   const blockAnnotations = annotations.filter((a) => a.block_index === blockIndex);
   const segments = splitBySources(spliceAnnotations(text, blockAnnotations), sources);
-  // RN's Text can only nest more Text as inline children — a note glyph
-  // can't be placed inline mid-paragraph the way web does with a <span>, so
-  // every margin note (block-level or range-anchored) surfaces as a badge
-  // below the paragraph instead. Only highlight segments render styled.
-  const notes = blockAnnotations.filter((a) => a.type === "margin_note");
+  // Notes anchored to a passage draw on the passage, with their marker right
+  // after it (see below). Only a note with no offsets belongs to the whole
+  // block, and those -- the ones made before notes could be anchored, and
+  // the ones made from the long-press menu -- still get a badge at the end,
+  // exactly as apps/web/src/app/(app)/learn/[id]/text-lesson-view.tsx does.
+  const blockNotes = blockAnnotations.filter(
+    (a) => a.type === "margin_note" && a.start_offset === null,
+  );
+
+  // The paragraph's anchored notes, read on their own rather than taken from
+  // whichever annotation won a segment.
+  //
+  // `spliceAnnotations` picks one winner per sub-range ("most recent paints
+  // over"), so a highlight drawn across a note would otherwise hide the note
+  // *and* its marker -- and on a phone that makes the note unreachable, since
+  // the notes panel lists notebook entries, not a lesson's margin notes. The
+  // note's underline and the highlight's fill both apply instead.
+  const rangeNotes = blockAnnotations.filter(
+    (a): a is Annotation & { start_offset: number; end_offset: number } =>
+      a.type === "margin_note" && a.start_offset !== null && a.end_offset !== null,
+  );
+
+  function noteMarker(note: Annotation) {
+    // A nested `Text` with onPress, because RN's Text takes only more Text as
+    // inline children -- the web's round <button> can't be one, so this is a
+    // small pill of the same colour instead of an icon in a circle.
+    return (
+      <Text
+        key={`note-${note.id}`}
+        testID={`note-marker-${note.id}`}
+        onPress={() => onOpenNote(note)}
+        style={styles.noteMarker}
+        accessibilityRole="button"
+        accessibilityLabel={t("lesson.panel.openNote")}
+      >
+        {" ✎ "}
+      </Text>
+    );
+  }
+
+  // Walked with a cursor so each segment knows its absolute offset: that is
+  // the only way to tell where a note's run ends, and so where its marker
+  // goes. `splitBySources` can cut one annotation into several segments.
+  let cursor = 0;
+  const pieces: React.ReactNode[] = [];
+  const marked = new Set<string>();
+  segments.forEach((segment, index) => {
+    const start = cursor;
+    const end = start + segment.text.length;
+    cursor = end;
+    const highlight = segment.annotation?.type === "highlight" ? segment.annotation : null;
+    const noted = rangeNotes.some((note) => note.start_offset <= start && note.end_offset >= end);
+
+    pieces.push(
+      segment.source ? (
+        <Text key={index} testID="quiz-source" style={styles.quizSource}>
+          {segment.text}
+        </Text>
+      ) : (
+        <Text
+          key={index}
+          style={[
+            noted && styles.noteRun,
+            highlight && { backgroundColor: highlightMarkColor(colors, highlight.color) },
+          ]}
+        >
+          {segment.text}
+        </Text>
+      ),
+    );
+
+    // The note's bubble, inline where its passage ends.
+    for (const note of rangeNotes) {
+      if (marked.has(note.id) || note.end_offset !== end) continue;
+      marked.add(note.id);
+      pieces.push(noteMarker(note));
+    }
+  });
+
+  // A note whose end offset falls outside the text it is anchored to -- a
+  // paragraph edited shorter under it, say. `spliceAnnotations` clamps its
+  // boundaries, so no segment ends where the note does and the loop above
+  // never reaches it. It still has to be openable, so its marker goes last.
+  for (const note of rangeNotes) {
+    if (!marked.has(note.id)) pieces.push(noteMarker(note));
+  }
 
   return (
     <View onLayout={(event) => onLayoutY?.(event.nativeEvent.layout.y)}>
       <Pressable testID={`paragraph-${blockIndex}`} onLongPress={onLongPress}>
-        <Text style={[styles.paragraph, body]}>
-          {segments.map((segment, index) =>
-            segment.source ? (
-              <Text key={index} testID="quiz-source" style={styles.quizSource}>
-                {segment.text}
-              </Text>
-            ) : segment.annotation?.type === "highlight" ? (
-              <Text
-                key={index}
-                style={{ backgroundColor: highlightMarkColor(colors, segment.annotation.color) }}
-              >
-                {segment.text}
-              </Text>
-            ) : (
-              <Text key={index}>{segment.text}</Text>
-            ),
-          )}
-        </Text>
+        <Text style={[styles.paragraph, body]}>{pieces}</Text>
       </Pressable>
-      {notes.length > 0 && (
+      {blockNotes.length > 0 && (
         <View style={styles.noteRow}>
-          {notes.map((note) => (
+          {blockNotes.map((note) => (
             <Pressable
               key={note.id}
               onPress={() => onOpenNote(note)}
@@ -245,7 +313,13 @@ function useScaledBody() {
 }
 
 type ActiveTool =
-  { type: "highlight"; color: string } | { type: "pen"; color: string } | { type: "eraser" } | null;
+  | { type: "highlight"; color: string }
+  | { type: "pen"; color: string }
+  | { type: "eraser" }
+  // Anchors the next word range to a note, like the web's note tool. Text
+  // view only -- react-native-pdf exposes no text runs to anchor to.
+  | { type: "note" }
+  | null;
 
 // The pen starts in graphite; with the pen up, a swatch changes its colour
 // to that swatch's ink (design.md §5), as on the web.
@@ -263,6 +337,7 @@ function ToolNotch({
   onToolChange,
   toolsEnabled,
   penAvailable,
+  noteAvailable,
   onContents,
   onExplain,
   textScaleAvailable,
@@ -272,6 +347,8 @@ function ToolNotch({
   onToolChange: (tool: ActiveTool) => void;
   toolsEnabled: boolean;
   penAvailable: boolean;
+  /** Notes anchor to text, so this is the text view -- the pen's mirror. */
+  noteAvailable: boolean;
   onContents: () => void;
   onExplain: () => void;
   /** Text size. Only the Lesson and Review tabs render prose that reads the
@@ -343,6 +420,24 @@ function ToolNotch({
             accessibilityLabel={t("lesson.tools.explain")}
           >
             <BulbIcon color={colors.mutedForeground} />
+          </Pressable>
+          {/* Notes anchor to a passage of text, so the tool is greyed out
+              over a PDF page the same way the pen is over the text. */}
+          <Pressable
+            onPress={() => onToolChange(activeTool?.type === "note" ? null : { type: "note" })}
+            disabled={!noteAvailable}
+            accessibilityRole="button"
+            accessibilityLabel={
+              noteAvailable ? t("lesson.tools.note") : t("lesson.tools.noteTextOnly")
+            }
+            accessibilityState={{ selected: activeTool?.type === "note", disabled: !noteAvailable }}
+            style={[
+              styles.tool,
+              activeTool?.type === "note" && styles.toolActive,
+              !noteAvailable && styles.toolDisabled,
+            ]}
+          >
+            <NoteIcon color={activeTool?.type === "note" ? colors.background : colors.foreground} />
           </Pressable>
           <Pressable
             onPress={() =>
@@ -725,6 +820,18 @@ function LessonCardRow({ card, onChanged }: { card: Flashcard; onChanged: () => 
   );
 }
 
+/** Again / Hard / Good / Easy, in scheduler order.
+ *
+ * Declared once for both places that grade a card -- the flashcards tab below
+ * and the review bar -- so the two cannot drift apart visually. `tone` is the
+ * colour token that names the grade. */
+const GRADES: { rating: ClozeRating; tone: "again" | "hard" | "good" | "easy" }[] = [
+  { rating: "again", tone: "again" },
+  { rating: "hard", tone: "hard" },
+  { rating: "good", tone: "good" },
+  { rating: "easy", tone: "easy" },
+];
+
 function FlashcardsTab({ documentId }: { documentId: string }) {
   const { t, language } = useI18n();
   const styles = useStyles();
@@ -906,58 +1013,26 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
 
           {revealed && (
             <View style={styles.gradeRow}>
-              <Pressable
-                disabled={reviewMutation.isPending}
-                onPress={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "again" })}
-                accessibilityRole="button"
-                style={styles.gradeButton}
-              >
-                <Text style={[styles.gradeButtonText, { color: colors.again }]}>
-                  {t("lesson.grades.again")}
-                </Text>
-                <Text style={styles.gradeInterval}>
-                  {formatInterval(currentCard.next_intervals.again, language)}
-                </Text>
-              </Pressable>
-              <Pressable
-                disabled={reviewMutation.isPending}
-                onPress={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "hard" })}
-                accessibilityRole="button"
-                style={styles.gradeButton}
-              >
-                <Text style={[styles.gradeButtonText, { color: colors.hard }]}>
-                  {t("lesson.grades.hard")}
-                </Text>
-                <Text style={styles.gradeInterval}>
-                  {formatInterval(currentCard.next_intervals.hard, language)}
-                </Text>
-              </Pressable>
-              <Pressable
-                disabled={reviewMutation.isPending}
-                onPress={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "good" })}
-                accessibilityRole="button"
-                style={styles.gradeButton}
-              >
-                <Text style={[styles.gradeButtonText, { color: colors.good }]}>
-                  {t("lesson.grades.good")}
-                </Text>
-                <Text style={styles.gradeInterval}>
-                  {formatInterval(currentCard.next_intervals.good, language)}
-                </Text>
-              </Pressable>
-              <Pressable
-                disabled={reviewMutation.isPending}
-                onPress={() => reviewMutation.mutate({ cardId: currentCard.id, rating: "easy" })}
-                accessibilityRole="button"
-                style={styles.gradeButton}
-              >
-                <Text style={[styles.gradeButtonText, { color: colors.easy }]}>
-                  {t("lesson.grades.easy")}
-                </Text>
-                <Text style={styles.gradeInterval}>
-                  {formatInterval(currentCard.next_intervals.easy, language)}
-                </Text>
-              </Pressable>
+              {GRADES.map((grade) => (
+                <Pressable
+                  key={grade.rating}
+                  disabled={reviewMutation.isPending}
+                  onPress={() =>
+                    reviewMutation.mutate({ cardId: currentCard.id, rating: grade.rating })
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={t("lesson.gradeWithInterval", {
+                    grade: t(`lesson.grades.${grade.rating}`),
+                    interval: describeInterval(currentCard.next_intervals[grade.rating], language),
+                  })}
+                  style={[styles.gradeButton, { borderColor: colors[grade.tone] }]}
+                >
+                  <Text style={styles.gradeButtonText}>{t(`lesson.grades.${grade.rating}`)}</Text>
+                  <Text style={styles.gradeInterval}>
+                    {formatInterval(currentCard.next_intervals[grade.rating], language)}
+                  </Text>
+                </Pressable>
+              ))}
             </View>
           )}
 
@@ -1187,13 +1262,6 @@ function ReviewArticle({
   );
 }
 
-const GRADES: { rating: ClozeRating; tone: "again" | "hard" | "good" | "easy" }[] = [
-  { rating: "again", tone: "again" },
-  { rating: "hard", tone: "hard" },
-  { rating: "good", tone: "good" },
-  { rating: "easy", tone: "easy" },
-];
-
 /** The review bar: a bottom notch with Show, then the four grades on light
  * paper buttons that stay light in dark mode (design.md §11). */
 function ReviewBar({
@@ -1264,7 +1332,7 @@ function ReviewBar({
           {GRADES.map((grade) => (
             <Pressable
               key={grade.rating}
-              style={styles.gradeButton}
+              style={[styles.gradeButton, { borderColor: colors[grade.tone] }]}
               disabled={review.isGrading}
               onPress={() => review.grade(grade.rating)}
               accessibilityRole="button"
@@ -1277,9 +1345,7 @@ function ReviewBar({
                   : t(`lesson.grades.${grade.rating}`)
               }
             >
-              <Text style={[styles.gradeButtonText, { color: colors[grade.tone] }]}>
-                {t(`lesson.grades.${grade.rating}`)}
-              </Text>
+              <Text style={styles.gradeButtonText}>{t(`lesson.grades.${grade.rating}`)}</Text>
               {review.nextIntervals && (
                 <Text style={styles.gradeInterval}>
                   {formatInterval(review.nextIntervals[grade.rating], language)}
@@ -1599,21 +1665,32 @@ export default function LectureScreen() {
   });
 
   const [actionMenuBlockIndex, setActionMenuBlockIndex] = useState<number | null>(null);
-  const [composingBlockIndex, setComposingBlockIndex] = useState<number | null>(null);
+  // What the note being composed will be attached to. Offsets are present
+  // when it came from the note tool (a passage you picked) and absent when it
+  // came from the long-press menu, which selects a whole paragraph -- the
+  // same two kinds of note the web creates, and what decides whether the
+  // marker lands on the passage or at the end of the block.
+  const [composing, setComposing] = useState<{
+    blockIndex: number;
+    start?: number;
+    end?: number;
+  } | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [viewingNote, setViewingNote] = useState<Annotation | null>(null);
   const [explainComingSoonVisible, setExplainComingSoonVisible] = useState(false);
 
   const createNoteMutation = useMutation({
-    mutationFn: (blockIndex: number) =>
+    mutationFn: (target: { blockIndex: number; start?: number; end?: number }) =>
       getApiClient().createAnnotation(id, {
         type: "margin_note",
-        block_index: blockIndex,
+        block_index: target.blockIndex,
+        start_offset: target.start,
+        end_offset: target.end,
         note_text: noteDraft.trim(),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["annotations", id] });
-      setComposingBlockIndex(null);
+      setComposing(null);
       setNoteDraft("");
     },
   });
@@ -1652,6 +1729,14 @@ export default function LectureScreen() {
 
   function handleSelectionSettled(blockIndex: number, start: number, end: number) {
     if (start === end) return;
+
+    if (activeTool?.type === "note") {
+      // The tool goes down as soon as the passage is picked: the next thing
+      // to do is write the note, not mark another passage.
+      setActiveTool(null);
+      setComposing({ blockIndex, start, end });
+      return;
+    }
 
     if (activeTool?.type === "highlight") {
       createAnnotationMutation.mutate({
@@ -1788,6 +1873,7 @@ export default function LectureScreen() {
   const markingHint = !lessonTools
     ? null
     : activeTool?.type === "highlight" ||
+        activeTool?.type === "note" ||
         (activeTool?.type === "eraser" && lessonViewMode === "text")
       ? anchorSet
         ? t("lesson.tools.markLastWord")
@@ -1891,7 +1977,9 @@ export default function LectureScreen() {
               documentId={id}
               storagePath={readyLecturePdf.storage_path}
               pageCount={readyLecturePdf.page_count}
-              tool={activeTool}
+              // The note tool never reaches here: it is disabled outside the
+              // text view, and switching views puts it down.
+              tool={activeTool?.type === "note" ? null : activeTool}
               viewportTop={pdfScrollTop}
               viewportHeight={windowHeight}
               onAnchorChange={setPdfAnchorSet}
@@ -2004,6 +2092,7 @@ export default function LectureScreen() {
           onToolChange={setActiveTool}
           toolsEnabled={lessonTools}
           penAvailable={activeTab === "lesson" && lessonViewMode === "pdf"}
+          noteAvailable={activeTab === "lesson" && lessonViewMode === "text"}
           onContents={() => setActiveDrawer("toc")}
           onExplain={() => setExplainComingSoonVisible(true)}
           textScaleAvailable={activeTab === "lesson" || activeTab === "review"}
@@ -2036,7 +2125,10 @@ export default function LectureScreen() {
             <View style={styles.modalCard}>
               <Pressable
                 onPress={() => {
-                  setComposingBlockIndex(actionMenuBlockIndex);
+                  // No offsets: a note on the paragraph as a whole.
+                  if (actionMenuBlockIndex !== null) {
+                    setComposing({ blockIndex: actionMenuBlockIndex });
+                  }
                   setActionMenuBlockIndex(null);
                 }}
                 style={styles.actionMenuItem}
@@ -2091,51 +2183,59 @@ export default function LectureScreen() {
           </View>
         </Modal>
 
+        {/* Both note modals hold a multiline input, where the return key
+            inserts a newline instead of dismissing the keyboard -- so a tap
+            on the dimmed page puts it away, and the card rides above it
+            rather than being covered by it. Without either, the keyboard
+            came up with the note and could not be sent back down. */}
         <Modal
-          visible={composingBlockIndex !== null}
+          visible={composing !== null}
           transparent
           animationType="fade"
-          onRequestClose={() => setComposingBlockIndex(null)}
+          onRequestClose={() => setComposing(null)}
         >
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>{t("lesson.panel.addNote")}</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={noteDraft}
-                onChangeText={setNoteDraft}
-                placeholder={t("lesson.panel.notePlaceholder")}
-                multiline
-                autoFocus
-              />
-              <View style={styles.modalActions}>
-                <Pressable
-                  onPress={() => {
-                    setComposingBlockIndex(null);
-                    setNoteDraft("");
-                  }}
-                  style={styles.modalButton}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.modalButtonText}>{t("common.cancel")}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() =>
-                    composingBlockIndex !== null && createNoteMutation.mutate(composingBlockIndex)
-                  }
-                  style={[styles.modalButton, styles.modalButtonPrimary]}
-                  disabled={!noteDraft.trim() || createNoteMutation.isPending}
-                  accessibilityRole="button"
-                >
-                  {createNoteMutation.isPending ? (
-                    <ActivityIndicator color={colors.primaryForeground} />
-                  ) : (
-                    <Text style={styles.modalButtonPrimaryText}>{t("common.save")}</Text>
-                  )}
-                </Pressable>
+          <Pressable style={styles.modalBackdrop} onPress={Keyboard.dismiss}>
+            <KeyboardAvoidingView
+              style={styles.modalLift}
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+            >
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>{t("lesson.panel.addNote")}</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={noteDraft}
+                  onChangeText={setNoteDraft}
+                  placeholder={t("lesson.panel.notePlaceholder")}
+                  multiline
+                  autoFocus
+                />
+                <View style={styles.modalActions}>
+                  <Pressable
+                    onPress={() => {
+                      setComposing(null);
+                      setNoteDraft("");
+                    }}
+                    style={styles.modalButton}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.modalButtonText}>{t("common.cancel")}</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => composing && createNoteMutation.mutate(composing)}
+                    style={[styles.modalButton, styles.modalButtonPrimary]}
+                    disabled={!noteDraft.trim() || createNoteMutation.isPending}
+                    accessibilityRole="button"
+                  >
+                    {createNoteMutation.isPending ? (
+                      <ActivityIndicator color={colors.primaryForeground} />
+                    ) : (
+                      <Text style={styles.modalButtonPrimaryText}>{t("common.save")}</Text>
+                    )}
+                  </Pressable>
+                </View>
               </View>
-            </View>
-          </View>
+            </KeyboardAvoidingView>
+          </Pressable>
         </Modal>
 
         <Modal
@@ -2144,40 +2244,45 @@ export default function LectureScreen() {
           animationType="fade"
           onRequestClose={closeNote}
         >
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>{t("lesson.panel.note")}</Text>
-              {viewingNote && (
-                <TextInput
-                  // Keyed by note so reopening another note starts from its text.
-                  key={viewingNote.id}
-                  style={styles.modalInput}
-                  defaultValue={viewingNote.note_text ?? ""}
-                  onChangeText={(text) => {
-                    noteEdit.current = text;
-                  }}
-                  multiline
-                  accessibilityLabel={t("lesson.panel.noteText")}
-                />
-              )}
-              <View style={styles.modalActions}>
-                <Pressable
-                  onPress={closeNote}
-                  style={styles.modalButton}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.modalButtonText}>{t("common.close")}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => viewingNote && deleteAnnotationMutation.mutate(viewingNote.id)}
-                  style={styles.modalButton}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.deleteText}>{t("common.delete")}</Text>
-                </Pressable>
+          <Pressable style={styles.modalBackdrop} onPress={Keyboard.dismiss}>
+            <KeyboardAvoidingView
+              style={styles.modalLift}
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+            >
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>{t("lesson.panel.note")}</Text>
+                {viewingNote && (
+                  <TextInput
+                    // Keyed by note so reopening another note starts from its text.
+                    key={viewingNote.id}
+                    style={styles.modalInput}
+                    defaultValue={viewingNote.note_text ?? ""}
+                    onChangeText={(text) => {
+                      noteEdit.current = text;
+                    }}
+                    multiline
+                    accessibilityLabel={t("lesson.panel.noteText")}
+                  />
+                )}
+                <View style={styles.modalActions}>
+                  <Pressable
+                    onPress={closeNote}
+                    style={styles.modalButton}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.modalButtonText}>{t("common.close")}</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => viewingNote && deleteAnnotationMutation.mutate(viewingNote.id)}
+                    style={styles.modalButton}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.deleteText}>{t("common.delete")}</Text>
+                  </Pressable>
+                </View>
               </View>
-            </View>
-          </View>
+            </KeyboardAvoidingView>
+          </Pressable>
         </Modal>
 
         <TocModal
@@ -2438,24 +2543,41 @@ const useStyles = makeStyles((colors) => ({
     fontWeight: fontWeights.extrabold,
     color: "#1D1F23",
   },
+  // A paper button outlined in its grade's colour, with dark text -- the web
+  // GradeButtons' PAPER_BUTTON (learn/[id]/grade-bar.tsx), which is what
+  // design.md §11 asks for. This used to put the colour on the *text* and
+  // give all four the same flat border, so the row read as four greyed-out
+  // buttons with oddly coloured words in them. The caller supplies
+  // `borderColor` from the grade's tone.
+  //
+  // The four share the row rather than each claiming 62px: "Din nou" next to
+  // "10 minute" is wider than that on a narrow phone, and the row has no
+  // flexWrap, so the fourth button used to be clipped off the edge.
   gradeButton: {
-    minWidth: 62,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
     alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
     paddingVertical: 10,
     paddingHorizontal: 6,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: "#DEDBD2",
     backgroundColor: colors.paper,
   },
   gradeInterval: {
     fontSize: 12,
     fontWeight: fontWeights.semibold,
-    color: "#6C6F76",
+    // Paper tokens, not the page's: these buttons stay light in dark mode,
+    // so their text has to as well.
+    color: colors.paperMutedForeground,
   },
   gradeButtonText: {
     fontSize: 15,
     fontWeight: fontWeights.extrabold,
+    color: colors.paperForeground,
   },
   clozeGap: {
     fontSize: 15,
@@ -2551,6 +2673,21 @@ const useStyles = makeStyles((colors) => ({
     lineHeight: 27,
     color: colors.foreground,
   },
+  // A note's passage and its inline bubble, in the design's note blue
+  // (pageColors, unthemed -- the lesson page's own colours, like the web's
+  // NoteBubble). `textDecorationStyle` is iOS-only; Android draws a solid
+  // underline in the same colour, which is the right fallback.
+  noteRun: {
+    textDecorationLine: "underline",
+    textDecorationStyle: "dashed",
+    textDecorationColor: pageColors.noteUnderline,
+  },
+  noteMarker: {
+    fontSize: 13,
+    fontWeight: fontWeights.bold,
+    color: pageColors.noteBubbleIcon,
+    backgroundColor: pageColors.noteBubble,
+  },
   noteRow: {
     flexDirection: "row",
     marginTop: spacing.xs,
@@ -2605,6 +2742,14 @@ const useStyles = makeStyles((colors) => ({
     alignItems: "center",
     justifyContent: "center",
     padding: spacing.xl,
+  },
+  // Between the backdrop and the card: the KeyboardAvoidingView that lifts
+  // the card clear of the keyboard. It has to carry the card's own width
+  // rules, since it now sits where the card used to.
+  modalLift: {
+    width: "100%",
+    maxWidth: 400,
+    justifyContent: "center",
   },
   modalCard: {
     width: "100%",
@@ -2704,7 +2849,7 @@ const useStyles = makeStyles((colors) => ({
   },
   reviewGradeRow: {
     flexDirection: "row",
-    justifyContent: "center",
+    alignSelf: "stretch",
     gap: 6,
   },
   flashcardsTab: {
@@ -2779,9 +2924,12 @@ const useStyles = makeStyles((colors) => ({
     paddingTop: spacing.sm,
     alignSelf: "stretch",
   },
+  // `alignSelf: stretch` because flashcardsTab centres its children: without
+  // it the row is only as wide as its content wants to be, and buttons that
+  // share the row by flex have nothing to share.
   gradeRow: {
     flexDirection: "row",
-    justifyContent: "center",
+    alignSelf: "stretch",
     gap: 6,
   },
   cardForm: {

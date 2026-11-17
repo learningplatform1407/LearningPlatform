@@ -38,15 +38,31 @@ beforeEach(() => {
   updateMe.mockReset().mockResolvedValue(me);
 });
 
-test("saving the notifications toggle", async () => {
+test("the notifications toggle writes as it is clicked, with no Save button", async () => {
   updateMe.mockResolvedValue({ ...me, settings: { ...me.settings, notifications_enabled: false } });
 
   const user = userEvent.setup();
   renderPage();
 
-  await user.click(await screen.findByLabelText("Enable notifications"));
-  await user.click(screen.getByRole("button", { name: "Save" }));
+  const toggle = await screen.findByLabelText("Enable notifications");
+  await user.click(toggle);
 
   expect(updateMe).toHaveBeenCalledWith({ notifications_enabled: false });
-  expect(await screen.findByText("Saved.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+  // The box shows the new state without waiting for the response (the
+  // optimistic write), and keeps it once the response lands.
+  expect(toggle).not.toBeChecked();
+});
+
+test("a failed write puts the toggle back and says so", async () => {
+  updateMe.mockRejectedValue(new Error("offline"));
+
+  const user = userEvent.setup();
+  renderPage();
+
+  const toggle = await screen.findByLabelText("Enable notifications");
+  await user.click(toggle);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Failed to save: offline");
+  expect(toggle).toBeChecked();
 });

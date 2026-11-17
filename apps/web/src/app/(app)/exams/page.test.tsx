@@ -314,3 +314,47 @@ test("keeps submit available while paused", async () => {
   expect(await screen.findByRole("button", { name: "Resume" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Submit quiz" })).toBeEnabled();
 });
+
+const attempt = {
+  id: "h1",
+  status: "completed",
+  question_count: 10,
+  points_awarded: 18,
+  points_possible: 24,
+  created_at: "2026-10-09T12:00:00Z",
+};
+
+test("past exams are a view of their own, reached from the hub", async () => {
+  getMe.mockResolvedValue({ id: "u1", role: "student" });
+  listQuizSessionHistory.mockResolvedValue([attempt, { ...attempt, id: "h2" }]);
+
+  const user = userEvent.setup();
+  renderPage();
+
+  // The hub says there are past exams and nothing more -- no attempt list,
+  // and the start form is still what the page is about.
+  expect(await screen.findByText("2 attempts")).toBeInTheDocument();
+  expect(screen.queryByText("18/24")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Start quiz" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "See past exams" }));
+
+  // The view: the three summary tiles, the attempts, and a way back.
+  expect(await screen.findByRole("heading", { name: "Past exams" })).toBeInTheDocument();
+  expect(screen.getByText("Taken")).toBeInTheDocument();
+  expect(screen.getAllByText("18/24")).toHaveLength(2);
+  expect(screen.queryByRole("button", { name: "Start quiz" })).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Back to Exam Hub" }));
+  expect(await screen.findByRole("button", { name: "Start quiz" })).toBeInTheDocument();
+});
+
+test("no past exams, no way into the view", async () => {
+  getMe.mockResolvedValue({ id: "u1", role: "student" });
+  listQuizSessionHistory.mockResolvedValue([]);
+
+  renderPage();
+
+  expect(await screen.findByRole("button", { name: "Start quiz" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "See past exams" })).not.toBeInTheDocument();
+});

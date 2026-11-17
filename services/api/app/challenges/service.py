@@ -119,6 +119,21 @@ def _to_response(db: Session, challenge: Challenge, viewer_id: uuid.UUID) -> Cha
     )
 
 
+def _answered_challenge(db: Session, session: QuizSession) -> Challenge | None:
+    """The challenge this session is an answer to, if it is one.
+
+    `accept_challenge` records it in the session's `filter_spec`, which is
+    where the questions came from -- there was no draw to describe.
+    """
+    challenge_id = session.filter_spec.get("challenge_id")
+    if not challenge_id:
+        return None
+    try:
+        return db.get(Challenge, uuid.UUID(str(challenge_id)))
+    except ValueError:  # not a uuid: not ours to interpret
+        return None
+
+
 def create_challenge(
     db: Session, challenger_id: uuid.UUID, data: ChallengeCreateRequest
 ) -> ChallengeResponse:
@@ -133,6 +148,18 @@ def create_challenge(
     if not _are_mutual(db, challenger_id, data.user_id):
         raise ApiError(
             403, "not_mutual_follow", "You can only challenge people who follow you back"
+        )
+    # Not back to the sender. These questions are the ones they chose and have
+    # already answered, so "beat my score" asks them to beat themselves on
+    # their own paper -- and `accept_challenge` would hand them a replay of a
+    # draw they have seen. Anyone else is fair game: the exam is a real
+    # attempt of yours, with a score of yours attached.
+    answered = _answered_challenge(db, source)
+    if answered is not None and data.user_id == answered.challenger_id:
+        raise ApiError(
+            409,
+            "cannot_return_challenge",
+            "You can't send this exam back to the person who set it",
         )
 
     now = datetime.now(UTC)

@@ -1,5 +1,5 @@
 import type { Challenge } from "@lp/contracts";
-import { formatPostDate, outcomeLabel } from "@lp/ui";
+import { cannotBeChallengedWith, formatPostDate, latestChallenges, outcomeLabel } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -70,13 +70,16 @@ function SmallButton({
 }
 
 /** "Challenge someone" under a finished exam: lists the people you follow who
- * follow you back, and sends this exam to the one you pick. */
+ * follow you back, and sends this exam to the one you pick.
+ *
+ * Whoever set these questions is left out -- see `cannotBeChallengedWith`. */
 export function ChallengeSender({ sessionId }: { sessionId: string }) {
   const { t } = useI18n();
   const styles = useStyles();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [sentTo, setSentTo] = useState<string[]>([]);
+  const challenges = useChallenges();
   const following = useQuery({
     queryKey: ["following"],
     queryFn: () => getApiClient().listFollowing(),
@@ -92,12 +95,16 @@ export function ChallengeSender({ sessionId }: { sessionId: string }) {
   });
 
   if (!open) {
-    return (
-      <SmallButton label={t("social.challenges.challengeSomeone")} onPress={() => setOpen(true)} />
-    );
+    return <SmallButton label={t("social.challenges.challenge")} onPress={() => setOpen(true)} />;
   }
 
   const mutuals = following.data?.filter((user) => user.follows_you) ?? [];
+  const blocked = cannotBeChallengedWith(challenges.data ?? [], sessionId);
+  const candidates = mutuals.filter((user) => !blocked.has(user.id));
+  // Named so the empty state can say who set the questions, rather than
+  // claiming you follow nobody back.
+  const setter = mutuals.find((user) => blocked.has(user.id));
+
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{t("social.challenges.challengeSomeone")}</Text>
@@ -111,12 +118,19 @@ export function ChallengeSender({ sessionId }: { sessionId: string }) {
           </Text>
         </Pressable>
       )}
+      {candidates.length === 0 && setter && (
+        <Text style={styles.hint}>
+          {t("social.challenges.noOneLeft", {
+            name: setter.display_name ?? t("profile.unnamed"),
+          })}
+        </Text>
+      )}
       {send.isError && (
         <Text style={styles.error}>
           {t("social.actionFailed", { message: errorMessage(send.error) })}
         </Text>
       )}
-      {mutuals.map((user) => {
+      {candidates.map((user) => {
         const name = user.display_name ?? t("profile.unnamed");
         return (
           <View key={user.id} style={styles.row}>
@@ -131,7 +145,7 @@ export function ChallengeSender({ sessionId }: { sessionId: string }) {
             ) : (
               <SmallButton
                 primary
-                label={t("social.challenges.challengeSomeone")}
+                label={t("social.challenges.challenge")}
                 accessibilityLabel={t("social.challenges.challengeName", { name })}
                 disabled={send.isPending}
                 onPress={() => send.mutate(user.id)}
@@ -234,13 +248,22 @@ function ChallengeRow({
   );
 }
 
-/** Challenges you've sent and received, newest first. Hidden until there is one. */
+/**
+ * The Exam Hub's challenge section: the latest one only, with "View all" in
+ * the heading row. Hidden until there is one.
+ *
+ * The hub used to list every challenge the API returns, which pushed the
+ * start form off the screen once a few had piled up. The ones already dealt
+ * with belong on `ChallengesList`, a tap away.
+ */
 export function ChallengesSection({
   onAccepted,
   onOpen,
+  onViewAll,
 }: {
   onAccepted: () => void;
   onOpen: (id: string) => void;
+  onViewAll: () => void;
 }) {
   const { t } = useI18n();
   const styles = useStyles();
@@ -248,8 +271,15 @@ export function ChallengesSection({
   if (!challenges.data || challenges.data.length === 0) return null;
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{t("social.challenges.title")}</Text>
-      {challenges.data.map((challenge) => (
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionTitle}>{t("social.challenges.title")}</Text>
+        {challenges.data.length > 1 && (
+          <Pressable onPress={onViewAll} accessibilityRole="button" hitSlop={8}>
+            <Text style={styles.link}>{t("social.challenges.viewAll")}</Text>
+          </Pressable>
+        )}
+      </View>
+      {latestChallenges(challenges.data).map((challenge) => (
         <ChallengeRow
           key={challenge.id}
           challenge={challenge}
@@ -257,6 +287,47 @@ export function ChallengesSection({
           onOpen={onOpen}
         />
       ))}
+    </View>
+  );
+}
+
+/** Every challenge you've sent and received, newest first -- the view behind
+ * the hub section's "View all". */
+export function ChallengesList({
+  onAccepted,
+  onOpen,
+  onDone,
+}: {
+  onAccepted: () => void;
+  onOpen: (id: string) => void;
+  onDone: () => void;
+}) {
+  const { t } = useI18n();
+  const styles = useStyles();
+  const challenges = useChallenges();
+  return (
+    <View style={styles.section}>
+      <Text style={styles.title} accessibilityRole="header">
+        {t("social.challenges.allTitle")}
+      </Text>
+      {challenges.isPending && <Text style={styles.hint}>{t("common.loading")}</Text>}
+      {challenges.isError && (
+        <Text style={styles.error}>
+          {t("social.loadFailed", { message: errorMessage(challenges.error) })}
+        </Text>
+      )}
+      {challenges.data?.length === 0 && (
+        <Text style={styles.hint}>{t("social.challenges.none")}</Text>
+      )}
+      {challenges.data?.map((challenge) => (
+        <ChallengeRow
+          key={challenge.id}
+          challenge={challenge}
+          onAccepted={onAccepted}
+          onOpen={onOpen}
+        />
+      ))}
+      <SmallButton primary label={t("exams.backToHub")} onPress={onDone} />
     </View>
   );
 }
@@ -336,6 +407,14 @@ export function ChallengeResult({
 
 const useStyles = makeStyles((colors) => ({
   section: {
+    gap: spacing.sm,
+  },
+  // The heading and its "View all" on one line, the control on the right --
+  // above the challenge, not below it.
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: spacing.sm,
   },
   sectionTitle: {

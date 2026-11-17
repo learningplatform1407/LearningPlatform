@@ -38,18 +38,19 @@ beforeEach(() => {
   updateMe.mockReset().mockResolvedValue(me);
 });
 
-test("making the profile public", async () => {
+test("making the profile public writes on the click, with no Save button", async () => {
   updateMe.mockResolvedValue({ ...me, settings: { ...me.settings, profile_public: true } });
 
   const user = userEvent.setup();
   renderPage();
 
-  await user.click(await screen.findByLabelText("Public profile"));
+  const toggle = await screen.findByLabelText("Public profile");
+  await user.click(toggle);
   expect(screen.getByRole("heading", { name: "Privacy" })).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Save" }));
 
   expect(updateMe).toHaveBeenCalledWith({ profile_public: true });
-  expect(await screen.findByText("Saved.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+  expect(toggle).toBeChecked();
 });
 
 test("a profile without a display name can't be made public", async () => {

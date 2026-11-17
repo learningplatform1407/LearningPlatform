@@ -28,7 +28,7 @@ import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { useI18n } from "@/lib/i18n";
 
-import { ChallengeResult, ChallengeSender, ChallengesSection } from "./challenges";
+import { ChallengeResult, ChallengeSender, ChallengesList, ChallengesSection } from "./challenges";
 
 function describeError(t: Translator["t"], err: unknown): string {
   if (err instanceof ApiClientError) {
@@ -805,7 +805,13 @@ function Results({ sessionId, onDone }: { sessionId: string; onDone: () => void 
  * it. Nothing new is fetched -- the date and every number here were already
  * in `listQuizSessionHistory()`.
  */
-function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
+function PastExams({
+  onOpen,
+  onDone,
+}: {
+  onOpen: (sessionId: string) => void;
+  onDone: () => void;
+}) {
   const { t, language } = useI18n();
   const api = getBrowserApiClient();
   const history = useQuery({
@@ -813,13 +819,15 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
     queryFn: () => api.listQuizSessionHistory(),
   });
 
-  if (!history.data || history.data.length === 0) return null;
+  if (history.isPending) {
+    return <p className="mt-lg text-sm text-muted-foreground">{t("common.loading")}</p>;
+  }
 
-  const summary = summarizePastExams(history.data);
+  const summary = summarizePastExams(history.data ?? []);
 
   return (
-    <section className="mt-xl">
-      <h2 className="label-caps">{t("exams.pastExams")}</h2>
+    <section className="mt-lg">
+      <h2 className="text-heading m-0 font-extrabold text-foreground">{t("exams.pastExams")}</h2>
 
       <div className="mt-sm grid grid-cols-3 gap-sm">
         <StatTile label={t("exams.statTaken")} value={String(summary.taken)} />
@@ -835,7 +843,7 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
       </div>
 
       <ul className="mt-md flex flex-col gap-sm">
-        {history.data.map((item) => {
+        {(history.data ?? []).map((item) => {
           const percent = attemptPercent(item);
           return (
             <li key={item.id}>
@@ -875,11 +883,81 @@ function History({ onOpen }: { onOpen: (sessionId: string) => void }) {
           );
         })}
       </ul>
+
+      <Button type="button" className="mt-md self-start" onClick={onDone}>
+        {t("exams.backToHub")}
+      </Button>
     </section>
   );
 }
 
+/** The hub's way into the past-exams view: that there are past exams, how
+ * many, and nothing else.
+ *
+ * The attempt list used to sit at the bottom of the hub and grow without
+ * bound, so the start form -- the thing the page is for -- ended up above an
+ * ever-longer history. */
+function PastExamsLink({ onOpen }: { onOpen: () => void }) {
+  const { t } = useI18n();
+  const api = getBrowserApiClient();
+  const history = useQuery({
+    queryKey: ["quiz-session-history"],
+    queryFn: () => api.listQuizSessionHistory(),
+  });
+
+  if (!history.data || history.data.length === 0) return null;
+
+  // The latest attempt's state, when it is not a plain finish.
+  //
+  // §9.1 of docs/architecture/quizzes.md requires the landing state to make an
+  // attempt that ended while you were away discoverable: `/current` returns
+  // null for an expired session, so without a word here the page is an empty
+  // start form and the exam simply vanished. The list moving to its own view
+  // does not excuse that, so the row carries it.
+  const latest = history.data[0];
+  const ended = latest && latest.status !== "completed" ? quizStatusLabel(t, latest.status) : null;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={t("exams.openPastExams")}
+      className="group mt-xl flex w-full items-center justify-between gap-md border-t border-border pt-md text-left"
+    >
+      <span className="flex flex-col gap-xs">
+        <span className="label-caps">{t("exams.pastExams")}</span>
+        <span className="text-sm text-muted-foreground">
+          {t("exams.pastExamsCount", { count: history.data.length })}
+          {ended ? ` · ${ended}` : ""}
+        </span>
+      </span>
+      <span
+        aria-hidden="true"
+        className="text-heading text-muted-foreground group-hover:text-foreground"
+      >
+        ›
+      </span>
+    </button>
+  );
+}
+
 // --- page ----------------------------------------------------------------
+
+/** What the Exam Hub is showing instead of the hub itself.
+ *
+ * One value rather than a boolean (or a nullable id) per view: the past
+ * exams, the full challenge list, one attempt's results and one challenge's
+ * comparison are mutually exclusive, and separate flags made that only a
+ * convention -- two of them set at once rendered one view with another's back
+ * button. */
+type ExamsView =
+  | { kind: "hub" }
+  | { kind: "pastExams" }
+  | { kind: "challenges" }
+  | { kind: "results"; sessionId: string }
+  | { kind: "challenge"; challengeId: string };
+
+const HUB: ExamsView = { kind: "hub" };
 
 export default function QuizzesPage() {
   const { t } = useI18n();
@@ -891,8 +969,7 @@ export default function QuizzesPage() {
     queryFn: () => api.getCurrentQuizSession(),
   });
 
-  const [viewingResultsFor, setViewingResultsFor] = useState<string | null>(null);
-  const [viewingChallenge, setViewingChallenge] = useState<string | null>(null);
+  const [view, setView] = useState<ExamsView>(HUB);
 
   function refreshCurrent() {
     queryClient.invalidateQueries({ queryKey: ["quiz-session-current"] });
@@ -901,20 +978,30 @@ export default function QuizzesPage() {
     queryClient.invalidateQueries({ queryKey: ["challenges"] });
   }
 
+  function backToHub() {
+    setView(HUB);
+    refreshCurrent();
+  }
+
   return (
     <PageMain width="reading">
       <PageHeader kicker={t("exams.kicker")} title={t("exams.title")} />
-      <p className="text-toc text-muted-foreground">{t("exams.intro")}</p>
+      {view.kind === "hub" && <p className="text-toc text-muted-foreground">{t("exams.intro")}</p>}
 
-      {viewingChallenge ? (
-        <ChallengeResult challengeId={viewingChallenge} onDone={() => setViewingChallenge(null)} />
-      ) : viewingResultsFor ? (
-        <Results
-          sessionId={viewingResultsFor}
-          onDone={() => {
-            setViewingResultsFor(null);
-            refreshCurrent();
-          }}
+      {view.kind === "challenge" ? (
+        <ChallengeResult challengeId={view.challengeId} onDone={() => setView(HUB)} />
+      ) : view.kind === "results" ? (
+        <Results sessionId={view.sessionId} onDone={backToHub} />
+      ) : view.kind === "pastExams" ? (
+        <PastExams
+          onOpen={(sessionId) => setView({ kind: "results", sessionId })}
+          onDone={() => setView(HUB)}
+        />
+      ) : view.kind === "challenges" ? (
+        <ChallengesList
+          onAccepted={refreshCurrent}
+          onOpen={(challengeId) => setView({ kind: "challenge", challengeId })}
+          onDone={() => setView(HUB)}
         />
       ) : current.isPending ? (
         <p className="mt-lg text-sm text-muted-foreground">{t("common.loading")}</p>
@@ -926,7 +1013,7 @@ export default function QuizzesPage() {
               key={session.id}
               session={session}
               onFinished={() => {
-                setViewingResultsFor(session.id);
+                setView({ kind: "results", sessionId: session.id });
                 refreshCurrent();
               }}
             />
@@ -934,9 +1021,13 @@ export default function QuizzesPage() {
         })()
       ) : (
         <>
-          <ChallengesSection onAccepted={refreshCurrent} onOpen={setViewingChallenge} />
+          <ChallengesSection
+            onAccepted={refreshCurrent}
+            onOpen={(challengeId) => setView({ kind: "challenge", challengeId })}
+            onViewAll={() => setView({ kind: "challenges" })}
+          />
           <StartForm onStarted={refreshCurrent} />
-          <History onOpen={setViewingResultsFor} />
+          <PastExamsLink onOpen={() => setView({ kind: "pastExams" })} />
         </>
       )}
     </PageMain>

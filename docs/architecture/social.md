@@ -155,8 +155,23 @@ stateDiagram-v2
 - A finished exam can be sent to the same person once (unique on
   `(source_session_id, challengee_id)`). Expired sessions count as finished:
   they were graded.
+- **Not back to the sender.** The session you answered a challenge in cannot be
+  sent to whoever set it (409 `cannot_return_challenge`): those are their
+  questions, which they chose and have already answered, so "beat my score"
+  asks them to beat themselves on their own paper — and accepting would replay
+  a draw they have seen. Anyone else is fair game, because the attempt is
+  genuinely yours with a score of yours attached. `create_challenge` finds the
+  originating challenge through the session's `filter_spec.challenge_id`, which
+  `accept_challenge` wrote. Both clients leave that person out of the picker
+  (`cannotBeChallengedWith` in `packages/ui/src/quiz/challenges.ts`) rather than
+  offering a button that 409s.
 - There are no push notifications yet. Incoming challenges show on the Exam
-  Hub, with a count on its sidebar entry (web) and tab (mobile).
+  Hub, with a count on its sidebar entry (web) and tab (mobile). The hub shows
+  **the latest challenge only**, with "View all" in the heading row opening the
+  full list (`CHALLENGES_SHOWN_ON_HUB`): the list is capped at
+  `MAX_CHALLENGES_LISTED` server-side, and rendering all of it between the
+  intro and the start form pushed the screen down with challenges already dealt
+  with.
 - Time taken isn't compared: a session's clock fields don't record active
   answering time reliably across pauses, so only scores and per-question
   outcomes are shown.

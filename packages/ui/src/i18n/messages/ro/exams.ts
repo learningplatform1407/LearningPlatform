@@ -76,6 +76,13 @@ export const exams: Messages["exams"] = {
   // Vezi nota din ../en/exams.ts: rândurile arată data, scorul și o bară, nu
   // o singură propoziție interpolată.
   pastExams: "Examene anterioare",
+  openPastExams: "Vezi examenele anterioare",
+  pastExamsCount: plural({
+    one: "{count} încercare",
+    few: "{count} încercări",
+    other: "{count} de încercări",
+  }),
+  backToHub: "Înapoi la examene",
   statTaken: "Susținute",
   statAverage: "Medie",
   statBest: "Cel mai bun",

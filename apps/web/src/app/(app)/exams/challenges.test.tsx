@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 
-import { ChallengeResult, ChallengeSender, ChallengesSection } from "./challenges";
+import { ChallengeResult, ChallengeSender, ChallengesList, ChallengesSection } from "./challenges";
 
 const listFollowing = vi.fn();
 const createChallenge = vi.fn();
@@ -69,7 +69,7 @@ test("sending a finished exam to someone who follows you back", async () => {
   const user = userEvent.setup();
   renderWithQuery(<ChallengeSender sessionId="s1" />);
 
-  await user.click(screen.getByRole("button", { name: "Challenge someone" }));
+  await user.click(screen.getByRole("button", { name: "Challenge" }));
 
   // Only mutual follows can be challenged: Cris doesn't follow back.
   expect(await screen.findByText("Bea")).toBeInTheDocument();
@@ -86,15 +86,41 @@ test("with nobody following back, it says how challenges work", async () => {
   const user = userEvent.setup();
   renderWithQuery(<ChallengeSender sessionId="s1" />);
 
-  await user.click(screen.getByRole("button", { name: "Challenge someone" }));
+  await user.click(screen.getByRole("button", { name: "Challenge" }));
 
   expect(await screen.findByText(/between people who follow each other/)).toBeInTheDocument();
+});
+
+test("the exam you answered a challenge in cannot be sent back to its sender", async () => {
+  // Bea challenged me and I answered in session s1, so these are her
+  // questions: she is out of the picker, and she was the only mutual.
+  listChallenges.mockResolvedValue([{ ...challenge, status: "completed", your_session_id: "s1" }]);
+  const user = userEvent.setup();
+  renderWithQuery(<ChallengeSender sessionId="s1" />);
+
+  await user.click(screen.getByRole("button", { name: "Challenge" }));
+
+  expect(await screen.findByText(/Bea set these questions/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Challenge Bea" })).not.toBeInTheDocument();
+});
+
+test("another exam of mine can still be sent to the person who challenged me", async () => {
+  listChallenges.mockResolvedValue([{ ...challenge, status: "completed", your_session_id: "s1" }]);
+  const user = userEvent.setup();
+  // s9: an exam I started myself, not the one I answered hers in.
+  renderWithQuery(<ChallengeSender sessionId="s9" />);
+
+  await user.click(screen.getByRole("button", { name: "Challenge" }));
+
+  expect(await screen.findByRole("button", { name: "Challenge Bea" })).toBeInTheDocument();
 });
 
 test("accepting a challenge starts the attempt", async () => {
   const onAccepted = vi.fn();
   const user = userEvent.setup();
-  renderWithQuery(<ChallengesSection onAccepted={onAccepted} onOpen={vi.fn()} />);
+  renderWithQuery(
+    <ChallengesSection onAccepted={onAccepted} onOpen={vi.fn()} onViewAll={vi.fn()} />,
+  );
 
   const row = (await screen.findByText("Bea challenged you to 10 questions")).closest("li")!;
   await user.click(within(row).getByRole("button", { name: "Accept the challenge from Bea" }));
@@ -105,32 +131,62 @@ test("accepting a challenge starts the attempt", async () => {
 
 test("declining a challenge", async () => {
   const user = userEvent.setup();
-  renderWithQuery(<ChallengesSection onAccepted={vi.fn()} onOpen={vi.fn()} />);
+  renderWithQuery(<ChallengesSection onAccepted={vi.fn()} onOpen={vi.fn()} onViewAll={vi.fn()} />);
 
   await user.click(await screen.findByRole("button", { name: "Decline the challenge from Bea" }));
 
   expect(declineChallenge).toHaveBeenCalledWith("c1");
 });
 
-test("a finished challenge opens the comparison; a sent one shows its state", async () => {
+test("the hub shows only the latest challenge, with View all for the rest", async () => {
+  listChallenges.mockResolvedValue([
+    { ...challenge, id: "c2", status: "completed" },
+    { ...challenge, id: "c3", direction: "sent" },
+  ]);
+  const onViewAll = vi.fn();
+  const user = userEvent.setup();
+  renderWithQuery(
+    <ChallengesSection onAccepted={vi.fn()} onOpen={vi.fn()} onViewAll={onViewAll} />,
+  );
+
+  // c2 is newest (the API returns newest first); c3 stays behind View all.
+  expect(await screen.findByRole("button", { name: "See result" })).toBeInTheDocument();
+  expect(screen.queryByText("You challenged Bea to 10 questions")).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "View all" }));
+  expect(onViewAll).toHaveBeenCalled();
+});
+
+test("one challenge needs no View all", async () => {
+  renderWithQuery(<ChallengesSection onAccepted={vi.fn()} onOpen={vi.fn()} onViewAll={vi.fn()} />);
+
+  expect(await screen.findByText("Bea challenged you to 10 questions")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "View all" })).not.toBeInTheDocument();
+});
+
+test("the full list shows every challenge, and a finished one opens the comparison", async () => {
   listChallenges.mockResolvedValue([
     { ...challenge, id: "c2", status: "completed" },
     { ...challenge, id: "c3", direction: "sent" },
   ]);
   const onOpen = vi.fn();
+  const onDone = vi.fn();
   const user = userEvent.setup();
-  renderWithQuery(<ChallengesSection onAccepted={vi.fn()} onOpen={onOpen} />);
+  renderWithQuery(<ChallengesList onAccepted={vi.fn()} onOpen={onOpen} onDone={onDone} />);
 
   expect(await screen.findByText("You challenged Bea to 10 questions")).toBeInTheDocument();
   expect(screen.getByText("Waiting")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "See result" }));
 
   expect(onOpen).toHaveBeenCalledWith("c2");
+
+  await user.click(screen.getByRole("button", { name: "Back to Exam Hub" }));
+  expect(onDone).toHaveBeenCalled();
 });
 
 test("there is no section until there is a challenge", async () => {
   listChallenges.mockResolvedValue([]);
-  renderWithQuery(<ChallengesSection onAccepted={vi.fn()} onOpen={vi.fn()} />);
+  renderWithQuery(<ChallengesSection onAccepted={vi.fn()} onOpen={vi.fn()} onViewAll={vi.fn()} />);
 
   await vi.waitFor(() => expect(listChallenges).toHaveBeenCalled());
   expect(screen.queryByText("Challenges")).not.toBeInTheDocument();

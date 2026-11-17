@@ -53,10 +53,20 @@ export const social = {
   },
   challenges: {
     title: "Challenges",
+    /** The hub section's "see the rest" control; the hub shows only the
+     * latest challenge. */
+    viewAll: "View all",
+    allTitle: "All challenges",
+    none: "No challenges yet.",
     challengeSomeone: "Challenge someone",
+    /** The buttons themselves: one word, because the row or heading around
+     * them already says who is being challenged to what. */
+    challenge: "Challenge",
     pickerHint: "They answer the same questions, in the same order, with the same timer.",
     noMutuals:
       "Challenges are between people who follow each other. Follow someone back to challenge them.",
+    /** Why the person who set these questions is not in the picker. */
+    noOneLeft: "{name} set these questions, so there is no one else to challenge with them.",
     challengeName: "Challenge {name}",
     sentTo: "Challenge sent to {name}.",
     incoming: plural({

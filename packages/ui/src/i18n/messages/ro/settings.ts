@@ -3,6 +3,7 @@ import type { Messages } from "../en";
 export const settings: Messages["settings"] = {
   title: "Setări",
   sectionsLabel: "Secțiuni de setări",
+  autosaveHint: "Modificările se salvează pe loc.",
   sections: {
     account: "Cont",
     privacy: "Confidențialitate",
@@ -47,7 +48,8 @@ export const settings: Messages["settings"] = {
   },
   languages: {
     label: "Limba",
-    hint: "Interfața se schimbă imediat după salvare. Conținutul lecțiilor rămâne în limba în care a fost scris.",
+    hint: "Interfața se schimbă imediat ce alegi. Conținutul lecțiilor rămâne în limba în care a fost scris.",
+    choose: "Alege limba",
   },
   appearance: {
     theme: "Temă",
@@ -56,7 +58,7 @@ export const settings: Messages["settings"] = {
     system: "Sistem",
     hintWeb:
       "Sistem urmează setarea dispozitivului. Butonul cu lună din bara laterală o schimbă și el.",
-    hintMobile: "Sistem urmează setarea dispozitivului. Salvarea o aplică aici și pe web.",
+    hintMobile: "Sistem urmează setarea dispozitivului. Alegerea ta se aplică aici și pe web.",
   },
   profile: {
     email: "Email",

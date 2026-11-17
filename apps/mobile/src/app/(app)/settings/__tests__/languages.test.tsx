@@ -41,17 +41,18 @@ beforeEach(() => {
   mockUpdateMe.mockReset().mockResolvedValue(me);
 });
 
-test("shows the current language and saves on submit", async () => {
+test("the current language is a dropdown, closed, and saves nothing by itself", async () => {
   renderScreen();
 
+  // The row shows the active language; the other one is behind it, not laid
+  // out as a second pill.
   expect(await screen.findByText("English")).toBeTruthy();
-  fireEvent.press(screen.getByText("Save"));
-
-  await waitFor(() => expect(mockUpdateMe).toHaveBeenCalledWith({ language: "en" }));
-  expect(await screen.findByText("Saved.")).toBeTruthy();
+  expect(screen.queryByText("Română")).toBeNull();
+  expect(screen.queryByText("Save")).toBeNull();
+  expect(mockUpdateMe).not.toHaveBeenCalled();
 });
 
-test("offers Romanian, and saving it switches the interface", async () => {
+test("opening it offers Romanian, and choosing it switches the interface", async () => {
   mockUpdateMe.mockResolvedValue({ ...me, settings: { ...me.settings, language: "ro" } });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -62,11 +63,10 @@ test("offers Romanian, and saving it switches the interface", async () => {
     </QueryClientProvider>,
   );
 
+  fireEvent.press(await screen.findByLabelText("Language"));
   fireEvent.press(await screen.findByText("Română"));
-  fireEvent.press(screen.getByText("Save"));
 
   await waitFor(() => expect(mockUpdateMe).toHaveBeenCalledWith({ language: "ro" }));
   // The saved `me` lands in the shared query cache, which the provider reads.
-  expect(await screen.findByText("Salvează")).toBeTruthy();
-  expect(screen.getByText("Limbi")).toBeTruthy();
+  expect(await screen.findByText("Limbi")).toBeTruthy();
 });

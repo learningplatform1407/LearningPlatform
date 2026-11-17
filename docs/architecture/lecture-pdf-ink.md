@@ -250,10 +250,19 @@ and ink drawn on the emulator renders in the right place on web. That round-trip
 is the real test of the `[0, 1]` normalisation in §2 — two renderers, one storage format, no
 conversion layer.
 
-### 8.3 iOS is unverified
+### 8.3 iOS
 
-**Everything above was confirmed on Android only.** The reader has never been built or run on iOS,
-so treat this section as a checklist rather than a description.
+**Everything above was confirmed on Android first.** The reader has since been run on an iPhone,
+which found one thing this file had not predicted, below; the rest of this section is still a
+checklist rather than a description.
+
+**The page takes no touches.** `scrollEnabled={false}` stops the native viewer from scrolling, but
+it does not stop it from _claiming_ the gesture: on iOS, PDFKit's own scroll view swallowed every
+drag that began over a page, so dragging on the lesson scrolled nothing and only the gaps beside the
+pages worked. The page subtree is wrapped in a `pointerEvents="none"` layer
+(`apps/mobile/src/lib/pdf-lesson-view.tsx`), which costs nothing: zoom and paging are already off,
+and marking and ink are sibling layers above it, so they still receive their touches. Android
+tolerated the same markup, which is why Android testing never surfaced it.
 
 Building it needs **full Xcode**, not just the Command Line Tools — `xcode-select -p` pointing at
 `/Library/Developer/CommandLineTools` means `xcodebuild` does not exist and `expo run:ios` cannot
@@ -269,8 +278,11 @@ Four things are known to differ, and none of them have been exercised:
   `onLoadComplete` and what the container measures via `onLayout`. The JS is shared; the native
   view is not. Misalignment between ink and page is the thing to look for first.
 - **Safe-area insets.** `edgeToEdgeEnabled` is an Android Gradle property, so the specific mechanism
-  in HARDEN-9 does not apply — but nothing in `apps/mobile/src` handles insets at all, and a notch
-  or Dynamic Island makes iOS _more_ likely to clip the reader's top control row, not less.
+  in HARDEN-9 does not apply. `app/_layout.tsx` now pads every screen by `insets.top`, and
+  `ThemeProvider` paints the window behind the root view with the theme's background
+  (`expo-system-ui`) — without that, the strip under the notch showed the platform's own window
+  colour, a shade off the page in light mode and the wrong colour entirely in dark. A notch or
+  Dynamic Island still makes iOS more likely to clip the reader's top control row than Android.
 - **Session storage.** `LargeSecureStore` keeps its AES key in `expo-secure-store`, which is the iOS
   Keychain rather than the Android Keystore. The pattern is cross-platform but has only run against
   the Keystore.
