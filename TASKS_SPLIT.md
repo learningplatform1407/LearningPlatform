@@ -356,6 +356,15 @@ was deliberately left alone: changing it orphans the dev client already installe
 device. The decision this ticket is really about — the permanent identifiers for both platforms —
 is still open.
 
+_Update (2026-11-16)._ That prediction came true on the next `prebuild`: the device build failed
+with `No profiles for 'com.anonymous.mobile' were found`. `app.json` now declares
+`ios.bundleIdentifier: "com.mihneaghira.mobile"`, so the identifier survives `prebuild` and the iOS
+half of this ticket is settled in the repo rather than in a gitignored file. Two things still are
+not. `android.package` remains `com.anonymous.mobile` — the orphaned-install argument above still
+holds, and it has to change before any Play listing. And `ENABLE_USER_SCRIPT_SANDBOXING` has no
+`app.json` equivalent, so it still has to be re-applied by hand after every `prebuild`; a small
+local config plugin (`withXcodeProject`) would close that, and is the remaining work here.
+
 **HARDEN-8 detail.** All seven content tables — `questions`, `books`, `chapters`, `sub_chapters`, `documents`, `quizzes` (now dropped) and `flashcards` — declare `created_by` as `ForeignKey("profiles.id", ondelete="CASCADE")`. Deleting one admin profile would therefore take the whole content library with it, and `documents` cascades onward to versions, annotations, cloze cards and questions. No profile-deletion path exists yet, so nothing is broken today.
 
 Options: `SET NULL` (content outlives its author); reassign to a system profile; or prompt the operator per content type at deletion time. Note CASCADE is **not** wrong for a `scope='personal'` flashcard — your own study card reasonably goes with your account — so the official/personal distinction is likely part of the answer rather than a complication to it. Whatever it is, it should land once across all seven tables; the FLASH epic deliberately declined to fix only the newest one, which would have read as an accident rather than a decision.
