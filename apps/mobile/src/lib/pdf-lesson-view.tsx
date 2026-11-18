@@ -1,13 +1,14 @@
 import type { PageHighlight, PageWord, Stroke, StrokePoint } from "@lp/contracts";
-import { highlightIndex } from "@lp/ui";
+import { highlightIndex, pageColors, type PenSize } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
-import { Alert, type LayoutChangeEvent, Pressable, Text, View } from "react-native";
+import { useMemo, useRef, useState } from "react";
+import { Alert, type LayoutChangeEvent, Text, View } from "react-native";
 import Pdf from "react-native-pdf";
 
 import { getApiClient } from "@/lib/api-client";
 import { DrawingCanvas } from "@/lib/notebook-drawing-canvas";
 import { supabase } from "@/lib/supabase";
+import { charWidth } from "@/lib/text-letters";
 import { fontSizes, shadows } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
 import { useI18n } from "@/lib/i18n";
@@ -27,7 +28,10 @@ const ERASE_RADIUS = 0.02;
 
 /** A tool from the lesson's tool notch, as it applies to a PDF page. */
 export type PdfTool =
-  { type: "highlight"; color: string } | { type: "pen"; color: string } | { type: "eraser" } | null;
+  | { type: "highlight"; color: string }
+  | { type: "pen"; color: string; size: PenSize }
+  | { type: "eraser" }
+  | null;
 
 interface PdfLessonViewProps {
   documentId: string;
@@ -39,14 +43,40 @@ interface PdfLessonViewProps {
    * coordinates as this view's own layout: pages near it are rendered. */
   viewportTop: number;
   viewportHeight: number;
-  /** Whether a highlight's first word has been tapped, for the screen's
-   * marking hint. */
-  onAnchorChange?: (set: boolean) => void;
+  /** True while a highlight is being dragged: the screen locks its scroll. */
+  onMarkingChange?: (marking: boolean) => void;
   /** A highlight or ink save failed. */
   onSaveError?: () => void;
 }
 
-type WordAnchor = { page: number; index: number };
+// How long a finger has to rest on a page before a drag marks instead of
+// scrolling, and how far it may drift while resting -- as in the text view.
+const MARK_HOLD_MS = 250;
+const MARK_SLOP = 10;
+
+/**
+ * Each word's box split into one box per letter, so a PDF highlight can
+ * start and stop inside a word, as in the text view. The server gives word
+ * boxes only, so each word's width is shared out between its letters by
+ * their typical advance widths (lib/text-letters): exact at both ends of the
+ * word, and within a letter of the print in between.
+ */
+export function lettersOfWords(words: PageWord[]): PageWord[] {
+  const letters: PageWord[] = [];
+  for (const word of words) {
+    const chars = [...word.text].filter((ch) => !/\s/u.test(ch));
+    if (chars.length === 0) continue;
+    const [x0, y0, x1, y1] = word.box;
+    const total = chars.reduce((sum, ch) => sum + charWidth(ch), 0);
+    let at = x0;
+    for (const ch of chars) {
+      const next = at + ((x1 - x0) * charWidth(ch)) / total;
+      letters.push({ text: ch, line: word.line, box: [at, y0, next, y1] });
+      at = next;
+    }
+  }
+  return letters;
+}
 
 /** One rectangle per run of words on a printed line, padded a little so the
  * mark covers the whole glyphs rather than their tight boxes. */
@@ -74,8 +104,8 @@ export function rectsForWords(words: PageWord[]): PageHighlight["rects"] {
   ]);
 }
 
-/** The word under a point, or failing that the closest one on the same line
- * height -- a tap between two words still means one of them. */
+/** The word (or letter) under a point, or failing that the closest one on
+ * the same line height -- a point between two of them still means one. */
 export function wordAt(words: PageWord[], x: number, y: number): number | null {
   let best: number | null = null;
   let bestDistance = 0.05;
@@ -120,7 +150,7 @@ export function PdfLessonView({
   tool,
   viewportTop,
   viewportHeight,
-  onAnchorChange,
+  onMarkingChange,
   onSaveError,
 }: PdfLessonViewProps) {
   const { t } = useI18n();
@@ -130,13 +160,6 @@ export function PdfLessonView({
   const [aspect, setAspect] = useState(DEFAULT_ASPECT);
   const [firstLoaded, setFirstLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [anchor, setAnchor] = useState<WordAnchor | null>(null);
-  // A new tool starts a new range.
-  const [anchorTool, setAnchorTool] = useState(tool);
-  if (anchorTool !== tool) {
-    setAnchorTool(tool);
-    setAnchor(null);
-  }
 
   const {
     data: signedUrl,
@@ -200,11 +223,7 @@ export function PdfLessonView({
               height={pageHeight}
               rendered={near && (page === 1 || firstLoaded)}
               tool={tool}
-              anchor={anchor?.page === page ? anchor.index : null}
-              onAnchor={(next) => {
-                setAnchor(next === null ? null : { page, index: next });
-                onAnchorChange?.(next !== null);
-              }}
+              onMarkingChange={onMarkingChange}
               onSaveError={onSaveError}
               onLoaded={(size) => {
                 if (page !== 1) return;
@@ -227,8 +246,7 @@ function PdfPage({
   height,
   rendered,
   tool,
-  anchor,
-  onAnchor,
+  onMarkingChange,
   onLoaded,
   onFailed,
   onSaveError,
@@ -240,8 +258,7 @@ function PdfPage({
   height: number;
   rendered: boolean;
   tool: PdfTool;
-  anchor: number | null;
-  onAnchor: (index: number | null) => void;
+  onMarkingChange?: (marking: boolean) => void;
   onLoaded: (size: { width: number; height: number }) => void;
   onFailed: () => void;
   onSaveError?: () => void;
@@ -301,28 +318,61 @@ function PdfPage({
     }
   }
 
-  function tapToMark(x: number, y: number) {
-    if (tool?.type !== "highlight" || !words) return;
-    if (words.words.length === 0) {
+  const letters = useMemo(() => (words ? lettersOfWords(words.words) : null), [words]);
+  // A highlight being dragged: from the letter held to the one under the
+  // finger, by index into `letters`.
+  const gesture = useRef<{
+    x: number;
+    y: number;
+    pageX: number;
+    pageY: number;
+    timer: ReturnType<typeof setTimeout>;
+    anchor: number | null;
+    current: number | null;
+  } | null>(null);
+  const [preview, setPreview] = useState<[number, number] | null>(null);
+
+  function runOf(a: number, b: number): PageWord[] {
+    return (letters ?? []).slice(Math.min(a, b), Math.max(a, b) + 1);
+  }
+
+  function beginMark() {
+    const g = gesture.current;
+    if (!g || tool?.type !== "highlight" || !letters) return;
+    if (letters.length === 0) {
+      gesture.current = null;
       Alert.alert(t("lesson.pdfView.noTextTitle"), t("lesson.pdfView.noTextScan"));
       return;
     }
-    const index = wordAt(words.words, x / width, y / height);
+    const index = wordAt(letters, g.x / width, g.y / height);
     if (index === null) return;
-    if (anchor === null) {
-      onAnchor(index);
-      return;
+    g.anchor = index;
+    g.current = index;
+    setPreview([index, index]);
+    onMarkingChange?.(true);
+  }
+
+  function finishMark(commit: boolean) {
+    const g = gesture.current;
+    gesture.current = null;
+    if (!g) return;
+    clearTimeout(g.timer);
+    if (g.anchor === null || g.current === null) return;
+    setPreview(null);
+    onMarkingChange?.(false);
+    if (commit && tool?.type === "highlight") {
+      save.mutate({
+        strokes,
+        highlights: [
+          ...highlights,
+          { color: tool.color, rects: rectsForWords(runOf(g.anchor, g.current)) },
+        ],
+      });
     }
-    onAnchor(null);
-    const run = words.words.slice(Math.min(anchor, index), Math.max(anchor, index) + 1);
-    save.mutate({
-      strokes,
-      highlights: [...highlights, { color: tool.color, rects: rectsForWords(run) }],
-    });
   }
 
   const shownHighlights = erasedHighlights ?? highlights;
-  const anchorBox = anchor !== null ? words?.words[anchor]?.box : undefined;
+  const previewRects = preview ? rectsForWords(runOf(...preview)) : [];
 
   return (
     <View
@@ -385,19 +435,21 @@ function PdfPage({
             />
           )),
         )}
-        {anchorBox && (
+        {previewRects.map(([x0, y0, x1, y1], r) => (
           <View
+            key={`preview-${r}`}
+            testID="pdf-mark-preview"
             style={[
-              styles.anchor,
+              styles.preview,
               {
-                left: anchorBox[0] * width - 2,
-                top: anchorBox[1] * height - 2,
-                width: (anchorBox[2] - anchorBox[0]) * width + 4,
-                height: (anchorBox[3] - anchorBox[1]) * height + 4,
+                left: x0 * width,
+                top: y0 * height,
+                width: (x1 - x0) * width,
+                height: (y1 - y0) * height,
               },
             ]}
           />
-        )}
+        ))}
       </View>
 
       {/* Ink on top: read-only until the pen or eraser is picked up. */}
@@ -413,6 +465,7 @@ function PdfPage({
           readOnly={!(tool?.type === "pen" || tool?.type === "eraser")}
           tool={tool?.type === "eraser" ? "eraser" : "pen"}
           penColor={tool?.type === "pen" ? tool.color : undefined}
+          penSize={tool?.type === "pen" ? tool.size : undefined}
           onChange={(next) => {
             pendingStrokes.current = next;
           }}
@@ -425,12 +478,44 @@ function PdfPage({
         />
       </View>
 
+      {/* Press and hold, then drag, to mark -- the text view's gesture. A
+          quick swipe still scrolls the lesson; the scroll is locked only
+          once a mark is under way. */}
       {marking && (
-        <Pressable
+        <View
           style={styles.layer}
-          onPress={(event) => tapToMark(event.nativeEvent.locationX, event.nativeEvent.locationY)}
-          accessibilityRole="button"
+          testID={`pdf-mark-layer-${page}`}
           accessibilityLabel={t("lesson.pdfView.markWords", { number: page })}
+          onStartShouldSetResponder={() => true}
+          onResponderGrant={(event) => {
+            const { locationX, locationY, pageX, pageY } = event.nativeEvent;
+            gesture.current = {
+              x: locationX,
+              y: locationY,
+              pageX,
+              pageY,
+              timer: setTimeout(beginMark, MARK_HOLD_MS),
+              anchor: null,
+              current: null,
+            };
+          }}
+          onResponderMove={(event) => {
+            const g = gesture.current;
+            if (!g) return;
+            const x = g.x + (event.nativeEvent.pageX - g.pageX);
+            const y = g.y + (event.nativeEvent.pageY - g.pageY);
+            if (g.anchor === null) {
+              if (Math.hypot(x - g.x, y - g.y) > MARK_SLOP) clearTimeout(g.timer);
+              return;
+            }
+            const index = letters ? wordAt(letters, x / width, y / height) : null;
+            if (index === null || index === g.current) return;
+            g.current = index;
+            setPreview([g.anchor, index]);
+          }}
+          onResponderTerminationRequest={() => gesture.current?.anchor == null}
+          onResponderRelease={() => finishMark(true)}
+          onResponderTerminate={() => finishMark(false)}
         />
       )}
     </View>
@@ -463,11 +548,10 @@ const useStyles = makeStyles((colors) => ({
     right: 0,
     bottom: 0,
   },
-  anchor: {
+  // The mark under way, before it is saved: the text view's preview tint.
+  preview: {
     position: "absolute",
-    borderWidth: 2,
-    borderColor: colors.accent,
-    borderRadius: 3,
+    backgroundColor: pageColors.noteSelection,
   },
   hint: {
     fontSize: fontSizes.sm,

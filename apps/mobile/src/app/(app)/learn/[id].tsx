@@ -18,6 +18,9 @@ import {
   formatInterval,
   highlightIndex,
   pageColors,
+  PEN_SIZES,
+  PEN_SIZE_SCALE,
+  type PenSize,
 } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
@@ -40,6 +43,7 @@ import {
 } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
+import { letterAtPoint, type LetterSpan, type TextLine } from "@/lib/text-letters";
 import {
   NewEntryButtons,
   NotebookEntryEditor,
@@ -314,7 +318,7 @@ function useScaledBody() {
 
 type ActiveTool =
   | { type: "highlight"; color: string }
-  | { type: "pen"; color: string }
+  | { type: "pen"; color: string; size: PenSize }
   | { type: "eraser" }
   // Anchors the next word range to a note, like the web's note tool. Text
   // view only -- react-native-pdf exposes no text runs to anchor to.
@@ -335,6 +339,8 @@ const PEN_GRAPHITE = "#1D1F23";
 function ToolNotch({
   activeTool,
   onToolChange,
+  penSize,
+  onPenSize,
   toolsEnabled,
   penAvailable,
   noteAvailable,
@@ -345,6 +351,9 @@ function ToolNotch({
 }: {
   activeTool: ActiveTool;
   onToolChange: (tool: ActiveTool) => void;
+  /** The nib the pen picks up with, remembered while it is put down. */
+  penSize: PenSize;
+  onPenSize: (size: PenSize) => void;
   toolsEnabled: boolean;
   penAvailable: boolean;
   /** Notes anchor to text, so this is the text view -- the pen's mirror. */
@@ -388,7 +397,7 @@ function ToolNotch({
                 onPress={() =>
                   onToolChange(
                     activeTool?.type === "pen"
-                      ? { type: "pen", color: isActive ? PEN_GRAPHITE : color.pen }
+                      ? { ...activeTool, color: isActive ? PEN_GRAPHITE : color.pen }
                       : isActive
                         ? null
                         : { type: "highlight", color: color.name },
@@ -441,7 +450,11 @@ function ToolNotch({
           </Pressable>
           <Pressable
             onPress={() =>
-              onToolChange(activeTool?.type === "pen" ? null : { type: "pen", color: PEN_GRAPHITE })
+              onToolChange(
+                activeTool?.type === "pen"
+                  ? null
+                  : { type: "pen", color: PEN_GRAPHITE, size: penSize },
+              )
             }
             disabled={!penAvailable}
             accessibilityRole="button"
@@ -457,6 +470,27 @@ function ToolNotch({
           >
             <PenIcon color={activeTool?.type === "pen" ? colors.background : colors.foreground} />
           </Pressable>
+          {/* The nib sizes, only while the pen is in hand: a dot per size,
+              drawn at that size, as on the web. */}
+          {activeTool?.type === "pen" &&
+            PEN_SIZES.map((nib) => (
+              <Pressable
+                key={nib}
+                onPress={() => onPenSize(nib)}
+                accessibilityRole="button"
+                accessibilityLabel={t("notebook.penSize", { size: t(`penSizes.${nib}`) })}
+                accessibilityState={{ selected: activeTool.size === nib }}
+                style={[styles.tool, activeTool.size === nib && styles.toolSelected]}
+                hitSlop={2}
+              >
+                <View
+                  style={[
+                    styles.penSizeDot,
+                    { width: 4 * PEN_SIZE_SCALE[nib], height: 4 * PEN_SIZE_SCALE[nib] },
+                  ]}
+                />
+              </Pressable>
+            ))}
           <Pressable
             onPress={() => onToolChange(activeTool?.type === "eraser" ? null : { type: "eraser" })}
             accessibilityRole="button"
@@ -487,33 +521,79 @@ function ToolNotch({
   );
 }
 
-/** A word's place in its block's text. */
-type WordSpan = { start: number; end: number };
+// How long a finger has to rest on a letter before a drag marks instead of
+// scrolling, and how far it may drift while resting.
+const MARK_HOLD_MS = 250;
+const MARK_SLOP = 10;
 
 /**
- * A paragraph whose words can be tapped while a marking tool is armed
- * (design.md §9, word-level marking). Touch has no "drag over words" here,
- * so a range is two taps: the first word, then the last -- tapping the
- * first word again marks just that word. Either way the range snaps to
- * whole words, like the web's drag.
+ * A paragraph that can be marked letter by letter while a marking tool is
+ * armed (design.md §9). Press and hold on a letter, then drag: the mark
+ * runs from that letter to the one under the finger, as the web's drag
+ * does. A quick swipe still scrolls the lesson, so the tool can stay in
+ * hand while reading on; the scroll is locked only once a mark is under way.
+ *
+ * React Native can't say which character is under a point, so the letter is
+ * worked out from the paragraph's measured lines (lib/text-letters).
  */
-function TappableParagraph({
+function MarkableParagraph({
   text,
   blockIndex,
   annotations,
-  anchor,
-  onTapWord,
+  onMark,
+  onMarkingChange,
 }: {
   text: string;
   blockIndex: number;
   annotations: Annotation[];
-  /** The first word of a range in progress, when it's in this block. */
-  anchor: WordSpan | null;
-  onTapWord: (blockIndex: number, word: WordSpan) => void;
+  onMark: (blockIndex: number, start: number, end: number) => void;
+  /** True while a mark is being dragged: the screen locks its scroll. */
+  onMarkingChange: (marking: boolean) => void;
 }) {
   const styles = useStyles();
   const colors = useThemeColors();
   const body = useScaledBody();
+  const lines = useRef<TextLine[]>([]);
+  const gesture = useRef<{
+    x: number;
+    y: number;
+    pageX: number;
+    pageY: number;
+    timer: ReturnType<typeof setTimeout>;
+    anchor: LetterSpan | null;
+    current: LetterSpan | null;
+  } | null>(null);
+  const [preview, setPreview] = useState<LetterSpan | null>(null);
+
+  function span(a: LetterSpan, b: LetterSpan): LetterSpan {
+    return { start: Math.min(a.start, b.start), end: Math.max(a.end, b.end) };
+  }
+
+  function begin() {
+    const g = gesture.current;
+    if (!g) return;
+    const letter = letterAtPoint(lines.current, g.x, g.y);
+    if (!letter) return;
+    g.anchor = letter;
+    g.current = letter;
+    setPreview(letter);
+    onMarkingChange(true);
+  }
+
+  function finish(commit: boolean) {
+    const g = gesture.current;
+    gesture.current = null;
+    if (!g) return;
+    clearTimeout(g.timer);
+    if (!g.anchor || !g.current) return;
+    setPreview(null);
+    onMarkingChange(false);
+    if (commit) {
+      const range = span(g.anchor, g.current);
+      onMark(blockIndex, range.start, range.end);
+    }
+  }
+
   // The paragraph's highlights stay painted while marking, so a new mark
   // shows up the moment it's made -- not only once the tool is put down.
   const marks = annotations.filter(
@@ -523,40 +603,83 @@ function TappableParagraph({
       a.start_offset !== null &&
       a.end_offset !== null,
   );
-  function markAt(offset: number) {
-    const mark = marks.find((a) => a.start_offset! <= offset && offset < a.end_offset!);
-    return mark ? { backgroundColor: highlightMarkColor(colors, mark.color) } : undefined;
+  // Cut wherever a mark or the drag preview starts or stops, and paint each
+  // piece by what covers it.
+  const cuts = new Set([0, text.length]);
+  for (const mark of marks) {
+    cuts.add(Math.min(text.length, mark.start_offset!));
+    cuts.add(Math.min(text.length, mark.end_offset!));
   }
-  const pieces: React.ReactNode[] = [];
-  let at = 0;
-  for (const match of text.matchAll(/\S+/g)) {
-    const word = { start: match.index, end: match.index + match[0].length };
-    if (word.start > at) {
-      pieces.push(
-        <Text key={`gap-${at}`} style={markAt(at)}>
-          {text.slice(at, word.start)}
-        </Text>,
-      );
-    }
-    const isAnchor = anchor?.start === word.start;
-    pieces.push(
+  if (preview) {
+    cuts.add(preview.start);
+    cuts.add(preview.end);
+  }
+  const points = [...cuts].sort((a, b) => a - b);
+  const pieces = points.slice(0, -1).map((from, i) => {
+    const to = points[i + 1]!;
+    const mark = marks.find((a) => a.start_offset! <= from && from < a.end_offset!);
+    const previewed = preview !== null && preview.start <= from && from < preview.end;
+    return (
       <Text
-        key={word.start}
-        testID={`word-${blockIndex}-${word.start}`}
-        onPress={() => onTapWord(blockIndex, word)}
-        style={[markAt(word.start), isAnchor && styles.wordAnchor]}
-        accessibilityRole="button"
+        key={from}
+        style={[
+          mark && { backgroundColor: highlightMarkColor(colors, mark.color) },
+          previewed && styles.markPreview,
+        ]}
       >
-        {match[0]}
-      </Text>,
+        {text.slice(from, to)}
+      </Text>
     );
-    at = word.end;
-  }
-  if (at < text.length) pieces.push(text.slice(at));
+  });
+
   return (
-    <Text testID={`tappable-paragraph-${blockIndex}`} style={[styles.paragraph, body]}>
-      {pieces}
-    </Text>
+    <View
+      testID={`markable-paragraph-${blockIndex}`}
+      onStartShouldSetResponder={() => true}
+      onResponderGrant={(event) => {
+        const { locationX, locationY, pageX, pageY } = event.nativeEvent;
+        gesture.current = {
+          x: locationX,
+          y: locationY,
+          pageX,
+          pageY,
+          timer: setTimeout(begin, MARK_HOLD_MS),
+          anchor: null,
+          current: null,
+        };
+      }}
+      onResponderMove={(event) => {
+        const g = gesture.current;
+        if (!g) return;
+        // Moves arrive relative to whatever is under the finger, so the
+        // point is tracked from where the press started instead.
+        const x = g.x + (event.nativeEvent.pageX - g.pageX);
+        const y = g.y + (event.nativeEvent.pageY - g.pageY);
+        if (!g.anchor) {
+          // Moving before the hold is up: a scroll, not a mark.
+          if (Math.hypot(x - g.x, y - g.y) > MARK_SLOP) clearTimeout(g.timer);
+          return;
+        }
+        const letter = letterAtPoint(lines.current, x, y);
+        if (!letter || letter.start === g.current?.start) return;
+        g.current = letter;
+        setPreview(span(g.anchor, letter));
+      }}
+      // Once a mark is under way, the scroll view may not take the touch.
+      onResponderTerminationRequest={() => !gesture.current?.anchor}
+      onResponderRelease={() => finish(true)}
+      onResponderTerminate={() => finish(false)}
+    >
+      <Text
+        testID={`markable-text-${blockIndex}`}
+        style={[styles.paragraph, body]}
+        onTextLayout={(event) => {
+          lines.current = event.nativeEvent.lines;
+        }}
+      >
+        {pieces}
+      </Text>
+    </View>
   );
 }
 
@@ -1434,63 +1557,106 @@ type NotesView =
   | { kind: "new-text" }
   | { kind: "new-drawing" };
 
+/**
+ * The table of contents: the whole chapter the lesson belongs to, as on the
+ * web -- the chapter's title on top, then each sub-chapter (bold, a step
+ * larger than its lessons) with its lessons beneath, so the reader can move
+ * to any lesson in the chapter. The chapter comes from the content tree the
+ * Library and the Question Bank already load, in one request. A lesson
+ * outside the hierarchy lists the Uncategorized bucket instead.
+ */
 function TocModal({
   visible,
   onClose,
-  scopeId,
+  chapter,
   currentDocumentId,
 }: {
   visible: boolean;
   onClose: () => void;
-  scopeId: string;
+  chapter: { id: string; title: string } | null;
   currentDocumentId: string;
 }) {
   const { t } = useI18n();
   const styles = useStyles();
-  const { data, isPending } = useQuery({
-    queryKey: ["documents", scopeId],
-    queryFn: () => getApiClient().listDocuments(scopeId),
-    enabled: visible,
+  const tree = useQuery({
+    queryKey: ["question-bank-tree"],
+    queryFn: () => getApiClient().getQuestionBankTree(),
+    enabled: visible && chapter !== null,
   });
+  const uncategorized = useQuery({
+    queryKey: ["documents", "none"],
+    queryFn: () => getApiClient().listDocuments("none"),
+    enabled: visible && chapter === null,
+  });
+  const chapterNode = chapter
+    ? tree.data?.books.flatMap((book) => book.chapters).find((node) => node.id === chapter.id)
+    : undefined;
 
   // The lesson to open once the panel is gone. Closing and pushing in the
   // same tick mounted the new lesson underneath a panel that was still on
   // screen -- on iOS a Modal is its own native window, so the old drawer hung
   // over the new screen until it finished dismissing. Overlay fires
   // onDismissed after the panel has left the tree, which is the safe moment.
+  // The new lesson opens with the drawer already up, and without the push
+  // animation (learn/_layout.tsx), so the drawer seems to stay in place.
   const [pendingLessonId, setPendingLessonId] = useState<string | null>(null);
+
+  function lessonRow(lesson: { id: string; title: string }) {
+    const current = lesson.id === currentDocumentId;
+    return (
+      <Pressable
+        key={lesson.id}
+        style={[styles.tocRow, current && styles.tocRowActive]}
+        onPress={() => {
+          setPendingLessonId(lesson.id);
+          onClose();
+        }}
+        accessibilityRole="button"
+        accessibilityState={{ selected: current }}
+      >
+        <Text style={[styles.rowTitle, current && styles.tocRowActiveText]}>{lesson.title}</Text>
+      </Pressable>
+    );
+  }
 
   return (
     <Overlay
       visible={visible}
-      title={t("lesson.toc.lessonsInChapter")}
+      title={chapter?.title ?? t("lesson.toc.lessonsInChapter")}
       onClose={onClose}
       side="left"
       onDismissed={() => {
         if (!pendingLessonId) return;
         setPendingLessonId(null);
-        router.push(`/learn/${pendingLessonId}`);
+        router.push(`/learn/${pendingLessonId}?toc=1`);
       }}
     >
-      {isPending && <Text style={styles.hint}>{t("common.loading")}</Text>}
-      {!isPending && (!data || data.length === 0) && (
-        <Text style={styles.hint}>{t("bank.noLessons")}</Text>
+      {chapter ? (
+        <>
+          {tree.isPending && <Text style={styles.hint}>{t("common.loading")}</Text>}
+          {tree.isError && <Text style={styles.error}>{t("lesson.toc.loadFailed")}</Text>}
+          {chapterNode?.sub_chapters.map((subChapter) => (
+            <View key={subChapter.id} style={styles.tocSection}>
+              <Text style={styles.tocSubChapter} accessibilityRole="header">
+                {subChapter.title}
+              </Text>
+              {subChapter.lessons.length > 0 ? (
+                subChapter.lessons.map(lessonRow)
+              ) : (
+                <Text style={styles.hint}>{t("bank.noLessons")}</Text>
+              )}
+            </View>
+          ))}
+        </>
+      ) : (
+        <>
+          {uncategorized.isPending && <Text style={styles.hint}>{t("common.loading")}</Text>}
+          {uncategorized.data?.length === 0 && (
+            <Text style={styles.hint}>{t("bank.noLessons")}</Text>
+          )}
+          {uncategorized.data?.map(lessonRow)}
+        </>
       )}
-      {data?.map((doc) => (
-        <Pressable
-          key={doc.id}
-          style={[styles.tocRow, doc.id === currentDocumentId && styles.tocRowActive]}
-          onPress={() => {
-            setPendingLessonId(doc.id);
-            onClose();
-          }}
-          accessibilityRole="button"
-        >
-          <Text style={[styles.rowTitle, doc.id === currentDocumentId && styles.tocRowActiveText]}>
-            {doc.title}
-          </Text>
-        </Pressable>
-      ))}
     </Overlay>
   );
 }
@@ -1579,7 +1745,11 @@ export default function LectureScreen() {
   const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
-  const { id, tab: tabParam } = useLocalSearchParams<{ id: string; tab?: string }>();
+  const {
+    id,
+    tab: tabParam,
+    toc: tocParam,
+  } = useLocalSearchParams<{ id: string; tab?: string; toc?: string }>();
   const queryClient = useQueryClient();
   // Deep link support: navigating here with ?tab=review (e.g. from the
   // review dashboard) opens straight to that tab instead of always
@@ -1591,37 +1761,25 @@ export default function LectureScreen() {
   // panel and the notebook at the same time unrepresentable. On iOS each is
   // its own native window, and the stacking between two of those is
   // undefined -- which is how they ended up overlapping.
-  const [activeDrawer, setActiveDrawer] = useState<"toc" | "notes" | null>(null);
+  // A lesson opened from the contents arrives with them open (`toc=1`), so
+  // moving through a chapter doesn't close the drawer at every step.
+  const [activeDrawer, setActiveDrawer] = useState<"toc" | "notes" | null>(() =>
+    tocParam === "1" ? "toc" : null,
+  );
   const [activeTool, setActiveToolState] = useState<ActiveTool>(null);
-  // The first tapped word of a range being marked (see TappableParagraph).
-  const [markAnchor, setMarkAnchor] = useState<(WordSpan & { blockIndex: number }) | null>(null);
-  // The PDF view keeps its own first-tapped word; this only says whether
-  // there is one, for the hint.
-  const [pdfAnchorSet, setPdfAnchorSet] = useState(false);
+  const [penSize, setPenSize] = useState<PenSize>("medium");
+  // A mark being dragged (MarkableParagraph, or a PDF page): the lesson
+  // stops scrolling under the finger until it lifts.
+  const [marking, setMarking] = useState(false);
   function setActiveTool(tool: ActiveTool) {
     setActiveToolState(tool);
-    setMarkAnchor(null);
-    setPdfAnchorSet(false);
+    setMarking(false);
   }
 
   function saveFailed() {
     Alert.alert(t("lesson.saveFailedTitle"), t("lesson.saveFailedDetail"));
   }
 
-  function tapWord(blockIndex: number, word: WordSpan) {
-    // A second tap in the same paragraph completes the range; a tap in
-    // another paragraph starts over there (marks are per paragraph).
-    if (!markAnchor || markAnchor.blockIndex !== blockIndex) {
-      setMarkAnchor({ blockIndex, ...word });
-      return;
-    }
-    setMarkAnchor(null);
-    handleSelectionSettled(
-      blockIndex,
-      Math.min(markAnchor.start, word.start),
-      Math.max(markAnchor.end, word.end),
-    );
-  }
   // Defaults to "text" -- the PDF/Text toggle itself only renders when the
   // lesson has a *ready* lecture_pdf attached (see `readyLecturePdf` below).
   const [lessonViewMode, setLessonViewMode] = useState<"text" | "pdf">("text");
@@ -1869,15 +2027,12 @@ export default function LectureScreen() {
   const lessonTools =
     activeTab === "lesson" &&
     (lessonViewMode === "pdf" ? readyLecturePdf !== null : version?.status === "ready");
-  const anchorSet = lessonViewMode === "pdf" ? pdfAnchorSet : markAnchor !== null;
   const markingHint = !lessonTools
     ? null
     : activeTool?.type === "highlight" ||
         activeTool?.type === "note" ||
         (activeTool?.type === "eraser" && lessonViewMode === "text")
-      ? anchorSet
-        ? t("lesson.tools.markLastWord")
-        : t("lesson.tools.markFirstWord")
+      ? t("lesson.tools.holdToMark")
       : activeTool?.type === "pen"
         ? t("lesson.tools.penHint")
         : activeTool?.type === "eraser"
@@ -1896,7 +2051,9 @@ export default function LectureScreen() {
           scrollEventThrottle={32}
           // With the pen or eraser up on a PDF page, a drag draws or erases;
           // put the tool down to scroll.
+          // A mark being dragged locks it too, until the finger lifts.
           scrollEnabled={
+            !marking &&
             !(
               activeTab === "lesson" &&
               lessonViewMode === "pdf" &&
@@ -1982,7 +2139,7 @@ export default function LectureScreen() {
               tool={activeTool?.type === "note" ? null : activeTool}
               viewportTop={pdfScrollTop}
               viewportHeight={windowHeight}
-              onAnchorChange={setPdfAnchorSet}
+              onMarkingChange={setMarking}
               onSaveError={saveFailed}
             />
           )}
@@ -2017,13 +2174,13 @@ export default function LectureScreen() {
                   }
                   if (activeTool) {
                     return (
-                      <TappableParagraph
+                      <MarkableParagraph
                         key={index}
                         text={block.text ?? ""}
                         blockIndex={index}
                         annotations={annotations}
-                        anchor={markAnchor?.blockIndex === index ? markAnchor : null}
-                        onTapWord={tapWord}
+                        onMark={handleSelectionSettled}
+                        onMarkingChange={setMarking}
                       />
                     );
                   }
@@ -2090,6 +2247,14 @@ export default function LectureScreen() {
         <ToolNotch
           activeTool={activeTool}
           onToolChange={setActiveTool}
+          penSize={penSize}
+          onPenSize={(size) => {
+            setPenSize(size);
+            // Not setActiveTool: changing nib keeps a highlight anchor.
+            setActiveToolState((current) =>
+              current?.type === "pen" ? { ...current, size } : current,
+            );
+          }}
           toolsEnabled={lessonTools}
           penAvailable={activeTab === "lesson" && lessonViewMode === "pdf"}
           noteAvailable={activeTab === "lesson" && lessonViewMode === "text"}
@@ -2199,10 +2364,10 @@ export default function LectureScreen() {
               style={styles.modalLift}
               behavior={Platform.OS === "ios" ? "padding" : "height"}
             >
-              <View style={styles.modalCard}>
+              <View style={[styles.modalCard, styles.noteCard]}>
                 <Text style={styles.modalTitle}>{t("lesson.panel.addNote")}</Text>
                 <TextInput
-                  style={styles.modalInput}
+                  style={[styles.modalInput, styles.noteInput]}
                   value={noteDraft}
                   onChangeText={setNoteDraft}
                   placeholder={t("lesson.panel.notePlaceholder")}
@@ -2249,13 +2414,13 @@ export default function LectureScreen() {
               style={styles.modalLift}
               behavior={Platform.OS === "ios" ? "padding" : "height"}
             >
-              <View style={styles.modalCard}>
+              <View style={[styles.modalCard, styles.noteCard]}>
                 <Text style={styles.modalTitle}>{t("lesson.panel.note")}</Text>
                 {viewingNote && (
                   <TextInput
                     // Keyed by note so reopening another note starts from its text.
                     key={viewingNote.id}
-                    style={styles.modalInput}
+                    style={[styles.modalInput, styles.noteInput]}
                     defaultValue={viewingNote.note_text ?? ""}
                     onChangeText={(text) => {
                       noteEdit.current = text;
@@ -2288,7 +2453,7 @@ export default function LectureScreen() {
         <TocModal
           visible={activeDrawer === "toc"}
           onClose={() => setActiveDrawer(null)}
-          scopeId={data.sub_chapter?.id ?? "none"}
+          chapter={data.sub_chapter?.chapter ?? null}
           currentDocumentId={id}
         />
         <NotesModal
@@ -2386,10 +2551,9 @@ const useStyles = makeStyles((colors) => ({
     overflow: "hidden",
     textAlign: "center",
   },
-  wordAnchor: {
-    backgroundColor: colors.clozeBg,
-    textDecorationLine: "underline",
-    textDecorationColor: colors.accent,
+  // A mark being dragged, before it is made: the web's preview tint.
+  markPreview: {
+    backgroundColor: pageColors.noteSelection,
   },
   hidden: {
     display: "none",
@@ -2472,6 +2636,17 @@ const useStyles = makeStyles((colors) => ({
     justifyContent: "center",
   },
   toolActive: {
+    backgroundColor: colors.foreground,
+  },
+  // A pen size in use: outlined rather than filled, so it reads as an
+  // option of the (filled) pen above it rather than a second tool.
+  toolSelected: {
+    backgroundColor: colors.muted,
+    borderWidth: 1.5,
+    borderColor: colors.foreground,
+  },
+  penSizeDot: {
+    borderRadius: 999,
     backgroundColor: colors.foreground,
   },
   toolDisabled: {
@@ -2640,6 +2815,18 @@ const useStyles = makeStyles((colors) => ({
   tocRowActiveText: {
     fontWeight: fontWeights.extrabold,
   },
+  tocSection: {
+    marginBottom: spacing.md,
+  },
+  // A sub-chapter reads as a heading over its lessons: bold and a step
+  // larger than the lesson rows (rowTitle).
+  tocSubChapter: {
+    marginBottom: 2,
+    paddingHorizontal: 8,
+    fontSize: fontSizes.base,
+    fontWeight: fontWeights.extrabold,
+    color: colors.foreground,
+  },
   quizzesTab: {
     gap: spacing.md,
   },
@@ -2758,6 +2945,17 @@ const useStyles = makeStyles((colors) => ({
     backgroundColor: colors.background,
     padding: spacing.lg,
     gap: spacing.sm,
+  },
+  // In-text notes are meant to be short, so they open in a small pop-up
+  // rather than a page-wide card; a long note scrolls inside the field.
+  noteCard: {
+    maxWidth: 300,
+    alignSelf: "center",
+    padding: spacing.md,
+  },
+  noteInput: {
+    minHeight: 64,
+    maxHeight: 180,
   },
   modalTitle: {
     fontSize: fontSizes.sm,

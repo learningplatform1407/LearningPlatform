@@ -31,6 +31,7 @@ const createNotebookEntry = vi.fn();
 const updateNotebookEntry = vi.fn();
 const deleteNotebookEntry = vi.fn();
 const listDocuments = vi.fn();
+const getQuestionBankTree = vi.fn();
 
 vi.mock("@/lib/api-client.browser", () => ({
   getBrowserApiClient: () => ({
@@ -56,6 +57,7 @@ vi.mock("@/lib/api-client.browser", () => ({
     updateNotebookEntry,
     deleteNotebookEntry,
     listDocuments,
+    getQuestionBankTree,
   }),
 }));
 
@@ -65,9 +67,10 @@ vi.mock("@/lib/supabase/client", () => ({
   }),
 }));
 
+let searchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "d1" }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => searchParams,
 }));
 
 // PdfLessonView drives pdfjs-dist (worker, canvas rendering) which has no
@@ -144,11 +147,27 @@ function findMark(text: string) {
 
 /** A pointer drag across the lesson text, from one word to another, the
  * way a marking tool is used. */
+/** The span of one letter of the first `word` found in the lesson text. */
+function letterOf(word: string, which: "first" | "last"): HTMLElement {
+  for (const paragraph of document.querySelectorAll<HTMLElement>("p[data-block-index]")) {
+    const at = (paragraph.textContent ?? "").indexOf(word);
+    if (at < 0) continue;
+    const offset = which === "first" ? at : at + word.length - 1;
+    const letter = paragraph.querySelector<HTMLElement>(`[data-ls="${offset}"]`);
+    if (letter) return letter;
+  }
+  throw new Error(`No letters for "${word}"`);
+}
+
+/** Drags from the first letter of `from` to the last letter of `to`. */
 function dragWords(from: string, to: string) {
-  const word = (text: string) => screen.getAllByText(text, { selector: "[data-gi]" })[0]!;
-  fireEvent.pointerDown(word(from), { button: 0, pointerId: 1 });
-  fireEvent.pointerMove(word(to), { pointerId: 1 });
-  fireEvent.pointerUp(word(to), { pointerId: 1 });
+  dragLetters(letterOf(from, "first"), letterOf(to, "last"));
+}
+
+function dragLetters(from: HTMLElement, to: HTMLElement) {
+  fireEvent.pointerDown(from, { button: 0, pointerId: 1 });
+  fireEvent.pointerMove(to, { pointerId: 1 });
+  fireEvent.pointerUp(to, { pointerId: 1 });
 }
 
 function renderPage() {
@@ -165,6 +184,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  searchParams = new URLSearchParams();
   getDocument.mockReset();
   createSignedUrl.mockReset();
   listAnnotations.mockReset().mockResolvedValue([]);
@@ -195,6 +215,7 @@ beforeEach(() => {
   updateNotebookEntry.mockReset();
   deleteNotebookEntry.mockReset();
   listDocuments.mockReset().mockResolvedValue([]);
+  getQuestionBankTree.mockReset();
 });
 
 /** A hidden cloze gap, hints on or off: "[ m___ ]" or "[ … ]". */
@@ -393,7 +414,7 @@ describe("LecturePage", () => {
     expect(screen.getByText(para("Hello world"))).toBeInTheDocument();
   });
 
-  test("a block-level margin note shows a note bubble that opens it in the Notebook", async () => {
+  test("a block-level margin note shows a note bubble that opens it in a pop-up", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
     listAnnotations.mockResolvedValue([
       note({ id: "a1", start_offset: null, end_offset: null, note_text: "Remember this" }),
@@ -404,9 +425,52 @@ describe("LecturePage", () => {
     const bubble = await screen.findByRole("button", { name: "Open note" });
     expect(screen.queryByDisplayValue("Remember this")).not.toBeInTheDocument();
 
-    await userEvent.setup().click(bubble);
+    const user = userEvent.setup();
+    await user.click(bubble);
 
-    expect(await screen.findByDisplayValue("Remember this")).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Note" })).toContainElement(
+      screen.getByDisplayValue("Remember this"),
+    );
+    // A small window beside the text, not the side panel.
+    expect(
+      screen.queryByRole("complementary", { name: "Notebook and AI chat" }),
+    ).not.toBeInTheDocument();
+
+    // The same bubble again closes it.
+    await user.click(bubble);
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  test("the note pop-up closes on Escape, deletes, and hands off to the Notebook", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listAnnotations.mockResolvedValue([
+      note({ id: "a1", start_offset: 6, end_offset: 11, note_text: "Remember this" }),
+    ]);
+    deleteAnnotation.mockResolvedValue(undefined);
+
+    renderPage();
+    const user = userEvent.setup();
+    const bubble = await screen.findByRole("button", { name: "Open note" });
+
+    await user.click(bubble);
+    await screen.findByRole("dialog", { name: "Note" });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    await user.click(bubble);
+    await user.click(await screen.findByRole("button", { name: "Open in the notebook" }));
+    expect(
+      await screen.findByRole("complementary", { name: "Notebook and AI chat" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Note" })).not.toBeInTheDocument();
+
+    await user.click(bubble);
+    await user.click(
+      within(await screen.findByRole("dialog", { name: "Note" })).getByRole("button", {
+        name: "Delete note",
+      }),
+    );
+    await waitFor(() => expect(deleteAnnotation).toHaveBeenCalledWith("d1", "a1"));
   });
 
   test("editing a margin note's text saves it in place, without recreating it", async () => {
@@ -463,7 +527,7 @@ describe("LecturePage", () => {
     );
   });
 
-  test("a tap on a single word marks the whole word", async () => {
+  test("marking goes letter by letter: a drag can start and stop inside a word", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
     createAnnotation.mockResolvedValue(highlight({ id: "new" }));
 
@@ -471,14 +535,39 @@ describe("LecturePage", () => {
     await screen.findByText(para("Hello world"));
 
     await userEvent.setup().click(screen.getByRole("button", { name: "Highlight — purple" }));
-    dragWords("world", "world");
+    // From the "l" of "Hello" to the "r" of "world".
+    const letters = [...document.querySelectorAll<HTMLElement>("[data-gi]")];
+    expect(letters.map((el) => el.textContent).join("")).toBe("Helloworld");
+    dragLetters(letters[3]!, letters[7]!);
+
+    await waitFor(() =>
+      expect(createAnnotation).toHaveBeenCalledWith("d1", {
+        type: "highlight",
+        block_index: 0,
+        start_offset: 3,
+        end_offset: 9,
+        color: "purple",
+      }),
+    );
+  });
+
+  test("a tap marks the one letter under it", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    createAnnotation.mockResolvedValue(highlight({ id: "new" }));
+
+    renderPage();
+    await screen.findByText(para("Hello world"));
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Highlight — purple" }));
+    const w = letterOf("world", "first");
+    dragLetters(w, w);
 
     await waitFor(() =>
       expect(createAnnotation).toHaveBeenCalledWith("d1", {
         type: "highlight",
         block_index: 0,
         start_offset: 6,
-        end_offset: 11,
+        end_offset: 7,
         color: "purple",
       }),
     );
@@ -661,11 +750,12 @@ describe("LecturePage", () => {
     expect((await findMark("world")).className).toContain("bg-highlight3");
   });
 
-  test("the note tool anchors a note to the dragged passage and opens it in the Notebook", async () => {
+  test("the note tool anchors a note to the dragged passage and opens it in a pop-up", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
-    createAnnotation.mockResolvedValue(
-      note({ id: "n-new", start_offset: 6, end_offset: 11, note_text: null }),
-    );
+    const created = note({ id: "n-new", start_offset: 6, end_offset: 11, note_text: null });
+    createAnnotation.mockResolvedValue(created);
+    // Empty at first; the refetch after creating it returns the new note.
+    listAnnotations.mockResolvedValueOnce([]).mockResolvedValue([created]);
 
     renderPage();
     await screen.findByText(para("Hello world"));
@@ -682,9 +772,9 @@ describe("LecturePage", () => {
         note_text: null,
       }),
     );
-    expect(
-      await screen.findByRole("complementary", { name: "Notebook and AI chat" }),
-    ).toBeInTheDocument();
+    const popover = await screen.findByRole("dialog", { name: "Note" });
+    // Opened empty and ready to write in.
+    expect(within(popover).getByRole("textbox", { name: "Note text" })).toHaveFocus();
   });
 
   test("Explain is offered but says it's coming soon, and creates nothing", async () => {
@@ -814,8 +904,9 @@ describe("LecturePage", () => {
 
     await user.click(await screen.findByRole("button", { name: "↗ See in lesson" }));
     expect(screen.getByRole("tab", { name: "Lesson" })).toHaveAttribute("aria-selected", "true");
+    // Painted letter by letter: the passage's letters, and nothing else.
     const painted = [...document.querySelectorAll("[data-source]")].map((el) => el.textContent);
-    expect(painted).toEqual(["This", "lowers", "preload."]);
+    expect(painted.join("")).toBe("Thislowerspreload.");
 
     await user.click(screen.getByRole("button", { name: "← Back to quizzes" }));
     expect(screen.getByRole("tab", { name: "Quizzes" })).toHaveAttribute("aria-selected", "true");
@@ -1719,7 +1810,7 @@ describe("LecturePage", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("the table of contents lists this lesson's headings and the sub-chapter's lessons", async () => {
+  test("the table of contents shows the whole chapter, with this lesson's headings under it", async () => {
     getDocument.mockResolvedValue({
       ...readyDocumentWithParagraph("Hello world"),
       current_version: {
@@ -1736,10 +1827,43 @@ describe("LecturePage", () => {
       },
       sub_chapter: { id: "sc1", title: "Sub A", chapter: { id: "c1", title: "Chapter One" } },
     });
-    listDocuments.mockResolvedValue([
-      { id: "d1", title: "Intro to Systems", created_at: "2026-01-01", status: "ready" },
-      { id: "d2", title: "Second lesson", created_at: "2026-01-01", status: "ready" },
-    ]);
+    const node = (id: string, title: string) => ({
+      id,
+      title,
+      question_count: 0,
+      answered_count: 0,
+      correct_count: 0,
+      partial_count: 0,
+      incorrect_count: 0,
+      points_awarded: 0,
+      points_possible: 0,
+      eligible_lesson_count: 0,
+      completed_lesson_count: 0,
+    });
+    getQuestionBankTree.mockResolvedValue({
+      books: [
+        {
+          ...node("b1", "Book"),
+          chapters: [
+            {
+              ...node("c1", "Chapter One"),
+              sub_chapters: [
+                {
+                  ...node("sc1", "Sub A"),
+                  lessons: [node("d1", "Intro to Systems"), node("d2", "Second lesson")],
+                },
+                { ...node("sc2", "Sub B"), lessons: [node("d3", "Third lesson")] },
+              ],
+            },
+            {
+              ...node("c2", "Chapter Two"),
+              sub_chapters: [{ ...node("sc3", "Sub C"), lessons: [node("d4", "Elsewhere")] }],
+            },
+          ],
+        },
+      ],
+      uncategorized_lessons: [],
+    });
 
     renderPage();
     await screen.findByText(para("Hello world"));
@@ -1749,12 +1873,18 @@ describe("LecturePage", () => {
     await user.click(screen.getByRole("button", { name: "Show contents" }));
 
     const toc = screen.getByRole("navigation", { name: "Table of contents" });
-    expect(within(toc).getByRole("button", { name: "Fracture types" })).toBeInTheDocument();
-    expect(await within(toc).findByRole("link", { name: "Second lesson" })).toHaveAttribute(
+    expect(within(toc).getByRole("heading", { level: 2, name: "Chapter One" })).toBeInTheDocument();
+    // Every sub-chapter of the chapter, as a heading of its own...
+    expect(
+      await within(toc).findByRole("heading", { level: 3, name: "Sub A" }),
+    ).toBeInTheDocument();
+    expect(within(toc).getByRole("heading", { level: 3, name: "Sub B" })).toBeInTheDocument();
+    // ...with its lessons, across sub-chapters.
+    expect(within(toc).getByRole("link", { name: "Third lesson" })).toHaveAttribute(
       "href",
-      "/learn/d2",
+      // The contents stay open on the lesson it leads to.
+      "/learn/d3?toc=1",
     );
-    expect(listDocuments).toHaveBeenCalledWith("sc1");
     expect(within(toc).getByRole("link", { name: "Intro to Systems" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -1762,9 +1892,25 @@ describe("LecturePage", () => {
     expect(within(toc).getByRole("link", { name: "Second lesson" })).not.toHaveAttribute(
       "aria-current",
     );
+    // Only this chapter.
+    expect(within(toc).queryByRole("link", { name: "Elsewhere" })).not.toBeInTheDocument();
+    // This lesson's own headings, under it.
+    expect(within(toc).getByRole("button", { name: "Fracture types" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Hide contents" }));
     expect(screen.queryByRole("navigation", { name: "Table of contents" })).toBeNull();
+  });
+
+  test("a lesson opened from the table of contents arrives with it still open", async () => {
+    searchParams = new URLSearchParams("toc=1");
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listDocuments.mockResolvedValue([]);
+
+    renderPage();
+    await screen.findByText(para("Hello world"));
+
+    expect(screen.getByRole("navigation", { name: "Table of contents" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide contents" })).toBeInTheDocument();
   });
 
   test("the table of contents falls back to the Uncategorized bucket when the lesson has no sub-chapter", async () => {

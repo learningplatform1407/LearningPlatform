@@ -16,6 +16,8 @@ export const notebook = {
   placeholder: "Write a new note...",
   drawingTools: "Drawing tools",
   penColor: "Pen color — {color}",
+  penSize: "Pen size — {size}",
+  penSizes: "Pen size",
   tool: "Tool",
   pen: "Pen",
   eraser: "Eraser",
@@ -33,4 +35,11 @@ export const colors = {
   purple: "purple",
   red: "red",
   green: "green",
+};
+
+/** Pen nib sizes, by their PEN_SIZES name. */
+export const penSizes = {
+  thin: "thin",
+  medium: "medium",
+  thick: "thick",
 };

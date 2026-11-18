@@ -1,6 +1,14 @@
 "use client";
 
-import { useMemo, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 
 import type { Annotation, ExtractedContent } from "@lp/contracts";
 import { highlightIndex } from "@lp/ui";
@@ -10,7 +18,7 @@ import { spliceAnnotations } from "@/lib/text-offset";
 import { useI18n } from "@/lib/i18n";
 
 import { ExtractedImage } from "./extracted-image";
-import { wordRanges, type BlockRange, type LessonTool, type WordRange } from "./lesson-tools";
+import { letterRanges, type BlockRange, type LessonTool, type LetterRange } from "./lesson-tools";
 
 type ExtractedBlock = ExtractedContent["blocks"][number];
 
@@ -30,33 +38,33 @@ export function headingId(blockIndex: number): string {
   return `lesson-heading-${blockIndex}`;
 }
 
-interface WordRef {
+interface LetterRef {
   gi: number;
   block: number;
-  ws: number;
-  we: number;
+  start: number;
+  end: number;
 }
 
-function wordFromElement(element: Element | null): WordRef | null {
-  const word = element?.closest<HTMLElement>("[data-gi]");
-  if (!word) return null;
+function letterFromElement(element: Element | null): LetterRef | null {
+  const letter = element?.closest<HTMLElement>("[data-gi]");
+  if (!letter) return null;
   return {
-    gi: Number(word.dataset.gi),
-    block: Number(word.dataset.block),
-    ws: Number(word.dataset.ws),
-    we: Number(word.dataset.we),
+    gi: Number(letter.dataset.gi),
+    block: Number(letter.dataset.block),
+    start: Number(letter.dataset.ls),
+    end: Number(letter.dataset.le),
   };
 }
 
 /**
  * The lesson in Text mode (design.md §9-10): sections under a top rule, and
- * every word its own span so marking is word-level.
+ * every letter its own span so marking is letter-level.
  *
- * Words carry their block and *whole-word* offsets, so a drag snaps to word
- * boundaries however the pointer moved, and the result is stored as the
- * same block/offset annotations as before -- no contract change. Existing
- * highlights are still rendered from their exact offsets (spliceAnnotations),
- * so one made mid-word before the redesign still shows where it was.
+ * Letters carry their block and offsets, so a drag covers exactly the
+ * letters from where it started to where it ended, and the result is stored
+ * as the same block/offset annotations as before -- no contract change.
+ * Highlights are rendered from their exact offsets (spliceAnnotations), so
+ * marks made word by word before this still show where they were.
  */
 export function TextLessonView({
   blocks,
@@ -78,50 +86,58 @@ export function TextLessonView({
   onOpenNote: (annotationId: string) => void;
 }) {
   const articleRef = useRef<HTMLElement>(null);
-  const drag = useRef<{ anchor: WordRef; current: WordRef } | null>(null);
+  const drag = useRef<{ anchor: LetterRef; current: LetterRef } | null>(null);
+  // The letters' spans by global index, collected when a drag starts, and
+  // the span of them currently painted -- so each pointer move repaints only
+  // what changed rather than walking every letter of the lesson.
+  const letterElements = useRef<HTMLElement[]>([]);
+  const painted = useRef<[number, number] | null>(null);
   const marking = tool !== null && tool.kind !== "pen";
 
-  // Global word numbering across paragraphs, so a drag from one paragraph
+  // Global letter numbering across paragraphs, so a drag from one paragraph
   // into the next covers everything in between.
-  const { wordsByBlock, firstWordIndex } = useMemo(() => {
-    const words = new Map<number, WordRange[]>();
+  const { lettersByBlock, firstLetterIndex } = useMemo(() => {
+    const letters = new Map<number, LetterRange[]>();
     const first = new Map<number, number>();
     let next = 0;
     blocks.forEach((block, index) => {
       if (block.type !== "paragraph") return;
-      const ranges = wordRanges(block.text ?? "");
-      words.set(index, ranges);
+      const ranges = letterRanges(block.text ?? "");
+      letters.set(index, ranges);
       first.set(index, next);
       next += ranges.length;
     });
-    return { wordsByBlock: words, firstWordIndex: first };
+    return { lettersByBlock: letters, firstLetterIndex: first };
   }, [blocks]);
 
-  function paintPreview(from: number, to: number) {
-    const article = articleRef.current;
-    if (!article) return;
-    const [lo, hi] = from <= to ? [from, to] : [to, from];
-    for (const element of article.querySelectorAll<HTMLElement>("[data-gi]")) {
-      const gi = Number(element.dataset.gi);
-      element.toggleAttribute("data-preview", gi >= lo && gi <= hi);
+  function setPreview(lo: number, hi: number, on: boolean) {
+    for (let gi = lo; gi <= hi; gi += 1) {
+      letterElements.current[gi]?.toggleAttribute("data-preview", on);
     }
+  }
+
+  function paintPreview(from: number, to: number) {
+    const [lo, hi] = from <= to ? [from, to] : [to, from];
+    if (painted.current) setPreview(painted.current[0], painted.current[1], false);
+    setPreview(lo, hi, true);
+    painted.current = [lo, hi];
   }
 
   function clearPreview() {
-    for (const element of articleRef.current?.querySelectorAll("[data-preview]") ?? []) {
-      element.removeAttribute("data-preview");
-    }
+    if (painted.current) setPreview(painted.current[0], painted.current[1], false);
+    painted.current = null;
+    letterElements.current = [];
   }
 
-  function rangesBetween(a: WordRef, b: WordRef): BlockRange[] {
+  function rangesBetween(a: LetterRef, b: LetterRef): BlockRange[] {
     const [first, last] = a.gi <= b.gi ? [a, b] : [b, a];
     const ranges: BlockRange[] = [];
-    for (const [blockIndex, words] of wordsByBlock) {
-      if (blockIndex < first.block || blockIndex > last.block || words.length === 0) continue;
+    for (const [blockIndex, letters] of lettersByBlock) {
+      if (blockIndex < first.block || blockIndex > last.block || letters.length === 0) continue;
       ranges.push({
         blockIndex,
-        start: blockIndex === first.block ? first.ws : words[0]!.start,
-        end: blockIndex === last.block ? last.we : words[words.length - 1]!.end,
+        start: blockIndex === first.block ? first.start : letters[0]!.start,
+        end: blockIndex === last.block ? last.end : letters[letters.length - 1]!.end,
       });
     }
     return ranges;
@@ -129,12 +145,17 @@ export function TextLessonView({
 
   function handlePointerDown(event: ReactPointerEvent<HTMLElement>) {
     if (!marking || event.button > 0) return;
-    const word = wordFromElement(event.target as Element);
-    if (!word) return;
+    const letter = letterFromElement(event.target as Element);
+    if (!letter) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    drag.current = { anchor: word, current: word };
-    paintPreview(word.gi, word.gi);
+    const elements: HTMLElement[] = [];
+    for (const element of articleRef.current?.querySelectorAll<HTMLElement>("[data-gi]") ?? []) {
+      elements[Number(element.dataset.gi)] = element;
+    }
+    letterElements.current = elements;
+    drag.current = { anchor: letter, current: letter };
+    paintPreview(letter.gi, letter.gi);
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLElement>) {
@@ -145,10 +166,10 @@ export function TextLessonView({
       typeof document.elementFromPoint === "function"
         ? document.elementFromPoint(event.clientX, event.clientY)
         : (event.target as Element);
-    const word = wordFromElement(hit);
-    if (!word || word.gi === drag.current.current.gi) return;
-    drag.current.current = word;
-    paintPreview(drag.current.anchor.gi, word.gi);
+    const letter = letterFromElement(hit);
+    if (!letter || letter.gi === drag.current.current.gi) return;
+    drag.current.current = letter;
+    paintPreview(drag.current.anchor.gi, letter.gi);
   }
 
   function handlePointerUp() {
@@ -157,6 +178,14 @@ export function TextLessonView({
     clearPreview();
     if (current) onMark(rangesBetween(current.anchor, current.current));
   }
+
+  // Paragraphs are memoised (there is a span per letter), so the note
+  // callback has to keep one identity across the parent's renders.
+  const openNoteRef = useRef(onOpenNote);
+  useEffect(() => {
+    openNoteRef.current = onOpenNote;
+  });
+  const openNote = useCallback((id: string) => openNoteRef.current(id), []);
 
   const annotationsByBlock = useMemo(() => {
     const byBlock = new Map<number, Annotation[]>();
@@ -204,11 +233,11 @@ export function TextLessonView({
             key={index}
             blockIndex={index}
             text={block.text ?? ""}
-            words={wordsByBlock.get(index) ?? []}
-            firstWord={firstWordIndex.get(index) ?? 0}
-            annotations={annotationsByBlock.get(index) ?? []}
+            letters={lettersByBlock.get(index) ?? NO_LETTERS}
+            firstLetter={firstLetterIndex.get(index) ?? 0}
+            annotations={annotationsByBlock.get(index) ?? NO_ANNOTATIONS}
             sources={sources?.get(index)}
-            onOpenNote={onOpenNote}
+            onOpenNote={openNote}
           />
         );
       })}
@@ -216,19 +245,22 @@ export function TextLessonView({
   );
 }
 
-function Paragraph({
+const NO_LETTERS: LetterRange[] = [];
+const NO_ANNOTATIONS: Annotation[] = [];
+
+const Paragraph = memo(function Paragraph({
   blockIndex,
   text,
-  words,
-  firstWord,
+  letters,
+  firstLetter,
   annotations,
   sources,
   onOpenNote,
 }: {
   blockIndex: number;
   text: string;
-  words: WordRange[];
-  firstWord: number;
+  letters: LetterRange[];
+  firstLetter: number;
   annotations: Annotation[];
   sources?: { start: number; end: number }[];
   onOpenNote: (annotationId: string) => void;
@@ -239,7 +271,7 @@ function Paragraph({
   const blockNotes = annotations.filter((a) => a.type === "margin_note" && a.start_offset === null);
 
   let cursor = 0;
-  let wordCursor = 0;
+  let letterCursor = 0;
   const children: ReactNode[] = [];
 
   segments.forEach((segment, segmentIndex) => {
@@ -247,44 +279,50 @@ function Paragraph({
     const end = start + segment.text.length;
     cursor = end;
 
-    // The words (or parts of words) inside this segment, with the gaps
-    // between them as plain text.
+    // The letters inside this segment, with the whitespace between them as
+    // plain text.
     const pieces: ReactNode[] = [];
     let at = start;
-    while (wordCursor < words.length && words[wordCursor]!.end <= start) wordCursor += 1;
-    for (let w = wordCursor; w < words.length && words[w]!.start < end; w += 1) {
-      const word = words[w]!;
-      const from = Math.max(word.start, start);
-      const to = Math.min(word.end, end);
-      if (from > at) pieces.push(text.slice(at, from));
+    while (letterCursor < letters.length && letters[letterCursor]!.end <= start) letterCursor += 1;
+    for (let l = letterCursor; l < letters.length && letters[l]!.start < end; l += 1) {
+      const letter = letters[l]!;
+      if (letter.start > at) pieces.push(text.slice(at, letter.start));
       pieces.push(
         <span
-          key={`w${w}`}
-          data-gi={firstWord + w}
+          key={`l${l}`}
+          data-gi={firstLetter + l}
           data-block={blockIndex}
-          data-ws={word.start}
-          data-we={word.end}
+          data-ls={letter.start}
+          data-le={letter.end}
           data-source={
-            sources?.some((source) => word.start < source.end && word.end > source.start)
+            sources?.some((source) => letter.start < source.end && letter.end > source.start)
               ? ""
               : undefined
           }
-          className="rounded-[2px] data-preview:bg-[rgba(47,111,159,0.16)] data-source:bg-[rgba(255,140,0,0.24)] data-source:shadow-[inset_0_-2px_#ff7a00]"
+          className="data-preview:bg-[rgba(47,111,159,0.16)] data-source:bg-[rgba(255,140,0,0.24)] data-source:shadow-[inset_0_-2px_#ff7a00]"
         >
-          {text.slice(from, to)}
+          {text.slice(letter.start, letter.end)}
         </span>,
       );
-      at = to;
+      at = letter.end;
     }
     if (at < end) pieces.push(text.slice(at, end));
 
     const annotation = segment.annotation;
     if (annotation?.type === "highlight") {
+      // Corners only where the colour ends: rounded where it meets another
+      // highlight, they cut a notch into the run at the join.
+      const isHighlight = (other?: { annotation: Annotation | null }) =>
+        other?.annotation?.type === "highlight";
+      const corners = [
+        isHighlight(segments[segmentIndex - 1]) ? "" : "rounded-l-[2px]",
+        isHighlight(segments[segmentIndex + 1]) ? "" : "rounded-r-[2px]",
+      ].join(" ");
       children.push(
         <mark
           key={segmentIndex}
           data-annotation-id={annotation.id}
-          className={`rounded-[2px] text-inherit ${highlightClass(annotation.color)}`}
+          className={`${corners} text-inherit ${highlightClass(annotation.color)}`}
         >
           {pieces}
         </mark>,
@@ -301,7 +339,11 @@ function Paragraph({
       );
       if (end === annotation.end_offset) {
         children.push(
-          <NoteBubble key={`n${segmentIndex}`} onClick={() => onOpenNote(annotation.id)} />,
+          <NoteBubble
+            key={`n${segmentIndex}`}
+            noteId={annotation.id}
+            onClick={() => onOpenNote(annotation.id)}
+          />,
         );
       }
     } else {
@@ -313,18 +355,20 @@ function Paragraph({
     <p data-block-index={blockIndex} className="my-2">
       {children}
       {blockNotes.map((note) => (
-        <NoteBubble key={note.id} onClick={() => onOpenNote(note.id)} />
+        <NoteBubble key={note.id} noteId={note.id} onClick={() => onOpenNote(note.id)} />
       ))}
     </p>
   );
-}
+});
 
 /** The design's inline note bubble: accent circle, white note glyph. */
-export function NoteBubble({ onClick }: { onClick: () => void }) {
+export function NoteBubble({ noteId, onClick }: { noteId: string; onClick: () => void }) {
   const { t } = useI18n();
   return (
     <button
       type="button"
+      // The note pop-up finds its bubble by this, to sit beside it.
+      data-note-bubble={noteId}
       aria-label={t("lesson.panel.openNote")}
       // Stops a marking tool's drag from starting on the bubble itself.
       onPointerDown={(event) => event.stopPropagation()}

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 import type { Stroke, StrokePoint } from "@lp/contracts";
-import { HIGHLIGHT_COLOR_NAMES, pageColors } from "@lp/ui";
+import { HIGHLIGHT_COLOR_NAMES, PEN_SIZES, PEN_SIZE_SCALE, pageColors, type PenSize } from "@lp/ui";
 
 import { useI18n } from "@/lib/i18n";
 
@@ -18,6 +18,7 @@ export const NOTEBOOK_PEN_COLORS = [
   ...HIGHLIGHT_COLOR_NAMES.map((name, i) => ({ name, value: pageColors.pens[i]! })),
 ];
 
+// The medium nib; the chosen size scales it.
 const STROKE_WIDTH = 0.006;
 
 // Normalized [0,1] hit radius for the eraser -- a drag point within this
@@ -100,6 +101,8 @@ export function DrawingCanvas({
   const size = explicitSize ? { width, height } : autoSize;
   const [color, setColor] = useState<string>(NOTEBOOK_PEN_COLORS[0]!.value);
   const [tool, setTool] = useState<"pen" | "eraser">("pen");
+  const [penSize, setPenSize] = useState<PenSize>("medium");
+  const strokeWidth = STROKE_WIDTH * PEN_SIZE_SCALE[penSize];
   const currentStrokeRef = useRef<StrokePoint[]>([]);
   const [drawingStroke, setDrawingStroke] = useState<StrokePoint[] | null>(null);
   const eraseBaseRef = useRef<Stroke[] | null>(null);
@@ -154,12 +157,12 @@ export function DrawingCanvas({
     if (drawingStroke && drawingStroke.length > 0) {
       drawStroke(
         ctx,
-        { color, width: STROKE_WIDTH, points: drawingStroke },
+        { color, width: strokeWidth, points: drawingStroke },
         size.width,
         size.height,
       );
     }
-  }, [strokes, drawingStroke, erasingPreview, size.width, size.height, color]);
+  }, [strokes, drawingStroke, erasingPreview, size.width, size.height, color, strokeWidth]);
 
   function commitChange(previous: Stroke[], next: Stroke[]) {
     setHistory((h) => [...h, previous]);
@@ -238,7 +241,7 @@ export function DrawingCanvas({
     currentStrokeRef.current = [];
     setDrawingStroke(null);
     if (points.length < 2) return;
-    commitChange(strokes, [...strokes, { color, width: STROKE_WIDTH, points }]);
+    commitChange(strokes, [...strokes, { color, width: strokeWidth, points }]);
   }
 
   return (
@@ -273,6 +276,27 @@ export function DrawingCanvas({
               }`}
             />
           ))}
+          <div
+            role="group"
+            aria-label={t("notebook.penSizes")}
+            className="ml-sm flex items-center gap-[2px]"
+          >
+            {PEN_SIZES.map((size) => (
+              <button
+                key={size}
+                type="button"
+                aria-label={t("notebook.penSize", { size: t(`penSizes.${size}`) })}
+                aria-pressed={penSize === size}
+                onClick={() => setPenSize(size)}
+                className="flex h-7 w-7 items-center justify-center rounded-full text-foreground hover:bg-muted aria-pressed:bg-muted aria-pressed:ring-1 aria-pressed:ring-foreground"
+              >
+                <span
+                  className="block rounded-full bg-current"
+                  style={{ width: 4 * PEN_SIZE_SCALE[size], height: 4 * PEN_SIZE_SCALE[size] }}
+                />
+              </button>
+            ))}
+          </div>
           <div
             role="group"
             aria-label={t("notebook.tool")}

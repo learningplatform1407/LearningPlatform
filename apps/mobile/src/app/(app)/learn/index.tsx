@@ -7,7 +7,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { getApiClient } from "@/lib/api-client";
 import { useI18n } from "@/lib/i18n";
 import { DailyQuestionCard } from "@/lib/daily-question-card";
-import { DailyQuestionOverlay, useDailyQuestion } from "@/lib/daily-question-overlay";
+import { useDailyQuestionContext } from "@/lib/daily-question-overlay";
 import { fontSizes, fontWeights, shadows, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
@@ -15,9 +15,7 @@ import { ScreenHeader } from "@/lib/ui/primitives";
 /** The hub's own content: recent lessons and the nav grid.
  *
  * Its query lives here rather than in the screen so the loading and error
- * branches can keep their early returns while the sheet stays mounted above
- * them -- otherwise the question of the day could not offer itself until an
- * unrelated lessons query had resolved. Same split as the web page.
+ * branches can keep their early returns. Same split as the web page.
  */
 function LearnContent({
   today,
@@ -142,29 +140,16 @@ function LearnContent({
 }
 
 export default function LearnScreen() {
-  const { today, openDate, open, holdOpen, close } = useDailyQuestion();
+  const { today, open } = useDailyQuestionContext();
   const day = today.data;
 
   return (
-    <>
-      <LearnContent
-        today={day}
-        onOpenToday={() => {
-          if (day) open(day.server_today);
-        }}
-      />
-      {/* One sheet for the card and the calendar inside it, mounted here so
-          neither can open its own. */}
-      {day && (
-        <DailyQuestionOverlay
-          forDate={openDate}
-          today={day}
-          onSelectDay={open}
-          onAnswered={holdOpen}
-          onClose={close}
-        />
-      )}
-    </>
+    <LearnContent
+      today={day}
+      onOpenToday={() => {
+        if (day) open(day.server_today);
+      }}
+    />
   );
 }
 

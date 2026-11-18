@@ -8,16 +8,19 @@ import {
   type Translator,
 } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { usePathname } from "expo-router";
+import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
+import { SafeAreaInsetsContext } from "react-native-safe-area-context";
 
 import { getApiClient } from "@/lib/api-client";
 import { DailyQuestionBody } from "@/lib/daily-question-body";
 import { Overlay } from "@/lib/overlay";
 import { readDismissedDate, writeDismissedDate } from "@/lib/qotd-dismissal";
 import { OUTCOME_MARKS } from "@/lib/question-reveal";
-import { fontSizes, fontWeights, radii, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, radii, shadows, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { CloseIcon } from "@/lib/ui/icons";
 import { useI18n } from "@/lib/i18n";
 
 /** Today's question, plus which day the sheet is showing.
@@ -29,9 +32,12 @@ import { useI18n } from "@/lib/i18n";
  * deliberately never materialises one, so routing today through it would 404
  * until some other visitor happened to trigger the draw.
  *
+ * Lives in the app layout (`DailyQuestionProvider`), because the "available"
+ * notice shows on every screen and opens the same sheet as the Learn card.
+ *
  * The dismissal marker goes through react-query rather than
  * `useSyncExternalStore` as on web, because AsyncStorage is async. That also
- * keeps auto-open a plain derivation instead of state written from an effect.
+ * keeps the notice a plain derivation instead of state written from an effect.
  */
 export function useDailyQuestion() {
   const queryClient = useQueryClient();
@@ -46,53 +52,139 @@ export function useDailyQuestion() {
     queryFn: readDismissedDate,
   });
 
-  // Set the moment the reader takes control of the sheet, by opening a day, by
-  // answering, or by closing. Auto-open is a *derivation*, so without this
-  // latch a close whose marker write failed would immediately re-derive as
-  // open and trap them in it.
-  const [chosen, setChosen] = useState<{ date: string | null } | null>(null);
+  const [openDate, setOpenDate] = useState<string | null>(null);
+  // Set once the reader has opened or dismissed today's question this
+  // session, so the notice goes away even if the marker write fails.
+  const [handled, setHandled] = useState(false);
 
   const dismiss = useMutation({
     mutationFn: writeDismissedDate,
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["qotd-dismissed"] }),
   });
   // `mutate` is stable; the mutation object around it is not, and depending on
-  // the object would churn `close`'s identity on every render.
+  // the object would churn the callbacks' identity on every render.
   const recordDismissal = dismiss.mutate;
 
   const day = today.data;
-  const autoOpen =
+  // The notice replaces the old auto-open: the question no longer takes over
+  // the screen, it only says it is waiting.
+  const showNotice =
     day !== undefined &&
     // Not until the marker has actually been read: `undefined` compares
-    // unequal to today's date, and would flash the sheet open on someone who
-    // had already dismissed it.
+    // unequal to today's date, and would flash the notice at someone who had
+    // already dismissed it.
     dismissed.isSuccess &&
     day.attempt === null && // unanswered, here or on another device
     day.question !== null && // an empty bank stays quiet
+    !handled &&
     dismissed.data !== day.server_today;
 
-  const openDate = chosen ? chosen.date : autoOpen ? day.server_today : null;
   const serverToday = day?.server_today;
+  const hasQuestion = day?.question != null;
 
-  const open = useCallback((forDate: string) => setChosen({ date: forDate }), []);
-  const holdOpen = useCallback(() => setChosen({ date: openDate }), [openDate]);
+  // The marker means "today's question has been offered", so opening today
+  // or dismissing the notice both write it. Except when there is nothing to
+  // offer: the hub card still opens on an empty-bank day to report the
+  // emptiness, and marking today from there would hide the notice if an admin
+  // published a question later the same day.
+  const markOffered = useCallback(() => {
+    if (serverToday === undefined || !hasQuestion) return;
+    recordDismissal(serverToday);
+    setHandled(true);
+  }, [hasQuestion, recordDismissal, serverToday]);
 
-  const close = useCallback(() => {
-    // The marker means "today's question has been offered", not "this exact
-    // day was closed", so closing writes it whichever day is on screen. That
-    // matters more here than on web: the calendar below sits *inside* the
-    // sheet, so browsing to a past day and then closing is reachable, and a
-    // day-specific marker would leave today un-offered.
-    //
-    // Except when there is nothing to offer. The hub card is still openable on
-    // an empty-bank day -- it reports the emptiness -- and marking today from
-    // there would suppress the auto-open if an admin published a question
-    // later the same day.
-    if (serverToday !== undefined && day?.question != null) recordDismissal(serverToday);
-    setChosen({ date: null });
-  }, [day?.question, recordDismissal, serverToday]);
+  const open = useCallback(
+    (forDate: string) => {
+      if (forDate === serverToday) markOffered();
+      setOpenDate(forDate);
+    },
+    [markOffered, serverToday],
+  );
 
-  return { today, openDate, open, holdOpen, close };
+  const close = useCallback(() => setOpenDate(null), []);
+
+  return { today, openDate, open, close, showNotice, dismissNotice: markOffered };
+}
+
+type DailyQuestionState = ReturnType<typeof useDailyQuestion>;
+
+const DailyQuestionContext = createContext<DailyQuestionState | null>(null);
+
+// The lesson reader is a reading surface with its own top notch, so the
+// notice waits until the reader leaves it -- the same rule as web.
+const LESSON_ROUTE = /^\/learn\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The question of the day for the whole app: one fetch, one sheet, and the
+ * top-right "available" notice on every screen. */
+export function DailyQuestionProvider({ children }: { children: ReactNode }) {
+  const state = useDailyQuestion();
+  const day = state.today.data;
+  const reading = LESSON_ROUTE.test(usePathname());
+  return (
+    <DailyQuestionContext.Provider value={state}>
+      {children}
+      {state.showNotice && state.openDate === null && !reading && day && (
+        <DailyQuestionNotice
+          onOpen={() => state.open(day.server_today)}
+          onDismiss={state.dismissNotice}
+        />
+      )}
+      {/* One sheet for every entry point, so the notice, the card and the
+          calendar inside the sheet cannot each open their own. */}
+      {day && (
+        <DailyQuestionOverlay
+          forDate={state.openDate}
+          today={day}
+          onSelectDay={state.open}
+          onClose={state.close}
+        />
+      )}
+    </DailyQuestionContext.Provider>
+  );
+}
+
+export function useDailyQuestionContext(): DailyQuestionState {
+  const state = useContext(DailyQuestionContext);
+  if (!state) throw new Error("useDailyQuestionContext must be used inside DailyQuestionProvider");
+  return state;
+}
+
+/** "Question of the day available", top-right. Opens the question, or goes
+ * away for the rest of the day. */
+function DailyQuestionNotice({ onOpen, onDismiss }: { onOpen: () => void; onDismiss: () => void }) {
+  const styles = useStyles();
+  const colors = useThemeColors();
+  const { t } = useI18n();
+  // The context rather than `useSafeAreaInsets()`, which throws when no
+  // provider is mounted (see lib/overlay.tsx).
+  const insets = useContext(SafeAreaInsetsContext);
+  return (
+    <View
+      style={[styles.notice, { top: (insets?.top ?? 0) + spacing.sm }]}
+      accessibilityRole="alert"
+      accessibilityLiveRegion="polite"
+    >
+      <View style={styles.noticeDot} />
+      <Pressable
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel={`${t("daily.available")}. ${t("daily.availableAction")}`}
+        style={styles.noticeBody}
+      >
+        <Text style={styles.noticeTitle}>{t("daily.available")}</Text>
+        <Text style={styles.noticeAction}>{t("daily.availableAction")}</Text>
+      </Pressable>
+      <Pressable
+        onPress={onDismiss}
+        accessibilityRole="button"
+        accessibilityLabel={t("daily.dismissNotice")}
+        hitSlop={8}
+        style={styles.noticeClose}
+      >
+        <CloseIcon size={16} color={colors.mutedForeground} />
+      </Pressable>
+    </View>
+  );
 }
 
 function dayAccessibilityLabel(
@@ -255,7 +347,6 @@ export function DailyQuestionOverlay({
   forDate,
   today,
   onSelectDay,
-  onAnswered,
   onClose,
 }: {
   /** `null` when the sheet is closed. */
@@ -263,7 +354,6 @@ export function DailyQuestionOverlay({
   /** Already-loaded today, from `useDailyQuestion`. */
   today: DailyQuestion;
   onSelectDay: (forDate: string) => void;
-  onAnswered: () => void;
   onClose: () => void;
 }) {
   const styles = useStyles();
@@ -293,7 +383,7 @@ export function DailyQuestionOverlay({
         </Text>
       )}
       {day ? (
-        <DailyQuestionBody day={day} onAnswered={onAnswered} />
+        <DailyQuestionBody day={day} />
       ) : past.isError ? (
         <Text style={styles.error}>{t("daily.dayFailed")}</Text>
       ) : (
@@ -304,6 +394,48 @@ export function DailyQuestionOverlay({
 }
 
 const useStyles = makeStyles((colors) => ({
+  notice: {
+    position: "absolute",
+    right: spacing.md,
+    maxWidth: 340,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.xs,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    ...shadows.md,
+  },
+  noticeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: radii.full,
+    backgroundColor: colors.accent,
+  },
+  noticeBody: {
+    flexShrink: 1,
+    paddingVertical: spacing.xs,
+  },
+  noticeTitle: {
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.bold,
+    color: colors.foreground,
+  },
+  noticeAction: {
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.semibold,
+    color: colors.accent,
+  },
+  noticeClose: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   calendar: {
     gap: spacing.sm,
   },

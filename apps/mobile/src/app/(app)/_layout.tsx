@@ -3,6 +3,7 @@ import { Tabs } from "expo-router/tabs";
 import { useWindowDimensions, View } from "react-native";
 
 import { usePendingChallengeCount } from "@/lib/challenges";
+import { DailyQuestionProvider } from "@/lib/daily-question-overlay";
 import { useI18n } from "@/lib/i18n";
 import { fontWeights, spacing } from "@/lib/theme";
 
@@ -80,6 +81,14 @@ const useStyles = makeStyles((colors) => ({
 }));
 
 export default function AppLayout() {
+  return (
+    <DailyQuestionProvider>
+      <AppNavigator />
+    </DailyQuestionProvider>
+  );
+}
+
+function AppNavigator() {
   const { t } = useI18n();
   const pendingChallenges = usePendingChallengeCount();
   const examsLabel =

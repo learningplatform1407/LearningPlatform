@@ -49,7 +49,8 @@ const ADMIN_ITEM: NavItem = { href: "/admin", label: "nav.admin", Icon: WrenchIc
 
 // A lesson owns the whole screen in the redesign: its left edge belongs to
 // the tool notch and table of contents, and it carries its own way back.
-const LESSON_ROUTE = /^\/learn\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const LESSON_ROUTE =
+  /^\/learn\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function Sidebar() {
   const { t } = useI18n();

@@ -16,7 +16,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { LessonPageInk, PageHighlight, Stroke, StrokePoint } from "@lp/contracts";
-import { highlightIndex, pageColors } from "@lp/ui";
+import { highlightIndex, pageColors, PEN_SIZE_SCALE } from "@lp/ui";
 
 import { useToast } from "@/components/toast";
 import { scrollBehavior } from "@/lib/use-media-query";
@@ -31,6 +31,7 @@ import {
   strokeHit,
   strokePath,
   wordAt,
+  lettersFromTextItems,
   wordsForQuote,
   wordsFromTextItems,
   type MeasureText,
@@ -63,7 +64,8 @@ const RENDER_MARGIN = "1200px 0px";
 const UNDO_LIMIT = 80;
 const TWO_FINGER_TAP_MS = 380;
 const TWO_FINGER_TAP_SLOP = 10;
-/** Pen width in PDF points (design.md §10), converted per page. */
+/** Medium pen width in PDF points (design.md §10), converted per page and
+ * scaled by the chosen size. */
 const PEN_POINTS = 1.3;
 const ERASER_POINTS = 4;
 
@@ -345,8 +347,10 @@ export function PdfLessonView({
   );
 }
 
-/** A page's words with their boxes, in page units (pdf-geometry). */
-async function pageWords(page: PDFPageProxy): Promise<PageWord[]> {
+/** A page's words -- or, with `letters`, its letters -- with their boxes,
+ * in page units (pdf-geometry). Words find quoted passages; letters are
+ * what a highlight is marked by. */
+async function pageWords(page: PDFPageProxy, letters = false): Promise<PageWord[]> {
   const base = page.getViewport({ scale: 1 });
   const content = await page.getTextContent();
   const items = content.items.flatMap((item) =>
@@ -364,7 +368,8 @@ async function pageWords(page: PDFPageProxy): Promise<PageWord[]> {
         ]
       : [],
   );
-  return wordsFromTextItems(items, base.width, base.height, measureText);
+  const boxes = letters ? lettersFromTextItems : wordsFromTextItems;
+  return boxes(items, base.width, base.height, measureText);
 }
 
 let measureContext: CanvasRenderingContext2D | null | undefined;
@@ -490,7 +495,7 @@ function PdfPage({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [near, setNear] = useState(false);
   const [page, setPage] = useState<PDFPageProxy | null>(null);
-  const [words, setWords] = useState<PageWord[] | null>(null);
+  const [letters, setLetters] = useState<PageWord[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [draft, setDraft] = useState<{ points: StrokePoint[]; width: number } | null>(null);
   const [preview, setPreview] = useState<PageHighlight["rects"] | null>(null);
@@ -558,17 +563,17 @@ function PdfPage({
     };
   }, [page, near, width]);
 
-  // Word boxes, for word-level highlighting. Loaded once per page.
+  // Letter boxes, for letter-level highlighting. Loaded once per page.
   useEffect(() => {
-    if (!near || !page || words) return;
+    if (!near || !page || letters) return;
     let cancelled = false;
-    void pageWords(page).then((found) => {
-      if (!cancelled) setWords(found);
+    void pageWords(page, true).then((found) => {
+      if (!cancelled) setLetters(found);
     });
     return () => {
       cancelled = true;
     };
-  }, [near, page, words]);
+  }, [near, page, letters]);
 
   const { data: ink = EMPTY_INK } = useQuery({
     queryKey: ["page-ink", documentId, pageNumber],
@@ -623,7 +628,8 @@ function PdfPage({
 
     if (tool.kind === "pen") {
       const pressure = pointerType === "pen" && event.pressure > 0 ? event.pressure : null;
-      const widthPoints = pressure === null ? PEN_POINTS : 1 + pressure * 0.7;
+      const widthPoints =
+        (pressure === null ? PEN_POINTS : 1 + pressure * 0.7) * PEN_SIZE_SCALE[tool.size];
       const width = widthPoints / pointsWide;
       gesture.current = {
         kind: "pen",
@@ -655,23 +661,23 @@ function PdfPage({
       return;
     }
 
-    if (!words || words.length === 0) {
-      toast(words ? t("lesson.pdfView.noText") : t("lesson.pdfView.stillReading"));
+    if (!letters || letters.length === 0) {
+      toast(letters ? t("lesson.pdfView.noText") : t("lesson.pdfView.stillReading"));
       return;
     }
-    const word = wordAt(words, point.x, point.y);
-    if (!word) return;
+    const letter = wordAt(letters, point.x, point.y);
+    if (!letter) return;
     gesture.current = {
       kind: "highlight",
       pointerId: event.pointerId,
       before,
       points: [],
       width: 0,
-      anchor: word,
-      current: word,
+      anchor: letter,
+      current: letter,
       erased: null,
     };
-    setPreview(rectsForRange(words, word.index, word.index));
+    setPreview(rectsForRange(letters, letter.index, letter.index));
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
@@ -704,12 +710,12 @@ function PdfPage({
         current.erased = next;
         setErasing(next);
       }
-    } else if (current.kind === "highlight" && words && current.anchor) {
+    } else if (current.kind === "highlight" && letters && current.anchor) {
       const point = pointOf(event);
-      const word = wordAt(words, point.x, point.y);
-      if (word && word.index !== current.current?.index) {
-        current.current = word;
-        setPreview(rectsForRange(words, current.anchor.index, word.index));
+      const letter = wordAt(letters, point.x, point.y);
+      if (letter && letter.index !== current.current?.index) {
+        current.current = letter;
+        setPreview(rectsForRange(letters, current.anchor.index, letter.index));
       }
     }
   }
@@ -753,10 +759,10 @@ function PdfPage({
       ) {
         onEdit(pageNumber, current.before, after);
       }
-    } else if (current.kind === "highlight" && words && current.anchor && current.current) {
+    } else if (current.kind === "highlight" && letters && current.anchor && current.current) {
       setPreview(null);
       if (!tool || tool.kind !== "highlight") return;
-      const rects = rectsForRange(words, current.anchor.index, current.current.index);
+      const rects = rectsForRange(letters, current.anchor.index, current.current.index);
       if (rects.length === 0) return;
       onEdit(pageNumber, current.before, {
         strokes: current.before.strokes,

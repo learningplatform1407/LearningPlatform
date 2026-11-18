@@ -18,6 +18,8 @@ export const notebook: Messages["notebook"] = {
   placeholder: "Scrie aici notița ta…",
   drawingTools: "Unelte de desen",
   penColor: "Culoarea pixului — {color}",
+  penSize: "Grosimea pixului — {size}",
+  penSizes: "Grosimea pixului",
   tool: "Unealtă",
   pen: "Pix",
   eraser: "Gumă",
@@ -34,4 +36,11 @@ export const colors: Messages["colors"] = {
   purple: "mov",
   red: "roșu",
   green: "verde",
+};
+
+/** Pen nib sizes, by their PEN_SIZES name. */
+export const penSizes: Messages["penSizes"] = {
+  thin: "subțire",
+  medium: "medie",
+  thick: "groasă",
 };

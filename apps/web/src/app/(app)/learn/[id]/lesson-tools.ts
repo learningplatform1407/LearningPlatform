@@ -1,4 +1,4 @@
-import { HIGHLIGHT_COLOR_NAMES, type HighlightColorName } from "@lp/ui";
+import { HIGHLIGHT_COLOR_NAMES, type HighlightColorName, type PenSize } from "@lp/ui";
 
 export type LessonTab = "lesson" | "review" | "quizzes" | "flashcards";
 export type LessonViewMode = "text" | "pdf";
@@ -8,7 +8,7 @@ export type SwatchIndex = 0 | 1 | 2 | 3 | 4;
 
 export type LessonTool =
   | { kind: "highlight"; color: SwatchIndex }
-  | { kind: "pen"; color: SwatchIndex }
+  | { kind: "pen"; color: SwatchIndex; size: PenSize }
   | { kind: "eraser" }
   | { kind: "note" }
   | null;
@@ -21,7 +21,7 @@ export function colorName(index: SwatchIndex): HighlightColorName {
  * the pen; otherwise it picks that marker, and picking the active marker
  * again turns it off. */
 export function pickSwatch(tool: LessonTool, color: SwatchIndex): LessonTool {
-  if (tool?.kind === "pen") return { kind: "pen", color };
+  if (tool?.kind === "pen") return { ...tool, color };
   if (tool?.kind === "highlight" && tool.color === color) return null;
   return { kind: "highlight", color };
 }
@@ -34,20 +34,22 @@ export function toolAvailable(kind: NonNullable<LessonTool>["kind"], mode: Lesso
   return true;
 }
 
-export interface WordRange {
+export interface LetterRange {
   start: number;
   end: number;
 }
 
-/** Word boundaries in `text`: runs of non-whitespace. Marking snaps to
- * these, so a highlight never starts or stops mid-word however the pointer
- * moved. */
-export function wordRanges(text: string): WordRange[] {
-  const words: WordRange[] = [];
-  for (const match of text.matchAll(/\S+/g)) {
-    words.push({ start: match.index, end: match.index + match[0].length });
+/** Each letter of `text` -- every character but whitespace -- with its
+ * offsets. Marking moves letter by letter, so a highlight can start or stop
+ * inside a word; it never starts or stops on a space, because only letters
+ * can be pressed. A code point rather than a UTF-16 unit, so a character
+ * outside the BMP is one letter, not two halves. */
+export function letterRanges(text: string): LetterRange[] {
+  const letters: LetterRange[] = [];
+  for (const match of text.matchAll(/\S/gu)) {
+    letters.push({ start: match.index, end: match.index + match[0].length });
   }
-  return words;
+  return letters;
 }
 
 /** One block's slice of a marked range. A drag can run across paragraphs,

@@ -4,6 +4,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
+import { DailyQuestionProvider } from "@/components/daily-question-overlay";
+
 import LearnPage from "./page";
 
 const listRecentLessons = vi.fn();
@@ -95,7 +97,9 @@ function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <LearnPage />
+      <DailyQuestionProvider>
+        <LearnPage />
+      </DailyQuestionProvider>
     </QueryClientProvider>,
   );
 }
@@ -107,11 +111,11 @@ beforeEach(() => {
   getDailyQuestionForDate.mockReset();
   answerDailyQuestion.mockReset();
   // The dismissal marker is real localStorage in jsdom, so it would otherwise
-  // leak between tests and silence the auto-open.
+  // leak between tests and silence the notice.
   window.localStorage.clear();
 
   // An empty bank by default: the quietest state, so a test that does not care
-  // about the question of the day is not interrupted by its overlay.
+  // about the question of the day sees no notice.
   getDailyQuestion.mockResolvedValue(emptyBank());
   getDailyQuestionCalendar.mockResolvedValue(calendar());
 });
@@ -223,27 +227,38 @@ describe("LearnPage", () => {
 });
 
 describe("LearnPage question of the day", () => {
-  test("auto-opens today's unanswered question", async () => {
+  test("offers today's unanswered question with a notice instead of opening it", async () => {
     listRecentLessons.mockResolvedValue([]);
     getDailyQuestion.mockResolvedValue(unanswered());
+    const user = userEvent.setup();
 
     renderPage();
+
+    const notice = await screen.findByRole("status");
+    expect(notice).toHaveTextContent("Question of the day available");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Question of the day available/ }));
 
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveAccessibleName("Question of the day");
     expect(screen.getByText("Which of these are prime?")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Check answer" })).toBeInTheDocument();
+    // Opening it is the offer taken up, so the notice does not come back.
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.queryByText("Question of the day available")).not.toBeInTheDocument();
   });
 
-  test("does not auto-open once it has been closed, even on a fresh mount", async () => {
+  test("a dismissed notice stays away for the day, even on a fresh mount", async () => {
     listRecentLessons.mockResolvedValue([]);
     getDailyQuestion.mockResolvedValue(unanswered());
     const user = userEvent.setup();
 
     const first = renderPage();
-    await screen.findByRole("dialog");
-    await user.click(screen.getByRole("button", { name: "Close" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await screen.findByText("Question of the day available");
+    await user.click(screen.getByRole("button", { name: "Dismiss for today" }));
+    expect(screen.queryByText("Question of the day available")).not.toBeInTheDocument();
 
     // Navigating away and back is a fresh mount, which is exactly the case the
     // stored marker exists to survive.
@@ -251,15 +266,16 @@ describe("LearnPage question of the day", () => {
     renderPage();
 
     await screen.findByRole("heading", { name: "Question of the day" });
+    expect(screen.queryByText("Question of the day available")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  test("stays closed even when the marker cannot be stored", async () => {
+  test("dismissing still hides the notice when the marker cannot be stored", async () => {
     listRecentLessons.mockResolvedValue([]);
     getDailyQuestion.mockResolvedValue(unanswered());
-    // Safari in private mode throws on setItem. Auto-open is derived from the
-    // marker, so without a latch on "the reader has taken control" a failed
-    // write would re-derive as open and trap them in the overlay.
+    // Safari in private mode throws on setItem. The notice is derived from the
+    // marker, so without a latch on "the reader has dealt with it" a failed
+    // write would leave it on screen.
     //
     // The whole Storage is swapped rather than spying on setItem, because
     // `vi.spyOn(window.localStorage, "setItem")` does not work against real
@@ -288,19 +304,19 @@ describe("LearnPage question of the day", () => {
 
     try {
       renderPage();
-      await screen.findByRole("dialog");
-      await user.click(screen.getByRole("button", { name: "Close" }));
+      await screen.findByText("Question of the day available");
+      await user.click(screen.getByRole("button", { name: "Dismiss for today" }));
 
-      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-      // The write really was attempted and really did throw, so the overlay
-      // staying shut is the latch doing its job rather than a silent no-op.
+      expect(screen.queryByText("Question of the day available")).not.toBeInTheDocument();
+      // The write really was attempted and really did throw, so the notice
+      // going away is the latch doing its job rather than a silent no-op.
       expect(setItem).toHaveBeenCalledWith("lp.qotd.dismissed", TODAY);
     } finally {
       Object.defineProperty(window, "localStorage", { configurable: true, value: real });
     }
   });
 
-  test("does not auto-open a day that was already answered", async () => {
+  test("offers no notice for a day that was already answered", async () => {
     listRecentLessons.mockResolvedValue([]);
     getDailyQuestion.mockResolvedValue(answered());
 
@@ -309,6 +325,7 @@ describe("LearnPage question of the day", () => {
     // Twice: the rail and the nav card are both in the DOM — only CSS hides
     // one of them — and they must never disagree about today's state.
     expect(await screen.findAllByText("Answered correctly, 2/2 points.")).toHaveLength(2);
+    expect(screen.queryByText("Question of the day available")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -318,21 +335,21 @@ describe("LearnPage question of the day", () => {
     renderPage();
 
     expect(await screen.findAllByText("No question today.")).toHaveLength(2);
+    expect(screen.queryByText("Question of the day available")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     // An empty bank is not a failure — a fresh environment would otherwise
     // greet everyone with a red alert.
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  test("reopens today from the calendar after it was dismissed", async () => {
+  test("opens today from the calendar after the notice was dismissed", async () => {
     listRecentLessons.mockResolvedValue([]);
     getDailyQuestion.mockResolvedValue(unanswered());
     const user = userEvent.setup();
 
     renderPage();
-    await screen.findByRole("dialog");
-    await user.click(screen.getByRole("button", { name: "Close" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await screen.findByText("Question of the day available");
+    await user.click(screen.getByRole("button", { name: "Dismiss for today" }));
 
     await user.click(screen.getByRole("button", { name: /^Today, Tuesday, October 13, 2026/ }));
 
@@ -403,6 +420,7 @@ describe("LearnPage question of the day", () => {
     const user = userEvent.setup();
 
     renderPage();
+    await user.click(await screen.findByRole("button", { name: /Question of the day available/ }));
     await screen.findByRole("dialog");
     await user.click(screen.getByRole("checkbox", { name: "2" }));
     await user.click(screen.getByRole("button", { name: "Check answer" }));
@@ -423,6 +441,7 @@ describe("LearnPage question of the day", () => {
     const user = userEvent.setup();
 
     renderPage();
+    await user.click(await screen.findByRole("button", { name: /Question of the day available/ }));
     await screen.findByRole("dialog");
     await user.click(screen.getByRole("checkbox", { name: "2" }));
     await user.click(screen.getByRole("button", { name: "Check answer" }));
@@ -506,7 +525,7 @@ describe("LearnPage question of the day", () => {
     expect(screen.getByText("Answers · correct — 2/2 points")).toBeInTheDocument();
   });
 
-  test("closing an empty-bank day does not silence a question published later", async () => {
+  test("opening an empty-bank day does not silence a question published later", async () => {
     listRecentLessons.mockResolvedValue([]);
     const user = userEvent.setup();
 
@@ -523,6 +542,6 @@ describe("LearnPage question of the day", () => {
     getDailyQuestion.mockResolvedValue(unanswered());
     renderPage();
 
-    expect(await screen.findByRole("dialog")).toHaveAccessibleName("Question of the day");
+    expect(await screen.findByText("Question of the day available")).toBeInTheDocument();
   });
 });
