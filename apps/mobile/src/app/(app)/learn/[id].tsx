@@ -2043,6 +2043,7 @@ export default function LectureScreen() {
     <TextScaleContext.Provider value={textScale}>
       <View style={styles.screenRoot} {...swipeHandlers}>
         <ScrollView
+          testID="lesson-scroll"
           style={styles.container}
           contentContainerStyle={[
             styles.content,

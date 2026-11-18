@@ -1,7 +1,7 @@
 import type { PageHighlight, PageWord, Stroke, StrokePoint } from "@lp/contracts";
 import { highlightIndex, pageColors, type PenSize } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, type LayoutChangeEvent, Text, View } from "react-native";
 import Pdf from "react-native-pdf";
 
@@ -319,6 +319,12 @@ function PdfPage({
   }
 
   const letters = useMemo(() => (words ? lettersOfWords(words.words) : null), [words]);
+  // Read when the hold timer fires, not when it was set: words that arrive
+  // while a finger is already down still let that hold start a mark.
+  const lettersRef = useRef(letters);
+  useEffect(() => {
+    lettersRef.current = letters;
+  }, [letters]);
   // A highlight being dragged: from the letter held to the one under the
   // finger, by index into `letters`.
   const gesture = useRef<{
@@ -338,6 +344,7 @@ function PdfPage({
 
   function beginMark() {
     const g = gesture.current;
+    const letters = lettersRef.current;
     if (!g || tool?.type !== "highlight" || !letters) return;
     if (letters.length === 0) {
       gesture.current = null;

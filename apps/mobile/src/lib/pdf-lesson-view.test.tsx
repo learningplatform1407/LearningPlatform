@@ -131,8 +131,9 @@ test("with a marker up, press and hold, then drag, saves a highlight letter by l
   fireEvent(layer, "responderGrant", {
     nativeEvent: { locationX: from.x, locationY: from.y, pageX: from.x, pageY: from.y },
   });
-  await act(() => new Promise((resolve) => setTimeout(resolve, 300)));
-  expect(onMarkingChange).toHaveBeenLastCalledWith(true);
+  // The hold, waited on rather than slept through: a busy CI runner can fire
+  // the timer late.
+  await waitFor(() => expect(onMarkingChange).toHaveBeenLastCalledWith(true));
   expect(screen.getAllByTestId("pdf-mark-preview")).toHaveLength(1);
 
   fireEvent(layer, "responderMove", { nativeEvent: { pageX: to.x, pageY: to.y } });

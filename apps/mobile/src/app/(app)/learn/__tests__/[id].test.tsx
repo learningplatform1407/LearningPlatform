@@ -133,7 +133,10 @@ async function markLetters(text: string, from: number, to: number, block = 0) {
     pageY: i * 20 + 10,
   });
   fireEvent(paragraph, "responderGrant", { nativeEvent: at(from) });
-  await act(() => new Promise((resolve) => setTimeout(resolve, 300)));
+  // The hold is up once the lesson stops scrolling under the finger --
+  // waited on rather than slept through, since a busy CI runner can fire the
+  // timer late.
+  await waitFor(() => expect(screen.getByTestId("lesson-scroll").props.scrollEnabled).toBe(false));
   fireEvent(paragraph, "responderMove", { nativeEvent: at(to) });
   fireEvent(paragraph, "responderRelease", { nativeEvent: at(to) });
 }
