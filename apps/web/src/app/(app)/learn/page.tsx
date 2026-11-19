@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
 import { Card } from "@/components/card";
-import { DailyQuestionOverlay, useDailyQuestion } from "@/components/daily-question-overlay";
+import { useDailyQuestionContext } from "@/components/daily-question-overlay";
 import { DailyQuestionCard, DailyQuestionRail } from "@/components/daily-question-panel";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { useI18n } from "@/lib/i18n";
@@ -26,8 +26,7 @@ const TOOLS = [
  * branches can keep their early returns while the layout -- and with it the
  * calendar rail -- stays mounted above them. Previously each branch returned
  * its own `<main className="p-xl">`, which would have made the rail vanish
- * during both, and would have delayed the question's auto-open until an
- * unrelated lessons query resolved.
+ * during both.
  */
 function LearnContent({
   today,
@@ -133,7 +132,7 @@ function LearnContent({
 
 export default function LearnPage() {
   const { t } = useI18n();
-  const { today, openDate, open, holdOpen, close } = useDailyQuestion();
+  const { today, open } = useDailyQuestionContext();
   const day = today.data;
 
   return (
@@ -162,17 +161,6 @@ export default function LearnPage() {
           <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
         )}
       </aside>
-
-      {/* One overlay for both entry points, mounted here so the rail and the
-          card cannot each open their own. */}
-      {day && (
-        <DailyQuestionOverlay
-          forDate={openDate}
-          today={day}
-          onAnswered={holdOpen}
-          onClose={close}
-        />
-      )}
     </main>
   );
 }

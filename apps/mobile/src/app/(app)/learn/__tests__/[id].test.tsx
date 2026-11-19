@@ -1,6 +1,6 @@
 import { lightColors } from "@lp/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { StyleSheet } from "react-native";
 import { router } from "expo-router";
 
@@ -29,6 +29,7 @@ const mockCreateNotebookEntry = jest.fn();
 const mockUpdateNotebookEntry = jest.fn();
 const mockDeleteNotebookEntry = jest.fn();
 const mockListDocuments = jest.fn();
+const mockGetQuestionBankTree = jest.fn();
 
 jest.mock("@/lib/api-client", () => ({
   getApiClient: () => ({
@@ -54,6 +55,7 @@ jest.mock("@/lib/api-client", () => ({
     updateNotebookEntry: mockUpdateNotebookEntry,
     deleteNotebookEntry: mockDeleteNotebookEntry,
     listDocuments: mockListDocuments,
+    getQuestionBankTree: mockGetQuestionBankTree,
   }),
 }));
 
@@ -93,10 +95,11 @@ jest.mock("@/lib/pdf-lesson-view", () => {
 });
 
 let mockTabParam: string | undefined;
+let mockTocParam: string | undefined;
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), back: jest.fn(), navigate: jest.fn(), canGoBack: jest.fn() },
-  useLocalSearchParams: () => ({ id: "d1", tab: mockTabParam }),
+  useLocalSearchParams: () => ({ id: "d1", tab: mockTabParam, toc: mockTocParam }),
 }));
 
 function renderScreen() {
@@ -108,10 +111,34 @@ function renderScreen() {
   );
 }
 
-/** Marks a range the way a learner does: tap its first word, then its last. */
-function tapWords(first: number, last: number, block = 0) {
-  fireEvent.press(screen.getByTestId(`word-${block}-${first}`));
-  fireEvent.press(screen.getByTestId(`word-${block}-${last}`));
+/**
+ * Marks a range the way a learner does: press and hold on its first letter,
+ * then drag to its last. `from` and `to` are the two letters' offsets.
+ *
+ * The paragraph is laid out one character per line first, so a point picks
+ * an exact letter: the real layout comes from the device, and the maths of
+ * finding a letter in it has its own tests (lib/text-letters.test.ts).
+ */
+async function markLetters(text: string, from: number, to: number, block = 0) {
+  fireEvent(screen.getByTestId(`markable-text-${block}`), "textLayout", {
+    nativeEvent: {
+      lines: [...text].map((ch, i) => ({ text: ch, x: 0, y: i * 20, width: 10, height: 20 })),
+    },
+  });
+  const paragraph = screen.getByTestId(`markable-paragraph-${block}`);
+  const at = (i: number) => ({
+    locationX: 5,
+    locationY: i * 20 + 10,
+    pageX: 5,
+    pageY: i * 20 + 10,
+  });
+  fireEvent(paragraph, "responderGrant", { nativeEvent: at(from) });
+  // The hold is up once the lesson stops scrolling under the finger --
+  // waited on rather than slept through, since a busy CI runner can fire the
+  // timer late.
+  await waitFor(() => expect(screen.getByTestId("lesson-scroll").props.scrollEnabled).toBe(false));
+  fireEvent(paragraph, "responderMove", { nativeEvent: at(to) });
+  fireEvent(paragraph, "responderRelease", { nativeEvent: at(to) });
 }
 
 function readyDocumentWithParagraph(text: string) {
@@ -130,6 +157,7 @@ function readyDocumentWithParagraph(text: string) {
 
 beforeEach(() => {
   mockTabParam = undefined;
+  mockTocParam = undefined;
   mockGetDocument.mockReset();
   mockCreateSignedUrl.mockReset();
   mockListAnnotations.mockReset().mockResolvedValue([]);
@@ -439,11 +467,11 @@ test("the note tool anchors a note to the words you pick", async () => {
   renderScreen();
   await screen.findByText("Hello world again");
 
-  // Notes are picked the way highlights are: first word, then last. Before,
-  // the only note the phone could make covered the whole paragraph.
+  // Notes are picked the way highlights are: hold, then drag. Before, the
+  // only note the phone could make covered the whole paragraph.
   fireEvent.press(screen.getByLabelText("Note"));
-  fireEvent.press(await screen.findByTestId("word-0-0"));
-  fireEvent.press(screen.getByTestId("word-0-6"));
+  await screen.findByTestId("markable-paragraph-0");
+  await markLetters("Hello world again", 0, 10); // "Hello world"
 
   fireEvent.changeText(await screen.findByPlaceholderText("Note..."), "About the opening");
   fireEvent.press(screen.getByText("Save"));
@@ -1048,33 +1076,6 @@ test("the Notes overlay closes via its Close button", async () => {
   await waitFor(() => expect(screen.queryByText("No notes yet.")).toBeNull());
 });
 
-test("the Contents overlay lists the current sub-chapter's lessons and navigates on press", async () => {
-  mockGetDocument.mockResolvedValue({
-    ...readyDocumentWithParagraph("Hello world"),
-    sub_chapter: {
-      id: "sc1",
-      title: "Sub A",
-      chapter: { id: "c1", book_id: "b1", title: "Chapter One" },
-    },
-  });
-  mockListDocuments.mockResolvedValue([
-    { id: "d1", title: "Intro to Systems", created_at: "2026-01-01", status: "ready" },
-    { id: "d2", title: "Second lesson", created_at: "2026-01-01", status: "ready" },
-  ]);
-
-  renderScreen();
-  await screen.findByText("Hello world");
-
-  fireEvent.press(screen.getByLabelText("Contents"));
-
-  await screen.findByText("Second lesson");
-  expect(mockListDocuments).toHaveBeenCalledWith("sc1");
-
-  fireEvent.press(screen.getByText("Second lesson"));
-
-  expect(router.push).toHaveBeenCalledWith("/learn/d2");
-});
-
 test("the Contents overlay falls back to the Uncategorized bucket when the lesson has no sub-chapter", async () => {
   mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
   mockListDocuments.mockResolvedValue([
@@ -1116,7 +1117,7 @@ test("a highlight renders with its stored color", async () => {
   });
 });
 
-test("with the yellow highlight armed, tapping a word twice highlights exactly that word", async () => {
+test("with the yellow highlight armed, hold and drag highlights exactly those letters", async () => {
   mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
 
   renderScreen();
@@ -1124,21 +1125,42 @@ test("with the yellow highlight armed, tapping a word twice highlights exactly t
 
   fireEvent.press(screen.getByLabelText("Highlight — yellow"));
 
-  // Swapped to tappable words — the long-press Pressable is gone.
+  // Swapped to the markable paragraph — the long-press Pressable is gone.
   expect(screen.queryByTestId("paragraph-0")).toBeNull();
-  expect(screen.getByText("Tap the first word, then the last.")).toBeTruthy();
+  expect(screen.getByText("Press and hold, then drag across the text to mark it.")).toBeTruthy();
 
-  tapWords(0, 0);
+  // From the second "l" of "Hello" to the "o" of "world": letter by letter,
+  // so it starts and stops inside the words.
+  await markLetters("Hello world", 3, 7);
 
   await waitFor(() =>
     expect(mockCreateAnnotation).toHaveBeenCalledWith("d1", {
       type: "highlight",
       block_index: 0,
-      start_offset: 0,
-      end_offset: 5,
+      start_offset: 3,
+      end_offset: 8,
       color: "yellow",
     }),
   );
+});
+
+test("a quick swipe over the text scrolls instead of marking", async () => {
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+
+  renderScreen();
+  await screen.findByText("Hello world");
+  fireEvent.press(screen.getByLabelText("Highlight — yellow"));
+
+  const paragraph = await screen.findByTestId("markable-paragraph-0");
+  fireEvent(paragraph, "responderGrant", {
+    nativeEvent: { locationX: 5, locationY: 10, pageX: 5, pageY: 10 },
+  });
+  // Moving before the hold is up is a scroll.
+  fireEvent(paragraph, "responderMove", { nativeEvent: { pageX: 5, pageY: 80 } });
+  await act(() => new Promise((resolve) => setTimeout(resolve, 300)));
+  fireEvent(paragraph, "responderRelease", { nativeEvent: {} });
+
+  expect(mockCreateAnnotation).not.toHaveBeenCalled();
 });
 
 test("deactivating the tool restores long-press-for-notes on the paragraph", async () => {
@@ -1153,7 +1175,7 @@ test("deactivating the tool restores long-press-for-notes on the paragraph", asy
 
   fireEvent.press(yellowSwatch);
   expect(await screen.findByTestId("paragraph-0")).toBeTruthy();
-  expect(screen.queryByTestId("tappable-paragraph-0")).toBeNull();
+  expect(screen.queryByTestId("markable-paragraph-0")).toBeNull();
 });
 
 test("the eraser splits a highlight when the erased words are in the middle", async () => {
@@ -1176,7 +1198,7 @@ test("the eraser splits a highlight when the erased words are in the middle", as
   await screen.findByText("alpha beta gamma delta");
 
   fireEvent.press(screen.getByLabelText("Eraser"));
-  tapWords(6, 11); // "beta" .. "gamma"
+  await markLetters("alpha beta gamma delta", 6, 15); // "beta gamma"
 
   await waitFor(() => expect(mockDeleteAnnotation).toHaveBeenCalledWith("d1", "a1"));
   expect(mockCreateAnnotation).toHaveBeenCalledWith("d1", {
@@ -1215,7 +1237,7 @@ test("the eraser removes a highlight entirely with no remainder when fully erase
   await screen.findByText("Hello world");
 
   fireEvent.press(screen.getByLabelText("Eraser"));
-  tapWords(0, 0); // "Hello"
+  await markLetters("Hello world", 0, 4); // "Hello"
 
   await waitFor(() => expect(mockDeleteAnnotation).toHaveBeenCalledWith("d1", "a1"));
   expect(mockCreateAnnotation).not.toHaveBeenCalled();
@@ -1594,12 +1616,12 @@ test("highlights stay painted while a marker is picked up", async () => {
   await screen.findByText("Hello");
   fireEvent.press(screen.getByLabelText("Highlight — blue"));
 
-  const word = screen.getByTestId("word-0-0");
-  expect(word.props.style).toEqual(
+  const marked = within(await screen.findByTestId("markable-text-0")).getByText("Hello");
+  expect(marked.props.style).toEqual(
     expect.arrayContaining([{ backgroundColor: lightColors.highlight0 }]),
   );
   // And the hint is pinned on screen, not at the top of the text.
-  expect(screen.getByText("Tap the first word, then the last.")).toBeTruthy();
+  expect(screen.getByText("Press and hold, then drag across the text to mark it.")).toBeTruthy();
 });
 
 test("in the PDF view the same tools are in the tool notch, plus the pen", async () => {
@@ -1622,4 +1644,76 @@ test("in the PDF view the same tools are in the tool notch, plus the pen", async
 
   fireEvent.press(screen.getByLabelText("Eraser"));
   expect(screen.getByTestId("pdf-tool").props.children).toBe("eraser:");
+});
+
+test("the contents show the whole chapter: its title, each sub-chapter, and every lesson", async () => {
+  mockGetDocument.mockResolvedValue({
+    ...readyDocumentWithParagraph("Hello world"),
+    sub_chapter: { id: "sc1", title: "Sub A", chapter: { id: "c1", title: "Chapter One" } },
+  });
+  const node = (id: string, title: string) => ({
+    id,
+    title,
+    question_count: 0,
+    answered_count: 0,
+    correct_count: 0,
+    partial_count: 0,
+    incorrect_count: 0,
+    points_awarded: 0,
+    points_possible: 0,
+    eligible_lesson_count: 0,
+    completed_lesson_count: 0,
+  });
+  mockGetQuestionBankTree.mockResolvedValue({
+    books: [
+      {
+        ...node("b1", "Book"),
+        chapters: [
+          {
+            ...node("c1", "Chapter One"),
+            sub_chapters: [
+              {
+                ...node("sc1", "Sub A"),
+                lessons: [node("d1", "Intro to Systems"), node("d2", "Second lesson")],
+              },
+              { ...node("sc2", "Sub B"), lessons: [node("d3", "Third lesson")] },
+            ],
+          },
+          {
+            ...node("c2", "Chapter Two"),
+            sub_chapters: [{ ...node("sc3", "Sub C"), lessons: [node("d4", "Elsewhere")] }],
+          },
+        ],
+      },
+    ],
+    uncategorized_lessons: [],
+  });
+
+  renderScreen();
+  await screen.findByText("Hello world");
+  fireEvent.press(screen.getByLabelText("Contents"));
+
+  expect(await screen.findByText("Chapter One")).toBeTruthy();
+  expect(await screen.findByRole("header", { name: "Sub A" })).toBeTruthy();
+  expect(screen.getByRole("header", { name: "Sub B" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Intro to Systems", selected: true })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Second lesson", selected: false })).toBeTruthy();
+  expect(screen.getByText("Third lesson")).toBeTruthy();
+  expect(screen.queryByText("Elsewhere")).toBeNull();
+
+  // Any lesson in the chapter opens, not only this sub-chapter's.
+  fireEvent.press(screen.getByText("Third lesson"));
+  // The contents stay open on the lesson it leads to.
+  expect(router.push).toHaveBeenCalledWith("/learn/d3?toc=1");
+});
+
+test("a lesson opened from the contents arrives with them still open", async () => {
+  mockTocParam = "1";
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+  mockListDocuments.mockResolvedValue([]);
+
+  renderScreen();
+  await screen.findByText("Hello world");
+
+  expect(await screen.findByText("Lessons in this chapter")).toBeTruthy();
 });

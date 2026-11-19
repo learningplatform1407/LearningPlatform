@@ -33,15 +33,7 @@ function errorCode(err: unknown): string | null {
  * component has to remember: there is nothing to reveal until the server
  * decides there is.
  */
-export function DailyQuestionBody({
-  day,
-  onAnswered,
-}: {
-  day: DailyQuestion;
-  /** Pins the overlay open, since the refetch below changes what `answerable`
-   * and `attempt` say and the host derives its open state from them. */
-  onAnswered: () => void;
-}) {
+export function DailyQuestionBody({ day }: { day: DailyQuestion }) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<string[]>([]);
@@ -54,9 +46,6 @@ export function DailyQuestionBody({
       getBrowserApiClient().answerDailyQuestion(questionId, selected),
     onSuccess: () => {
       setError(null);
-      // Before the invalidation, so the overlay is already pinned open by the
-      // time the refetched day arrives saying it is no longer answerable.
-      onAnswered();
       queryClient.invalidateQueries({ queryKey: ["daily-question"] });
     },
     onError: (err) => {

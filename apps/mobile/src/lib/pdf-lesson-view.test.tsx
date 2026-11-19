@@ -1,7 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
-import { PdfLessonView, type PdfTool, rectsForWords, wordAt } from "./pdf-lesson-view";
+import {
+  lettersOfWords,
+  PdfLessonView,
+  type PdfTool,
+  rectsForWords,
+  wordAt,
+} from "./pdf-lesson-view";
 
 const mockGetPageInk = jest.fn();
 const mockGetPageWords = jest.fn();
@@ -69,6 +75,19 @@ test("a tap between two words picks the nearer one", () => {
   expect(wordAt(WORDS, 0.9, 0.5)).toBeNull();
 });
 
+test("each word splits into letters, by their typical widths, ending where the word does", () => {
+  const letters = lettersOfWords(WORDS);
+  expect(letters.map((l) => l.text).join("")).toBe("HelloworldNext");
+  const hello = letters.slice(0, 5);
+  expect(hello[0]!.box[0]).toBeCloseTo(0.1);
+  expect(hello[4]!.box[2]).toBeCloseTo(0.3);
+  // An "l" is narrower than an "H".
+  const width = (box: number[]) => box[2]! - box[0]!;
+  expect(width(hello[2]!.box)).toBeLessThan(width(hello[0]!.box));
+  // Letters keep their word's line, so a run of them joins per line.
+  expect(letters[10]!.line).toBe(2);
+});
+
 test("every page is its own card, and only the first renders before it has loaded", async () => {
   renderView(null);
   fireEvent(await screen.findByTestId("pdf-column"), "layout", {
@@ -81,24 +100,71 @@ test("every page is its own card, and only the first renders before it has loade
   expect(screen.getAllByTestId("mock-pdf")).toHaveLength(1);
 });
 
-test("with a marker up, tapping the first and last word saves a highlight", async () => {
+test("with a marker up, press and hold, then drag, saves a highlight letter by letter", async () => {
+  const onMarkingChange = jest.fn();
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <PdfLessonView
+        documentId="d1"
+        storagePath="lectures/a.pdf"
+        pageCount={3}
+        tool={{ type: "highlight", color: "blue" }}
+        viewportTop={0}
+        viewportHeight={800}
+        onMarkingChange={onMarkingChange}
+      />
+    </QueryClientProvider>,
+  );
+  fireEvent(await screen.findByTestId("pdf-column"), "layout", {
+    nativeEvent: { layout: { x: 0, y: 0, width: 300, height: 1000 } },
+  });
+  await waitFor(() => expect(mockGetPageWords).toHaveBeenCalledWith("d1", 1));
+  // Letters exist once the page's words have arrived.
+  await act(() => mockGetPageWords.mock.results[0]!.value);
+  const layer = screen.getByTestId("pdf-mark-layer-1");
+  // Page 1 is 300 wide and 300 * 1.414 tall.
+  const height = 300 * 1.414;
+  const from = { x: 0.2 * 300, y: 0.12 * height }; // the "e" of "Hello"
+  const to = { x: 0.12 * 300, y: 0.22 * height }; // the "N" of "Next"
+
+  fireEvent(layer, "responderGrant", {
+    nativeEvent: { locationX: from.x, locationY: from.y, pageX: from.x, pageY: from.y },
+  });
+  // The hold, waited on rather than slept through: a busy CI runner can fire
+  // the timer late.
+  await waitFor(() => expect(onMarkingChange).toHaveBeenLastCalledWith(true));
+  expect(screen.getAllByTestId("pdf-mark-preview")).toHaveLength(1);
+
+  fireEvent(layer, "responderMove", { nativeEvent: { pageX: to.x, pageY: to.y } });
+  // Across two printed lines: one preview rectangle per line.
+  expect(screen.getAllByTestId("pdf-mark-preview")).toHaveLength(2);
+  fireEvent(layer, "responderRelease", { nativeEvent: {} });
+
+  expect(onMarkingChange).toHaveBeenLastCalledWith(false);
+  await waitFor(() =>
+    expect(mockUpdatePageInk).toHaveBeenCalledWith("d1", 1, {
+      strokes: [],
+      highlights: [{ color: "blue", rects: rectsForWords(lettersOfWords(WORDS).slice(1, 11)) }],
+    }),
+  );
+});
+
+test("a quick swipe on a page is a scroll, not a mark", async () => {
   renderView({ type: "highlight", color: "blue" });
   fireEvent(await screen.findByTestId("pdf-column"), "layout", {
     nativeEvent: { layout: { x: 0, y: 0, width: 300, height: 1000 } },
   });
   await waitFor(() => expect(mockGetPageWords).toHaveBeenCalledWith("d1", 1));
+  const layer = await screen.findByTestId("pdf-mark-layer-1");
 
-  const page = screen.getByLabelText("Mark words on page 1");
-  // Page 1 is 300 wide and 300 * 1.414 tall.
-  const height = 300 * 1.414;
-  await waitFor(() => {
-    fireEvent.press(page, { nativeEvent: { locationX: 0.2 * 300, locationY: 0.12 * height } });
-    fireEvent.press(page, { nativeEvent: { locationX: 0.15 * 300, locationY: 0.22 * height } });
-    expect(mockUpdatePageInk).toHaveBeenCalled();
+  fireEvent(layer, "responderGrant", {
+    nativeEvent: { locationX: 60, locationY: 50, pageX: 60, pageY: 50 },
   });
+  fireEvent(layer, "responderMove", { nativeEvent: { pageX: 60, pageY: 120 } });
+  await act(() => new Promise((resolve) => setTimeout(resolve, 300)));
+  fireEvent(layer, "responderRelease", { nativeEvent: {} });
 
-  expect(mockUpdatePageInk).toHaveBeenCalledWith("d1", 1, {
-    strokes: [],
-    highlights: [{ color: "blue", rects: rectsForWords(WORDS) }],
-  });
+  expect(screen.queryByTestId("pdf-mark-preview")).toBeNull();
+  expect(mockUpdatePageInk).not.toHaveBeenCalled();
 });

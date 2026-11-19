@@ -119,7 +119,7 @@ describe("spliceAnnotations", () => {
 
     // Every character appears exactly once across all segments — no duplication.
     expect(segments.map((s) => s.text).join("")).toBe("abcdefghij");
-    expect(segments.map((s) => s.text)).toEqual(["abc", "def", "ghi", "j"]);
+    expect(segments.map((s) => s.text)).toEqual(["abc", "defghi", "j"]);
   });
 
   test("the most recently created annotation wins the visual in an overlapping region", () => {
@@ -138,12 +138,10 @@ describe("spliceAnnotations", () => {
       }),
     ]);
 
-    const overlap = segments.find((s) => s.text === "def");
+    const overlap = segments.find((s) => s.text === "defghi");
     expect(overlap?.annotation?.id).toBe("newer");
     const olderOnly = segments.find((s) => s.text === "abc");
     expect(olderOnly?.annotation?.id).toBe("older");
-    const newerOnly = segments.find((s) => s.text === "ghi");
-    expect(newerOnly?.annotation?.id).toBe("newer");
   });
 
   test("a highlight fully inside another still renders every character once", () => {
@@ -158,6 +156,20 @@ describe("spliceAnnotations", () => {
     expect(segments.find((s) => s.text === "def")?.annotation?.id).toBe("a2");
     expect(segments.find((s) => s.text === "abc")?.annotation?.id).toBe("a1");
     expect(segments.find((s) => s.text === "ghij")?.annotation?.id).toBe("a1");
+  });
+
+  test("a newer highlight cut in two by an older one's edge stays one run", () => {
+    // a2 (newer) covers 2-8; a1's edge at 5 falls inside it.
+    const segments = spliceAnnotations("abcdefghij", [
+      highlight({ id: "a1", start_offset: 0, end_offset: 5, created_at: "2026-01-01T00:00:00Z" }),
+      highlight({ id: "a2", start_offset: 2, end_offset: 8, created_at: "2026-01-02T00:00:00Z" }),
+    ]);
+
+    expect(segments.map((s) => [s.text, s.annotation?.id ?? null])).toEqual([
+      ["ab", "a1"],
+      ["cdefgh", "a2"],
+      ["ij", null],
+    ]);
   });
 });
 

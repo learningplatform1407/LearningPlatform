@@ -2,11 +2,12 @@ import type { PageHighlight, Stroke, StrokePoint } from "@lp/contracts";
 
 import { findQuote } from "@/lib/text-offset";
 
-/** A word's box on a page, in page units ([0, 1] of width and height),
- * with its position in reading order. */
+/** A word's -- or a letter's -- box on a page, in page units ([0, 1] of
+ * width and height), with its position in reading order. Words are what
+ * quoted passages are found by; letters are what marking moves by. */
 export interface PageWord {
   index: number;
-  /** The word as pdf.js read it -- used to find quoted passages. */
+  /** The word (or letter) as pdf.js read it. */
   text: string;
   x0: number;
   y0: number;
@@ -54,6 +55,31 @@ export function wordsFromTextItems(
   pageHeight: number,
   measure?: MeasureText,
 ): PageWord[] {
+  return boxesFromTextItems(/\S+/g, items, pageWidth, pageHeight, measure);
+}
+
+/**
+ * The same, one box per letter (every character but whitespace), so a PDF
+ * highlight can start and stop inside a word, as in Text mode. Each letter
+ * ends where the measured text up to it does, so the boxes follow the real
+ * glyph widths when `measure` is given.
+ */
+export function lettersFromTextItems(
+  items: TextItemLike[],
+  pageWidth: number,
+  pageHeight: number,
+  measure?: MeasureText,
+): PageWord[] {
+  return boxesFromTextItems(/\S/gu, items, pageWidth, pageHeight, measure);
+}
+
+function boxesFromTextItems(
+  pattern: RegExp,
+  items: TextItemLike[],
+  pageWidth: number,
+  pageHeight: number,
+  measure?: MeasureText,
+): PageWord[] {
   const words: PageWord[] = [];
   for (const item of items) {
     if (!item.str.trim() || item.width <= 0) continue;
@@ -66,7 +92,7 @@ export function wordsFromTextItems(
       total > 0
         ? (measure!(item.str.slice(0, i), item) / total) * item.width
         : (i / item.str.length) * item.width;
-    for (const match of item.str.matchAll(/\S+/g)) {
+    for (const match of item.str.matchAll(pattern)) {
       const x0 = e + at(match.index);
       const x1 = e + at(match.index + match[0].length);
       // `f` is the baseline. The box runs from the font's ascent above it

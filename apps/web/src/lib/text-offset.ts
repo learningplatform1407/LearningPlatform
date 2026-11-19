@@ -88,7 +88,12 @@ export function spliceAnnotations(text: string, annotations: Annotation[]): Anno
         ? null
         : covering.reduce((latest, a) => (a.created_at > latest.created_at ? a : latest));
 
-    segments.push({ text: text.slice(start, end), annotation: winner });
+    // A run another annotation's edge cut in two, but with the same winner on
+    // both sides, stays one segment: drawn as two, it shows a seam where the
+    // other mark began.
+    const previous = segments[segments.length - 1];
+    if (previous && previous.annotation === winner) previous.text += text.slice(start, end);
+    else segments.push({ text: text.slice(start, end), annotation: winner });
   }
   return segments;
 }

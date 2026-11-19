@@ -87,6 +87,10 @@ export function Overlay({
   // closed drawer fires onDismissed on its first render, which for the
   // contents drawer would mean navigating on arrival.
   const wasVisibleRef = useRef(visible);
+  // A side panel open from its first render was already on screen -- the
+  // contents drawer carried over to the next lesson -- so it doesn't slide
+  // in again. Later openings slide as usual.
+  const skipSlideRef = useRef(visible);
   // Held in a ref so a caller passing an inline closure cannot restart the
   // animation on every render.
   const onDismissedRef = useRef(onDismissed);
@@ -99,6 +103,11 @@ export function Overlay({
     if (!side) return;
     if (visible) {
       wasVisibleRef.current = true;
+      if (skipSlideRef.current) {
+        skipSlideRef.current = false;
+        progress.setValue(1);
+        return;
+      }
       // Reset first, so reopening slides in again rather than appearing in
       // place at the value the last open left behind.
       progress.setValue(0);

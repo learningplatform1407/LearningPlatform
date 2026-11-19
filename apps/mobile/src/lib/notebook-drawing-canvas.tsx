@@ -1,4 +1,4 @@
-import { HIGHLIGHT_COLOR_NAMES, pageColors } from "@lp/ui";
+import { HIGHLIGHT_COLOR_NAMES, PEN_SIZES, PEN_SIZE_SCALE, pageColors, type PenSize } from "@lp/ui";
 import type { Stroke, StrokePoint } from "@lp/contracts";
 import { useState } from "react";
 import {
@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import Svg, { Path, Polyline } from "react-native-svg";
 
-import { spacing } from "@/lib/theme";
+import { radii, spacing } from "@/lib/theme";
 import { makeStyles } from "@/lib/theme-context";
 import { useI18n } from "@/lib/i18n";
 
@@ -32,6 +32,7 @@ export const NOTEBOOK_PEN_COLORS = [
   ...HIGHLIGHT_COLOR_NAMES.map((name, index) => ({ name, hex: pageColors.pens[index]! })),
 ];
 
+// The medium nib; the chosen size scales it.
 const STROKE_WIDTH = 0.006;
 
 // Normalized [0,1] hit radius for the eraser -- a touch point within this
@@ -92,6 +93,7 @@ interface DrawingCanvasProps {
    * own toolbar is hidden. */
   tool?: "pen" | "eraser";
   penColor?: string;
+  penSize?: PenSize;
   /** Each point the eraser passes over, for a parent that erases more than
    * strokes there (a PDF page's highlights). */
   onErasePoint?: (point: StrokePoint) => void;
@@ -108,6 +110,7 @@ export function DrawingCanvas({
   pageKey,
   tool: toolProp,
   penColor,
+  penSize: penSizeProp,
   onErasePoint,
   onGestureEnd,
 }: DrawingCanvasProps) {
@@ -121,6 +124,8 @@ export function DrawingCanvas({
   const controlled = toolProp !== undefined;
   const tool = toolProp ?? ownTool;
   const color = penColor ?? ownColor;
+  const [ownPenSize, setPenSize] = useState<PenSize>("medium");
+  const strokeWidth = STROKE_WIDTH * PEN_SIZE_SCALE[penSizeProp ?? ownPenSize];
   const [drawingStroke, setDrawingStroke] = useState<StrokePoint[] | null>(null);
   const [erasingPreview, setErasingPreview] = useState<Stroke[] | null>(null);
   const [eraseBase, setEraseBase] = useState<Stroke[] | null>(null);
@@ -220,7 +225,7 @@ export function DrawingCanvas({
     const points = drawingStroke ?? [];
     setDrawingStroke(null);
     if (points.length >= 2) {
-      commitChange(strokes, [...strokes, { color, width: STROKE_WIDTH, points }]);
+      commitChange(strokes, [...strokes, { color, width: strokeWidth, points }]);
     }
     onGestureEnd?.();
   }
@@ -254,6 +259,23 @@ export function DrawingCanvas({
                 color === swatch.hex && styles.swatchActive,
               ]}
             />
+          ))}
+          {PEN_SIZES.map((nib) => (
+            <Pressable
+              key={nib}
+              onPress={() => setPenSize(nib)}
+              accessibilityRole="button"
+              accessibilityLabel={t("notebook.penSize", { size: t(`penSizes.${nib}`) })}
+              accessibilityState={{ selected: ownPenSize === nib }}
+              style={[styles.sizeButton, ownPenSize === nib && styles.sizeButtonActive]}
+            >
+              <View
+                style={[
+                  styles.sizeDot,
+                  { width: 4 * PEN_SIZE_SCALE[nib], height: 4 * PEN_SIZE_SCALE[nib] },
+                ]}
+              />
+            </Pressable>
           ))}
           <Pressable
             onPress={() => setTool("pen")}
@@ -322,12 +344,12 @@ export function DrawingCanvas({
             {drawingStroke && drawingStroke.length > 0 && (
               <Path
                 d={strokePath(
-                  { color, width: STROKE_WIDTH, points: drawingStroke },
+                  { color, width: strokeWidth, points: drawingStroke },
                   size.width,
                   size.height,
                 )}
                 stroke={color}
-                strokeWidth={Math.max(1, STROKE_WIDTH * size.width)}
+                strokeWidth={Math.max(1, strokeWidth * size.width)}
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 fill="none"
@@ -400,6 +422,22 @@ const useStyles = makeStyles((colors) => ({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  sizeButton: {
+    width: 28,
+    height: 28,
+    borderRadius: radii.full,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sizeButtonActive: {
+    backgroundColor: colors.muted,
+    borderWidth: 1,
+    borderColor: colors.foreground,
+  },
+  sizeDot: {
+    borderRadius: radii.full,
+    backgroundColor: colors.foreground,
   },
   swatchActive: {
     borderWidth: 3,

@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { router } from "expo-router";
 
+import { DailyQuestionProvider } from "@/lib/daily-question-overlay";
+
 import LearnScreen from "../index";
 
 const mockListRecentLessons = jest.fn();
@@ -22,7 +24,7 @@ jest.mock("@/lib/api-client", () => ({
   }),
 }));
 
-jest.mock("expo-router", () => ({ router: { push: jest.fn() } }));
+jest.mock("expo-router", () => ({ router: { push: jest.fn() }, usePathname: () => "/learn" }));
 
 // Every date here comes from this, never from the clock — the same rule the
 // components follow, so the suite stays green on any day.
@@ -97,7 +99,9 @@ function renderScreen() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <LearnScreen />
+      <DailyQuestionProvider>
+        <LearnScreen />
+      </DailyQuestionProvider>
     </QueryClientProvider>,
   );
 }
@@ -110,11 +114,11 @@ beforeEach(async () => {
   mockAnswerDailyQuestion.mockReset();
   (router.push as jest.Mock).mockReset();
   // The dismissal marker is a real in-memory AsyncStorage here, so it would
-  // otherwise leak between tests and silence the auto-open.
+  // otherwise leak between tests and silence the notice.
   await AsyncStorage.clear();
 
   // An empty bank by default: the quietest state, so a test that does not care
-  // about the question of the day is not interrupted by its sheet.
+  // about the question of the day sees no notice.
   mockGetDailyQuestion.mockResolvedValue(emptyBank());
   mockGetDailyQuestionCalendar.mockResolvedValue(calendar());
 });
@@ -196,37 +200,43 @@ test("shows the rest as Recently opened, excluding the Continue lesson", async (
 });
 
 test("offers the question of the day even while the lessons query is still loading", async () => {
-  // The sheet used to be impossible here: the screen returned early for
-  // loading, so anything outside the success branch simply did not exist.
+  // The screen returns early for loading; the notice lives above it in the
+  // layout, so it does not wait for an unrelated query.
   mockListRecentLessons.mockReturnValue(new Promise(() => {}));
   mockGetDailyQuestion.mockResolvedValue(unanswered());
 
   renderScreen();
 
-  expect(await screen.findByText("Which of these are prime?")).toBeTruthy();
+  expect(await screen.findByText("Question of the day available")).toBeTruthy();
 });
 
-test("auto-opens today's unanswered question", async () => {
+test("offers today's unanswered question with a notice instead of opening it", async () => {
   mockListRecentLessons.mockResolvedValue([]);
   mockGetDailyQuestion.mockResolvedValue(unanswered());
 
   renderScreen();
 
+  expect(await screen.findByText("Question of the day available")).toBeTruthy();
+  expect(screen.queryByText("Check answer")).toBeNull();
+
+  fireEvent.press(screen.getByText("Question of the day available"));
+
   expect(await screen.findByText("Which of these are prime?")).toBeTruthy();
   expect(screen.getByText("Check answer")).toBeTruthy();
-  expect(screen.getByText("Close")).toBeTruthy();
+  // Opening it is the offer taken up: the marker is written, so the notice
+  // does not come back on the next visit.
+  await waitFor(async () => expect(await AsyncStorage.getItem("lp.qotd.dismissed")).toBe(TODAY));
 });
 
-test("closes with Close, and does not auto-open again on a fresh mount", async () => {
+test("a dismissed notice stays away for the day, even on a fresh mount", async () => {
   mockListRecentLessons.mockResolvedValue([]);
   mockGetDailyQuestion.mockResolvedValue(unanswered());
 
   const first = renderScreen();
-  await screen.findByText("Which of these are prime?");
+  await screen.findByText("Question of the day available");
 
-  fireEvent.press(screen.getByText("Close"));
-  // RN's Modal unmounts asynchronously, so this has to be awaited.
-  await waitFor(() => expect(screen.queryByText("Check answer")).toBeNull());
+  fireEvent.press(screen.getByLabelText("Dismiss for today"));
+  await waitFor(() => expect(screen.queryByText("Question of the day available")).toBeNull());
   // Asserting the stored value, not that setItem was called: the official mock
   // backs these with a real in-memory store, so the value is the behaviour.
   await waitFor(async () => expect(await AsyncStorage.getItem("lp.qotd.dismissed")).toBe(TODAY));
@@ -237,16 +247,17 @@ test("closes with Close, and does not auto-open again on a fresh mount", async (
   renderScreen();
 
   await screen.findByText("Library");
+  expect(screen.queryByText("Question of the day available")).toBeNull();
   expect(screen.queryByText("Check answer")).toBeNull();
 });
 
-test("does not open before the dismissal marker has been read", async () => {
+test("does not show the notice before the dismissal marker has been read", async () => {
   mockListRecentLessons.mockResolvedValue([]);
   mockGetDailyQuestion.mockResolvedValue(unanswered());
   // Hold the marker read open. The API query can win this race — a warm
   // response against a cold AsyncStorage — and an unread marker is
   // `undefined`, which compares unequal to today's date. Without the
-  // isSuccess guard the sheet would open on someone who had already
+  // isSuccess guard the notice would flash at someone who had already
   // dismissed it today.
   let release: (value: string | null) => void = () => {};
   // AsyncStorage's official jest mock is built out of jest.fn()s, so
@@ -265,13 +276,13 @@ test("does not open before the dismissal marker has been read", async () => {
     renderScreen();
     // The card proves today's question has arrived...
     await screen.findByText("Answer today's question.");
-    // ...and the sheet is still shut, because the marker is unknown.
-    expect(screen.queryByText("Check answer")).toBeNull();
+    // ...and the notice is still hidden, because the marker is unknown.
+    expect(screen.queryByText("Question of the day available")).toBeNull();
 
     // Not suppressed, only deferred: once the marker says "not dismissed",
-    // the question offers itself.
+    // the notice shows.
     release(null);
-    expect(await screen.findByText("Check answer")).toBeTruthy();
+    expect(await screen.findByText("Question of the day available")).toBeTruthy();
   } finally {
     if (inMemoryGetItem) {
       getItem.mockImplementation(inMemoryGetItem);
@@ -281,7 +292,7 @@ test("does not open before the dismissal marker has been read", async () => {
   }
 });
 
-test("the hub card reopens it after it was dismissed", async () => {
+test("the hub card opens it after the notice was dismissed", async () => {
   mockListRecentLessons.mockResolvedValue([]);
   mockGetDailyQuestion.mockResolvedValue(unanswered());
   await AsyncStorage.setItem("lp.qotd.dismissed", TODAY);
@@ -289,20 +300,21 @@ test("the hub card reopens it after it was dismissed", async () => {
   renderScreen();
 
   await screen.findByText("Answer today's question.");
-  expect(screen.queryByText("Check answer")).toBeNull();
+  expect(screen.queryByText("Question of the day available")).toBeNull();
 
   fireEvent.press(screen.getByText("Question of the day"));
 
   expect(await screen.findByText("Check answer")).toBeTruthy();
 });
 
-test("does not auto-open a day that was already answered", async () => {
+test("offers no notice for a day that was already answered", async () => {
   mockListRecentLessons.mockResolvedValue([]);
   mockGetDailyQuestion.mockResolvedValue(answered());
 
   renderScreen();
 
   expect(await screen.findByText("Answered correctly, 2/2 points.")).toBeTruthy();
+  expect(screen.queryByText("Question of the day available")).toBeNull();
   expect(screen.queryByText("Close")).toBeNull();
 });
 
@@ -312,6 +324,7 @@ test("stays quiet when the bank holds no question", async () => {
   renderScreen();
 
   expect(await screen.findByText("No question today.")).toBeTruthy();
+  expect(screen.queryByText("Question of the day available")).toBeNull();
   expect(screen.queryByText("Close")).toBeNull();
 });
 
@@ -329,7 +342,7 @@ test("a past day that was not answered shows the question with no way to answer"
   } satisfies DailyQuestion);
 
   renderScreen();
-  // The bank is empty today, so nothing auto-opens; the card is the way in.
+  // The bank is empty today, so there is no notice; the card is the way in.
   fireEvent.press(await screen.findByText("Question of the day"));
 
   fireEvent.press(await screen.findByLabelText("Friday, October 9, 2026: not answered"));
@@ -350,6 +363,7 @@ test("answering keeps the sheet open, showing the score and reasoning", async ()
   mockAnswerDailyQuestion.mockResolvedValue(answered());
 
   renderScreen();
+  fireEvent.press(await screen.findByText("Question of the day available"));
   await screen.findByText("Which of these are prime?");
 
   // By role, not by text: the calendar grid above also contains a cell
@@ -369,6 +383,7 @@ test("asks for every day the grid renders, not just the month", async () => {
   mockGetDailyQuestion.mockResolvedValue(unanswered());
 
   renderScreen();
+  fireEvent.press(await screen.findByText("Question of the day available"));
   await screen.findByText("Check answer");
 
   // Six weeks, so October's grid also shows 28–30 September and early
@@ -392,7 +407,7 @@ test("a padding day from a neighbouring month is pressable like any other", asyn
   } satisfies DailyQuestion);
 
   renderScreen();
-  // The bank is empty today, so nothing auto-opens; the card is the way in.
+  // The bank is empty today, so there is no notice; the card is the way in.
   fireEvent.press(await screen.findByText("Question of the day"));
 
   fireEvent.press(await screen.findByLabelText("Tuesday, September 29, 2026: Answered correctly"));
@@ -401,7 +416,7 @@ test("a padding day from a neighbouring month is pressable like any other", asyn
   expect(await screen.findByText("Answers · correct — 2/2 points")).toBeTruthy();
 });
 
-test("closing an empty-bank day does not silence a question published later", async () => {
+test("opening an empty-bank day does not silence a question published later", async () => {
   mockListRecentLessons.mockResolvedValue([]);
 
   // The hub card still opens on a day with no question — it reports the
@@ -418,7 +433,7 @@ test("closing an empty-bank day does not silence a question published later", as
   mockGetDailyQuestion.mockResolvedValue(unanswered());
   renderScreen();
 
-  expect(await screen.findByText("Check answer")).toBeTruthy();
+  expect(await screen.findByText("Question of the day available")).toBeTruthy();
 });
 
 test("a day the calendar has no row for is not pressable", async () => {
@@ -426,6 +441,7 @@ test("a day the calendar has no row for is not pressable", async () => {
   mockGetDailyQuestion.mockResolvedValue(unanswered());
 
   renderScreen();
+  fireEvent.press(await screen.findByText("Question of the day available"));
   await screen.findByText("Check answer");
 
   // Days are drawn on demand and never backfilled, so a past date with no row

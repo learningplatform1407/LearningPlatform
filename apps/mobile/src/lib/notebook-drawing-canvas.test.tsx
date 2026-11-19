@@ -234,3 +234,45 @@ test("DrawingThumbnail renders without crashing for multiple strokes", () => {
 
   expect(screen.getByLabelText("Drawing preview")).toBeTruthy();
 });
+
+test("the pen draws at the size picked: thin, medium (the default) or thick", () => {
+  const onChange = jest.fn();
+  render(<DrawingCanvas strokes={[]} onChange={onChange} />);
+  const canvas = screen.getByLabelText("Drawing canvas");
+  fireEvent(canvas, "layout", layoutEvent(400, 300));
+
+  function draw() {
+    fireEvent(canvas, "responderGrant", { nativeEvent: { locationX: 10, locationY: 10 } });
+    fireEvent(canvas, "responderMove", { nativeEvent: { locationX: 50, locationY: 50 } });
+    fireEvent(canvas, "responderRelease", { nativeEvent: { locationX: 50, locationY: 50 } });
+    const strokes = onChange.mock.calls.at(-1)![0] as Stroke[];
+    return strokes.at(-1)!.width;
+  }
+
+  expect(screen.getByLabelText("Pen size — medium").props.accessibilityState).toMatchObject({
+    selected: true,
+  });
+  const medium = draw();
+  fireEvent.press(screen.getByLabelText("Pen size — thick"));
+  const thick = draw();
+  fireEvent.press(screen.getByLabelText("Pen size — thin"));
+  const thin = draw();
+
+  expect(thick).toBeGreaterThan(medium);
+  expect(thin).toBeLessThan(medium);
+});
+
+test("a parent that owns the tools sets the pen size, and the canvas hides its own picker", () => {
+  const onChange = jest.fn();
+  render(<DrawingCanvas strokes={[]} onChange={onChange} tool="pen" penSize="thick" />);
+  const canvas = screen.getByLabelText("Drawing canvas");
+  fireEvent(canvas, "layout", layoutEvent(400, 300));
+  expect(screen.queryByLabelText("Pen size — thick")).toBeNull();
+
+  fireEvent(canvas, "responderGrant", { nativeEvent: { locationX: 10, locationY: 10 } });
+  fireEvent(canvas, "responderMove", { nativeEvent: { locationX: 50, locationY: 50 } });
+  fireEvent(canvas, "responderRelease", { nativeEvent: { locationX: 50, locationY: 50 } });
+
+  const [strokes] = onChange.mock.calls[0] as [Stroke[]];
+  expect(strokes[0]!.width).toBeCloseTo(0.006 * 2.2);
+});

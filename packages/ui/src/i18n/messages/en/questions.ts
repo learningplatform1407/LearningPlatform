@@ -68,4 +68,7 @@ export const daily = {
   calendarFailed: "Failed to load the calendar.",
   dayFailed: "Failed to load that day.",
   loadFailed: "Failed to load the question of the day.",
+  available: "Question of the day available",
+  availableAction: "Answer it",
+  dismissNotice: "Dismiss for today",
 };

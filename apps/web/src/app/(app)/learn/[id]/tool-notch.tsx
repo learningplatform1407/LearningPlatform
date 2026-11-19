@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 
-import { HIGHLIGHT_COLOR_NAMES, pageColors } from "@lp/ui";
+import { HIGHLIGHT_COLOR_NAMES, PEN_SIZES, PEN_SIZE_SCALE, pageColors, type PenSize } from "@lp/ui";
 
 import { BulbIcon, EraserIcon, NoteIcon, PenIcon, UndoIcon } from "@/components/icons";
 import { useToast } from "@/components/toast";
@@ -31,6 +31,7 @@ export function ToolNotch({
   tocOpen,
   onToggleToc,
   onSwatch,
+  onPenSize,
   onTool,
   onUndo,
   textScaleAvailable,
@@ -44,6 +45,7 @@ export function ToolNotch({
   tocOpen: boolean;
   onToggleToc: () => void;
   onSwatch: (color: SwatchIndex) => void;
+  onPenSize: (size: PenSize) => void;
   onTool: (kind: "pen" | "eraser" | "note") => void;
   onUndo: () => void;
   /** Whether this tab renders prose the scale applies to (Lesson, Review). */
@@ -140,6 +142,25 @@ export function ToolNotch({
         >
           <PenIcon />
         </ToolButton>
+        {/* The nib sizes, only while the pen is in hand: a dot per size,
+            drawn at that size, so the choice reads without a label. */}
+        {penMode && (
+          <div role="group" aria-label={t("notebook.penSizes")} className="flex flex-col gap-[3px]">
+            {PEN_SIZES.map((size) => (
+              <ToolButton
+                key={size}
+                label={t("notebook.penSize", { size: t(`penSizes.${size}`) })}
+                pressed={tool.size === size}
+                onClick={() => onPenSize(size)}
+              >
+                <span
+                  className="block rounded-full bg-current"
+                  style={{ width: 4 * PEN_SIZE_SCALE[size], height: 4 * PEN_SIZE_SCALE[size] }}
+                />
+              </ToolButton>
+            ))}
+          </div>
+        )}
         <ToolButton
           label={t("lesson.tools.eraser")}
           title={t("lesson.tools.eraserTitle")}

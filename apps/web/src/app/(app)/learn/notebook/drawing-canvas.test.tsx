@@ -44,6 +44,34 @@ describe("DrawingCanvas", () => {
     expect(stroke.width).toBeGreaterThan(0);
   });
 
+  test("the pen draws at the size picked: thin, medium (the default) or thick", () => {
+    stubCanvasRect();
+    const onChange = vi.fn();
+    render(<DrawingCanvas strokes={[]} onChange={onChange} />);
+    const canvas = screen.getByRole("img", { name: "Drawing canvas" });
+
+    function draw() {
+      fireEvent.pointerDown(canvas, { clientX: 10, clientY: 10 });
+      fireEvent.pointerMove(canvas, { clientX: 50, clientY: 50 });
+      fireEvent.pointerUp(canvas, { clientX: 50, clientY: 50 });
+      const strokes = onChange.mock.calls.at(-1)![0] as Stroke[];
+      return strokes.at(-1)!.width;
+    }
+
+    expect(screen.getByRole("button", { name: "Pen size — medium" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    const medium = draw();
+    fireEvent.click(screen.getByRole("button", { name: "Pen size — thick" }));
+    const thick = draw();
+    fireEvent.click(screen.getByRole("button", { name: "Pen size — thin" }));
+    const thin = draw();
+
+    expect(thick).toBeGreaterThan(medium);
+    expect(thin).toBeLessThan(medium);
+  });
+
   test("does not emit a stroke for a single tap with no drag", () => {
     stubCanvasRect();
     const onChange = vi.fn();

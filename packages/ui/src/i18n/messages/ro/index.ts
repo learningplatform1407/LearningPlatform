@@ -10,7 +10,7 @@ import { feed } from "./feed";
 import { learn, library } from "./learn";
 import { lesson } from "./lesson";
 import { nav } from "./nav";
-import { colors, notebook } from "./notebook";
+import { colors, notebook, penSizes } from "./notebook";
 import { profile } from "./profile";
 import { daily, questions } from "./questions";
 import { settings } from "./settings";
@@ -32,6 +32,7 @@ export const ro: Messages = {
   study,
   notebook,
   colors,
+  penSizes,
   profile,
   social,
   feed,

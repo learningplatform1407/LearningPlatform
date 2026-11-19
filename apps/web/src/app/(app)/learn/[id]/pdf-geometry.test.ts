@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   highlightHit,
+  lettersFromTextItems,
   rectsForRange,
   strokeHit,
   strokePath,
@@ -16,6 +17,30 @@ const ITEMS = [
   { str: "Hello brave", transform: [10, 0, 0, 10, 50, 100], width: 110 },
   { str: "world", transform: [10, 0, 0, 10, 50, 120], width: 50 },
 ];
+
+describe("lettersFromTextItems", () => {
+  test("one box per letter, skipping spaces, numbered across runs", () => {
+    const letters = lettersFromTextItems(ITEMS, 600, 800);
+    expect(letters.map((l) => l.text).join("")).toBe("Hellobraveworld");
+    expect(letters.map((l) => l.index)).toEqual([...Array(15).keys()]);
+    // "b" of "brave" is character 6 of its run: 50 + 6 * 10.
+    const b = letters[5]!;
+    expect(b.text).toBe("b");
+    expect(b.x0).toBeCloseTo(110 / 600);
+    expect(b.x1).toBeCloseTo(120 / 600);
+  });
+
+  test("a range of letters can stop mid-word, one rectangle per line", () => {
+    const letters = lettersFromTextItems(ITEMS, 600, 800);
+    // From the "l" of "Hello" (index 2) to the "r" of "world" (index 12).
+    const rects = rectsForRange(letters, 2, 12, 0);
+    expect(rects).toHaveLength(2);
+    expect(rects[0]![0]).toBeCloseTo(70 / 600);
+    expect(rects[0]![2]).toBeCloseTo(160 / 600);
+    expect(rects[1]![0]).toBeCloseTo(50 / 600);
+    expect(rects[1]![2]).toBeCloseTo(80 / 600);
+  });
+});
 
 describe("wordsFromTextItems", () => {
   test("splits runs into words in reading order, in page units", () => {

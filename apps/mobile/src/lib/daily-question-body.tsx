@@ -33,15 +33,7 @@ function errorCode(err: unknown): string | null {
  * field that ever carries the answer key, so a past day they skipped simply
  * arrives with nothing to reveal.
  */
-export function DailyQuestionBody({
-  day,
-  onAnswered,
-}: {
-  day: DailyQuestion;
-  /** Pins the overlay open: the refetch below changes what `answerable` and
-   * `attempt` say, and the host derives its open state from them. */
-  onAnswered: () => void;
-}) {
+export function DailyQuestionBody({ day }: { day: DailyQuestion }) {
   const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
@@ -55,7 +47,6 @@ export function DailyQuestionBody({
     mutationFn: (questionId: string) => getApiClient().answerDailyQuestion(questionId, selected),
     onSuccess: () => {
       setError(null);
-      onAnswered();
       queryClient.invalidateQueries({ queryKey: ["daily-question"] });
     },
     onError: (err) => {

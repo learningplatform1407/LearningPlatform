@@ -144,3 +144,11 @@ export function highlightIndex(name: string | null | undefined): 0 | 1 | 2 | 3 |
   const index = HIGHLIGHT_COLOR_NAMES.indexOf(name as HighlightColorName);
   return (index < 0 ? 0 : index) as 0 | 1 | 2 | 3 | 4;
 }
+
+/** Pen nib sizes, thinnest first. Each surface has its own base width (PDF
+ * points on a lesson page, a share of the canvas in the notebook); the size
+ * scales it, so "medium" is the width every pen drew before sizes existed. */
+export const PEN_SIZES = ["thin", "medium", "thick"] as const;
+export type PenSize = (typeof PEN_SIZES)[number];
+
+export const PEN_SIZE_SCALE: Record<PenSize, number> = { thin: 0.55, medium: 1, thick: 2.2 };

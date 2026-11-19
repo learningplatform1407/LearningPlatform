@@ -79,4 +79,7 @@ export const daily: Messages["daily"] = {
   calendarFailed: "Calendarul nu s-a putut încărca.",
   dayFailed: "Ziua nu s-a putut încărca.",
   loadFailed: "Întrebarea zilei nu s-a putut încărca.",
+  available: "Întrebarea zilei este disponibilă",
+  availableAction: "Răspunde",
+  dismissNotice: "Ascunde pentru azi",
 };

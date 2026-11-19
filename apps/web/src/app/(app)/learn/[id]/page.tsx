@@ -6,6 +6,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Annotation, AnnotationCreateRequest } from "@lp/contracts";
+import type { PenSize } from "@lp/ui";
 
 import { useToast } from "@/components/toast";
 import { questionElementId } from "@/components/question-bank-list";
@@ -34,6 +35,7 @@ import { QuizzesTab } from "./quizzes-tab";
 import { ReviewTab } from "./review-tab";
 import { SidePanel, type SidePanelTab } from "./side-panel";
 import { headingId, TextLessonView } from "./text-lesson-view";
+import { NotePopover } from "./note-popover";
 import { TocDrawer, type TocHeading } from "./toc-drawer";
 import { ToolNotch } from "./tool-notch";
 import { useLessonKeys } from "./use-lesson-keys";
@@ -92,10 +94,16 @@ export default function LecturePage() {
   // has a *ready* lecture_pdf attached (see `readyLecturePdf` below).
   const [viewMode, setViewMode] = useState<LessonViewMode>("text");
   const [tool, setTool] = useState<LessonTool>(null);
-  const [tocOpen, setTocOpen] = useState(false);
+  // Remembered while the pen is put down, so picking it up again draws at
+  // the size last chosen.
+  const [penSize, setPenSize] = useState<PenSize>("medium");
+  // A lesson opened from the contents arrives with them still open (`toc=1`),
+  // so moving through a chapter doesn't close the drawer at every step.
+  const [tocOpen, setTocOpen] = useState(() => searchParams.get("toc") === "1");
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelTab, setPanelTab] = useState<SidePanelTab>("notebook");
   const [focusNoteId, setFocusNoteId] = useState<string | null>(null);
+  const [popoverNoteId, setPopoverNoteId] = useState<string | null>(null);
   const [textScale, setTextScale] = useState<TextScale>(() =>
     typeof window === "undefined" ? 100 : readTextScale(),
   );
@@ -136,6 +144,8 @@ export default function LecturePage() {
     queryFn: () => getBrowserApiClient().listAnnotations(params.id),
     enabled: version?.status === "ready",
   });
+  // Gone (deleted, or undone away) means closed.
+  const popoverNote = annotations.find((a) => a.id === popoverNoteId) ?? null;
 
   const createAnnotation = useMutation({
     mutationFn: (body: AnnotationCreateRequest) =>
@@ -279,7 +289,15 @@ export default function LecturePage() {
     pushUndo({ created: [], removed: [note] });
   }
 
+  /** A note's bubble (or a note just made) opens it in the small pop-up;
+   * pressing the same bubble again closes it. */
   function openNote(annotationId: string) {
+    setPopoverNoteId((current) => (current === annotationId ? null : annotationId));
+  }
+
+  /** The note in the side panel's Notebook, for a longer read or edit. */
+  function openNoteInPanel(annotationId: string) {
+    setPopoverNoteId(null);
     setFocusNoteId(annotationId);
     setPanelTab("notebook");
     setPanelOpen(true);
@@ -350,10 +368,19 @@ export default function LecturePage() {
     setTool((current) => {
       if (current?.kind === kind) return null;
       if (kind === "pen") {
-        return { kind: "pen", color: current?.kind === "highlight" ? current.color : 1 };
+        return {
+          kind: "pen",
+          color: current?.kind === "highlight" ? current.color : 1,
+          size: penSize,
+        };
       }
       return { kind };
     });
+  }
+
+  function choosePenSize(size: PenSize) {
+    setPenSize(size);
+    setTool((current) => (current?.kind === "pen" ? { ...current, size } : current));
   }
 
   function chooseSwatch(color: SwatchIndex) {
@@ -517,6 +544,7 @@ export default function LecturePage() {
         tocOpen={tocOpen}
         onToggleToc={() => setTocOpen((open) => !open)}
         onSwatch={chooseSwatch}
+        onPenSize={choosePenSize}
         onTool={chooseTool}
         onUndo={() => void undo()}
         textScale={textScale}
@@ -529,7 +557,7 @@ export default function LecturePage() {
         headings={headings}
         activeHeadingId={activeHeadingId}
         onJump={jumpToHeading}
-        scopeId={subChapter?.id ?? "none"}
+        chapter={subChapter?.chapter ?? null}
         currentDocumentId={params.id}
       />
 
@@ -637,6 +665,21 @@ export default function LecturePage() {
           )}
         </div>
       </main>
+
+      {popoverNote && activeTab === "lesson" && mode === "text" && (
+        <NotePopover
+          // Keyed so switching notes starts from the other note's text.
+          key={popoverNote.id}
+          note={popoverNote}
+          onSave={(text) => void saveNoteText(popoverNote, text)}
+          onDelete={() => {
+            setPopoverNoteId(null);
+            void deleteNote(popoverNote);
+          }}
+          onOpenInNotebook={() => openNoteInPanel(popoverNote.id)}
+          onClose={() => setPopoverNoteId(null)}
+        />
+      )}
     </div>
   );
 }
