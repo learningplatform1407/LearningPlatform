@@ -139,6 +139,30 @@ export const CloseIcon = (p: IconProps) => (
   </Icon>
 );
 
+// The three chevrons have no counterpart in the web set: the browser draws
+// its own arrow on a <select>, and the web drawers close with an X. Here they
+// are a side panel's dismiss control, the lesson's contents arrow and a
+// dropdown's arrow -- all three of which were text glyphs (‹ › ⌄) until
+// Android's fonts proved they draw them at their own size, weight and
+// baseline.
+export const ChevronLeftIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <Path d="M14.5 6L9 12l5.5 6" />
+  </Icon>
+);
+
+export const ChevronRightIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <Path d="M9.5 6l5.5 6-5.5 6" />
+  </Icon>
+);
+
+export const ChevronDownIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <Path d="M6 9.5l6 5.5 6-5.5" />
+  </Icon>
+);
+
 export const MenuIcon = (p: IconProps) => (
   <Icon {...p}>
     <Path d="M4 7h16M4 12h16M4 17h16" />

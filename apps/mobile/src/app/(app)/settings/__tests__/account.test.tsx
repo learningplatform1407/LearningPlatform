@@ -59,7 +59,7 @@ test("closing the overlay does not delete the account", async () => {
   renderScreen();
 
   fireEvent.press(await screen.findByText("Delete Account"));
-  fireEvent.press(await screen.findByText("Close"));
+  fireEvent.press(await screen.findByLabelText("Close"));
 
   expect(mockDeleteMe).not.toHaveBeenCalled();
 });

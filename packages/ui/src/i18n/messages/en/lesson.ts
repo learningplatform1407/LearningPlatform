@@ -133,7 +133,7 @@ export const lesson = {
       one: "Next review in {count} day.",
       other: "Next review in {count} days.",
     }),
-    excluded: "Excluded from reviews. You can include it again below.",
+    excluded: "Excluded from reviews. You can include it again from All cards.",
     loadFailed: "Failed to load flashcards.",
     addCard: "Add a card",
     none: "No flashcards for this lesson yet. Add your own, or check back for official ones.",
@@ -142,6 +142,7 @@ export const lesson = {
     controls: "Flashcard controls",
     excludeThis: "Exclude this card from reviews",
     allCards: "All cards in this lesson",
+    allCardsCount: "All cards ({count})",
     excludedCount: " · {count} excluded",
     manageFailed:
       "Failed to load this lesson's cards, so excluded ones can't be managed right now.",

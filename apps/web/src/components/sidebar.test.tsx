@@ -51,15 +51,21 @@ describe("Sidebar", () => {
     );
   });
 
-  test("collapsing leaves an icon per item, still reachable by its accessible name", async () => {
+  test("collapsing hides each item's label, leaving the icon and the name", async () => {
     renderSidebar();
 
     await userEvent.setup().click(screen.getByRole("button", { name: "Collapse sidebar" }));
 
     for (const name of ["Learn", "AI Assistant", "Profile"]) {
       const link = screen.getByRole("link", { name });
-      expect(link).toHaveTextContent("");
       expect(link.querySelector("svg")).not.toBeNull();
+      // The label stays mounted -- it fades and is clipped as the rail
+      // narrows, rather than vanishing a quarter-second before it -- but
+      // leaves the accessibility tree, so the name above comes from the
+      // link's own aria-label and is not announced twice.
+      const label = link.lastElementChild;
+      expect(label).toHaveTextContent(name);
+      expect(label).toHaveAttribute("aria-hidden", "true");
     }
   });
 

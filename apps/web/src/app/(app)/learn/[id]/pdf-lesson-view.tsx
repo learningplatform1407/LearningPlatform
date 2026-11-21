@@ -16,7 +16,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { LessonPageInk, PageHighlight, Stroke, StrokePoint } from "@lp/contracts";
-import { highlightIndex, pageColors, PEN_SIZE_SCALE } from "@lp/ui";
+import { clearHighlightRects, highlightIndex, pageColors, PEN_SIZE_SCALE } from "@lp/ui";
 
 import { useToast } from "@/components/toast";
 import { scrollBehavior } from "@/lib/use-media-query";
@@ -766,7 +766,13 @@ function PdfPage({
       if (rects.length === 0) return;
       onEdit(pageNumber, current.before, {
         strokes: current.before.strokes,
-        highlights: [...current.before.highlights, { color: colorName(tool.color), rects }],
+        // Cut out of what is already there before this one goes on top: the
+        // fills are translucent, so two marks left over the same words mix
+        // into a colour that is in neither swatch (clearHighlightRects).
+        highlights: [
+          ...clearHighlightRects(current.before.highlights, rects),
+          { color: colorName(tool.color), rects },
+        ],
       });
     }
   }

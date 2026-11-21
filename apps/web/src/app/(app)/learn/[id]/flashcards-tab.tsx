@@ -272,6 +272,12 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // The lesson's whole deck, listed on demand. It used to sit open at the
+  // bottom of the tab, under the card being reviewed and its grade buttons,
+  // so the only place a card is managed from -- including getting an excluded
+  // one back -- was behind a scroll nobody takes. It opens from the header
+  // now, beside Add a card.
+  const [listingAll, setListingAll] = useState(false);
 
   const deckQuery = useQuery({
     queryKey: ["flashcards", "due", documentId, scope],
@@ -360,6 +366,9 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
     onGrade: grade,
   });
 
+  const lessonCards = cardsQuery.data ?? [];
+  const excludedCount = lessonCards.filter((card) => card.suspended).length;
+
   if (deckQuery.isPending) {
     return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
   }
@@ -370,9 +379,6 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
       </p>
     );
   }
-
-  const lessonCards = cardsQuery.data ?? [];
-  const excludedCount = lessonCards.filter((card) => card.suspended).length;
 
   return (
     <div className="flex flex-col items-center gap-md">
@@ -391,11 +397,22 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
             setActionError(null);
           }}
         />
-        {!adding && (
-          <Button variant="secondary" onClick={() => setAdding(true)}>
-            {t("lesson.flashcards.addCard")}
-          </Button>
-        )}
+        <div className="flex items-center gap-xs">
+          {lessonCards.length > 0 && (
+            <Button
+              variant="secondary"
+              aria-expanded={listingAll}
+              onClick={() => setListingAll((open) => !open)}
+            >
+              {t("lesson.flashcards.allCardsCount", { count: lessonCards.length })}
+            </Button>
+          )}
+          {!adding && (
+            <Button variant="secondary" onClick={() => setAdding(true)}>
+              {t("lesson.flashcards.addCard")}
+            </Button>
+          )}
+        </div>
       </div>
 
       {adding && (
@@ -406,6 +423,24 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
             refresh();
           }}
         />
+      )}
+
+      {listingAll && lessonCards.length > 0 && (
+        <section className="w-full">
+          <h2 className="label-caps mb-sm">
+            {t("lesson.flashcards.allCards")}
+            {excludedCount > 0 && (
+              <span className="ml-xs font-normal text-muted-foreground">
+                {t("lesson.flashcards.excludedCount", { count: excludedCount }).trim()}
+              </span>
+            )}
+          </h2>
+          <ul className="border-b border-border">
+            {lessonCards.map((card) => (
+              <LessonCardRow key={card.id} card={card} onChanged={refresh} />
+            ))}
+          </ul>
+        </section>
       )}
 
       {!currentCard && (
@@ -486,24 +521,6 @@ export function FlashcardsTab({ documentId }: { documentId: string }) {
         <p role="alert" className="text-sm text-danger">
           {t("lesson.flashcards.manageFailed")}
         </p>
-      )}
-
-      {lessonCards.length > 0 && (
-        <section className="mt-lg w-full">
-          <h2 className="label-caps mb-sm">
-            {t("lesson.flashcards.allCards")}
-            {excludedCount > 0 && (
-              <span className="ml-xs font-normal text-muted-foreground">
-                {t("lesson.flashcards.excludedCount", { count: excludedCount }).trim()}
-              </span>
-            )}
-          </h2>
-          <ul className="border-b border-border">
-            {lessonCards.map((card) => (
-              <LessonCardRow key={card.id} card={card} onChanged={refresh} />
-            ))}
-          </ul>
-        </section>
       )}
     </div>
   );

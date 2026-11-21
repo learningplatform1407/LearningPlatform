@@ -1,5 +1,5 @@
 import type { PageHighlight, PageWord, Stroke, StrokePoint } from "@lp/contracts";
-import { highlightIndex, pageColors, type PenSize } from "@lp/ui";
+import { clearHighlightRects, highlightIndex, pageColors, type PenSize } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, type LayoutChangeEvent, Text, View } from "react-native";
@@ -297,9 +297,21 @@ function PdfPage({
       queryClient.invalidateQueries({ queryKey: inkKey });
       onSaveError?.();
     },
+    // Either way the cache is now the truth -- the server's answer, or the
+    // refetch a failure asks for -- so the local copy steps aside.
+    onSettled: () => setSavingStrokes(null),
   });
 
-  const strokes = ink?.strokes ?? [];
+  // The ink as the canvas last left it, held until the save has landed.
+  //
+  // This is what stopped a finished line from flickering. The canvas drops
+  // the stroke it was drawing the moment the finger lifts and hands it over
+  // through `onChange`; that used to write it to a ref, so nothing
+  // re-rendered and the line vanished until react-query ran the mutation's
+  // onMutate a tick later and put it in the cache. One frame with neither
+  // copy on screen is exactly the blink that was reported.
+  const [savingStrokes, setSavingStrokes] = useState<Stroke[] | null>(null);
+  const strokes = savingStrokes ?? ink?.strokes ?? [];
   const highlights = ink?.highlights ?? [];
   // One erase gesture's results, saved together when the finger lifts.
   const [erasedHighlights, setErasedHighlights] = useState<PageHighlight[] | null>(null);
@@ -368,12 +380,14 @@ function PdfPage({
     setPreview(null);
     onMarkingChange?.(false);
     if (commit && tool?.type === "highlight") {
+      const rects = rectsForWords(runOf(g.anchor, g.current));
+      // Cut out of the marks already there before adding this one: a page's
+      // fills are translucent, so two left on top of each other mix into a
+      // colour that is in no swatch instead of the second replacing the
+      // first (clearHighlightRects).
       save.mutate({
         strokes,
-        highlights: [
-          ...highlights,
-          { color: tool.color, rects: rectsForWords(runOf(g.anchor, g.current)) },
-        ],
+        highlights: [...clearHighlightRects(highlights, rects), { color: tool.color, rects }],
       });
     }
   }
@@ -475,6 +489,7 @@ function PdfPage({
           penSize={tool?.type === "pen" ? tool.size : undefined}
           onChange={(next) => {
             pendingStrokes.current = next;
+            setSavingStrokes(next);
           }}
           onErasePoint={(point) =>
             setErasedHighlights((current) =>

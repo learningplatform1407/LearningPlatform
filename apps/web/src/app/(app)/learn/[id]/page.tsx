@@ -6,7 +6,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Annotation, AnnotationCreateRequest } from "@lp/contracts";
-import type { PenSize } from "@lp/ui";
+import { clearHighlightRange, type PenSize } from "@lp/ui";
 
 import { useToast } from "@/components/toast";
 import { questionElementId } from "@/components/question-bank-list";
@@ -199,50 +199,43 @@ export default function LecturePage() {
   async function handleMark(ranges: BlockRange[]) {
     if (ranges.length === 0 || !tool) return;
 
-    if (tool.kind === "highlight") {
-      const created = await apply(
-        [],
-        ranges.map((range) => ({
-          type: "highlight" as const,
-          block_index: range.blockIndex,
-          start_offset: range.start,
-          end_offset: range.end,
-          color: colorName(tool.color),
-        })),
-      );
-      pushUndo({ created, removed: [] });
-      return;
-    }
-
-    if (tool.kind === "eraser") {
-      // Erasing removes only the covered part of a highlight: the original
-      // is deleted and whatever is left either side is recreated (there's
-      // no update endpoint, so this is delete + recreate, not a resize).
+    // Both marking tools clear the range they cover first: the highlights
+    // under it are deleted and whatever is left either side is recreated
+    // (there is no update endpoint, so this is delete + recreate, not a
+    // resize). The eraser has always worked this way; the highlighter now
+    // does too, so a second colour replaces the first instead of stacking on
+    // it -- see clearHighlightRange for what two marks over the same words
+    // did to the eraser afterwards.
+    if (tool.kind === "highlight" || tool.kind === "eraser") {
       const removed: Annotation[] = [];
-      const recreate: AnnotationCreateRequest[] = [];
+      const create: AnnotationCreateRequest[] = [];
       for (const range of ranges) {
-        for (const a of annotations) {
-          if (
-            a.type !== "highlight" ||
-            a.block_index !== range.blockIndex ||
-            a.start_offset === null ||
-            a.end_offset === null ||
-            a.start_offset >= range.end ||
-            a.end_offset <= range.start
-          ) {
-            continue;
-          }
-          removed.push(a);
-          if (a.start_offset < range.start) {
-            recreate.push({ ...recreateRequest(a), end_offset: range.start });
-          }
-          if (a.end_offset > range.end) {
-            recreate.push({ ...recreateRequest(a), start_offset: range.end });
-          }
+        const { remove, keep } = clearHighlightRange(
+          annotations,
+          range.blockIndex,
+          range.start,
+          range.end,
+        );
+        removed.push(...remove);
+        for (const piece of keep) {
+          create.push({
+            ...recreateRequest(piece.mark),
+            start_offset: piece.start,
+            end_offset: piece.end,
+          });
+        }
+        if (tool.kind === "highlight") {
+          create.push({
+            type: "highlight",
+            block_index: range.blockIndex,
+            start_offset: range.start,
+            end_offset: range.end,
+            color: colorName(tool.color),
+          });
         }
       }
-      if (removed.length === 0) return;
-      const created = await apply(removed, recreate);
+      if (removed.length === 0 && create.length === 0) return;
+      const created = await apply(removed, create);
       pushUndo({ created, removed });
       return;
     }

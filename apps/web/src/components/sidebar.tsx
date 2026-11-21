@@ -43,8 +43,8 @@ const NAV_ITEMS: readonly NavItem[] = [
 const PROFILE_ITEM: NavItem = { href: "/profile", label: "nav.profile", Icon: UserIcon };
 
 // A directory of the content tools: the two bulk importers,
-// question-of-the-day, and (unlike mobile, where it stays inline on the
-// Library page) library authoring itself. See docs/architecture/README.md.
+// question-of-the-day, and library authoring itself -- which is web-only,
+// with no counterpart on the phone. See docs/architecture/README.md.
 const ADMIN_ITEM: NavItem = { href: "/admin", label: "nav.admin", Icon: WrenchIcon };
 
 // A lesson owns the whole screen in the redesign: its left edge belongs to
@@ -109,10 +109,17 @@ export function Sidebar() {
         </div>
       )}
 
+      {/* The padding is in the transition with the width, and the rows keep
+          their icons hard against the leading edge (NavLink): collapsing used
+          to drop every label and centre every icon on the spot, so the icons
+          jumped to the middle of a sidebar that was still full width and then
+          the width caught up behind them. Collapsed, `px-3` plus the rows'
+          own `px-2` leaves an 18px icon centred in the 60px rail, which is
+          what `justify-center` was for. */}
       <nav
         aria-label={t("nav.main")}
-        className={`sticky top-0 hidden h-screen shrink-0 flex-col overflow-y-auto border-r border-border bg-background py-[22px] transition-[width] duration-[250ms] md:flex ${
-          collapsed ? "w-[3.75rem] px-2" : "w-[15rem] pr-3 pl-3.5"
+        className={`sticky top-0 hidden h-screen shrink-0 flex-col overflow-y-auto border-r border-border bg-background py-[22px] transition-[width,padding] duration-[250ms] motion-reduce:transition-none md:flex ${
+          collapsed ? "w-[3.75rem] px-3" : "w-[15rem] pr-3 pl-3.5"
         }`}
       >
         <button
@@ -210,13 +217,13 @@ function NavLink({
         title={collapsed ? label : undefined}
         aria-label={collapsed || badge > 0 ? label : undefined}
         aria-current={active ? "page" : undefined}
-        className={`${ITEM_CLASSES} ${collapsed ? "justify-center" : ""} ${
+        className={`${ITEM_CLASSES} ${
           active
             ? "bg-muted font-extrabold text-foreground"
             : "text-muted-foreground hover:bg-muted hover:text-foreground"
         }`}
       >
-        <span className="relative flex">
+        <span className="relative flex shrink-0">
           <Icon />
           {badge > 0 && collapsed && (
             <span
@@ -225,15 +232,27 @@ function NavLink({
             />
           )}
         </span>
-        {!collapsed && t(item.label)}
-        {badge > 0 && !collapsed && (
-          <span
-            aria-hidden="true"
-            className="ml-auto rounded-full bg-accent px-1.5 text-xs leading-5 font-bold text-background tabular-nums"
-          >
-            {badge}
-          </span>
-        )}
+        {/* Still mounted when collapsed, at zero width: it fades as the rail
+            narrows and is clipped by the row's `overflow-hidden`, instead of
+            disappearing a quarter of a second before the rail does. */}
+        <span
+          aria-hidden={collapsed}
+          className={`flex min-w-0 flex-1 items-center gap-2 transition-opacity duration-150 motion-reduce:transition-none ${
+            collapsed ? "opacity-0" : "opacity-100"
+          }`}
+        >
+          {t(item.label)}
+          {badge > 0 && (
+            // The count is already in the link's own aria-label, so the pill
+            // is decoration whether the rail is open or shut.
+            <span
+              aria-hidden="true"
+              className="ml-auto rounded-full bg-accent px-1.5 text-xs leading-5 font-bold text-background tabular-nums"
+            >
+              {badge}
+            </span>
+          )}
+        </span>
       </Link>
     </li>
   );
@@ -252,12 +271,17 @@ function ThemeToggle({ collapsed }: { collapsed: boolean }) {
       onClick={() => setPreference(next, { persist: true })}
       aria-label={collapsed ? label : undefined}
       title={collapsed ? label : undefined}
-      className={`${ITEM_CLASSES} text-muted-foreground hover:bg-muted hover:text-foreground ${
-        collapsed ? "justify-center" : ""
-      }`}
+      className={`${ITEM_CLASSES} text-muted-foreground hover:bg-muted hover:text-foreground`}
     >
-      {next === "dark" ? <MoonIcon /> : <SunIcon />}
-      {!collapsed && label}
+      <span className="flex shrink-0">{next === "dark" ? <MoonIcon /> : <SunIcon />}</span>
+      <span
+        aria-hidden={collapsed}
+        className={`min-w-0 flex-1 text-left transition-opacity duration-150 motion-reduce:transition-none ${
+          collapsed ? "opacity-0" : "opacity-100"
+        }`}
+      >
+        {label}
+      </span>
     </button>
   );
 }

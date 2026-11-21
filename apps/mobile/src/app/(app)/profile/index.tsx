@@ -1,4 +1,4 @@
-import { formatMonthYear } from "@lp/ui";
+import { formatMonthYear, RECENT_ACTIVITY_SHOWN } from "@lp/ui";
 import { useQuery } from "@tanstack/react-query";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback } from "react";
@@ -47,7 +47,7 @@ export default function ProfileScreen() {
   const followsAnyone = (following.data?.length ?? 0) > 0;
   const activity = useQuery({
     queryKey: ["activity", "recent"],
-    queryFn: () => getApiClient().listFollowingActivity({ limit: 5 }),
+    queryFn: () => getApiClient().listFollowingActivity({ limit: RECENT_ACTIVITY_SHOWN }),
     enabled: followsAnyone,
   });
   const { refetch: refetchActivity } = activity;

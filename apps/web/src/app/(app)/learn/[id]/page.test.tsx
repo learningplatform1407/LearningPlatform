@@ -414,6 +414,25 @@ describe("LecturePage", () => {
     expect(screen.getByText(para("Hello world"))).toBeInTheDocument();
   });
 
+  test("a note anchored mid-word puts its bubble after the whole word", async () => {
+    // The bubble is a 22px circle; dropped at the exact letter a drag ended
+    // on, it broke the word in two around it.
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world again"));
+    listAnnotations.mockResolvedValue([
+      note({ id: "a1", start_offset: 6, end_offset: 9, note_text: "Half a word" }),
+    ]);
+
+    renderPage();
+
+    const bubble = await screen.findByRole("button", { name: "Open note" });
+    // The run the note underlines is "wor"; the rest of the word comes
+    // between it and the bubble, instead of after the bubble.
+    const rest = bubble.previousSibling as HTMLElement;
+    expect(rest).toHaveTextContent("ld");
+    expect(rest.previousSibling).toHaveClass("border-dashed");
+    expect(rest.previousSibling).toHaveTextContent("wor");
+  });
+
   test("a block-level margin note shows a note bubble that opens it in a pop-up", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
     listAnnotations.mockResolvedValue([
@@ -1016,6 +1035,12 @@ describe("LecturePage", () => {
     };
   }
 
+  /** The lesson's whole deck is listed on demand, from the Flashcards tab's
+   * header -- open it, having already opened the tab. */
+  async function openAllCards(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: /^All cards \(/ }));
+  }
+
   test("a card can be excluded from reviews straight from the runner", async () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
     listDueFlashcards.mockResolvedValue([officialCard()]);
@@ -1030,7 +1055,7 @@ describe("LecturePage", () => {
 
     expect(setFlashcardSuspension).toHaveBeenCalledWith("f1", true);
     expect(
-      await screen.findByText("Excluded from reviews. You can include it again below."),
+      await screen.findByText("Excluded from reviews. You can include it again from All cards."),
     ).toBeInTheDocument();
   });
 
@@ -1056,6 +1081,7 @@ describe("LecturePage", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("tab", { name: "Flashcards" }));
+    await openAllCards(user);
 
     expect(await screen.findByText("Not in rotation")).toBeInTheDocument();
     expect(screen.getByText(/1 excluded/)).toBeInTheDocument();
@@ -1077,6 +1103,7 @@ describe("LecturePage", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("tab", { name: "Flashcards" }));
+    await openAllCards(user);
     await user.click(await screen.findByRole("button", { name: "Edit" }));
 
     const front = screen.getByLabelText("Front");
@@ -1100,6 +1127,7 @@ describe("LecturePage", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("tab", { name: "Flashcards" }));
+    await openAllCards(user);
     await user.click(await screen.findByRole("button", { name: "Edit" }));
     await user.clear(screen.getByLabelText("Front"));
 
@@ -1120,6 +1148,7 @@ describe("LecturePage", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("tab", { name: "Flashcards" }));
+    await openAllCards(user);
     await user.click(await screen.findByRole("button", { name: "Include in reviews" }));
 
     // This toggle is the only route back into the rotation, so silence would
@@ -1137,7 +1166,9 @@ describe("LecturePage", () => {
     renderPage();
     await screen.findByText(para("Hello world"));
 
-    await userEvent.setup().click(screen.getByRole("tab", { name: "Flashcards" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Flashcards" }));
+    await openAllCards(user);
 
     await screen.findByText("Not in rotation");
     expect(screen.queryByText(/No flashcards for this lesson yet/)).not.toBeInTheDocument();
@@ -1185,7 +1216,9 @@ describe("LecturePage", () => {
     renderPage();
     await screen.findByText(para("Hello world"));
 
-    await userEvent.setup().click(screen.getByRole("tab", { name: "Flashcards" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Flashcards" }));
+    await openAllCards(user);
 
     // Suspension writes the caller's own review state, so it applies to
     // shared content; editing and deleting do not.
@@ -1343,7 +1376,9 @@ describe("LecturePage", () => {
     renderPage();
     await screen.findByText(para("Hello world"));
 
-    await userEvent.setup().click(screen.getByRole("tab", { name: "Flashcards" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Flashcards" }));
+    await openAllCards(user);
 
     expect(await screen.findByRole("button", { name: "Retire" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();

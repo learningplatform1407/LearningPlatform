@@ -95,11 +95,10 @@ jest.mock("@/lib/pdf-lesson-view", () => {
 });
 
 let mockTabParam: string | undefined;
-let mockTocParam: string | undefined;
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), back: jest.fn(), navigate: jest.fn(), canGoBack: jest.fn() },
-  useLocalSearchParams: () => ({ id: "d1", tab: mockTabParam, toc: mockTocParam }),
+  useLocalSearchParams: () => ({ id: "d1", tab: mockTabParam }),
 }));
 
 function renderScreen() {
@@ -157,7 +156,6 @@ function readyDocumentWithParagraph(text: string) {
 
 beforeEach(() => {
   mockTabParam = undefined;
-  mockTocParam = undefined;
   mockGetDocument.mockReset();
   mockCreateSignedUrl.mockReset();
   mockListAnnotations.mockReset().mockResolvedValue([]);
@@ -458,6 +456,32 @@ test("a highlight drawn over a note does not hide the note's marker", async () =
 
   fireEvent.press(await screen.findByTestId("note-marker-a1"));
   expect(await screen.findByDisplayValue("Check this later")).toBeTruthy();
+});
+
+test("an inline note's marker goes after the word, never into the middle of it", async () => {
+  // A note taken from a drag that stopped mid-word used to put its marker
+  // exactly there, breaking the word in two around the bubble.
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world again"));
+  mockListAnnotations.mockResolvedValue([
+    {
+      id: "a1",
+      document_version_id: "v1",
+      type: "margin_note",
+      block_index: 0,
+      start_offset: 6,
+      end_offset: 9,
+      note_text: "Half a word",
+      color: null,
+      created_at: "2026-01-01",
+    },
+  ]);
+
+  renderScreen();
+
+  // The note is anchored to "wor"; its marker sits after "world".
+  expect(await screen.findByText(/world ✎/)).toBeTruthy();
+  fireEvent.press(screen.getByTestId("note-marker-a1"));
+  expect(await screen.findByDisplayValue("Half a word")).toBeTruthy();
 });
 
 test("the note tool anchors a note to the words you pick", async () => {
@@ -1071,7 +1095,7 @@ test("the Notes overlay closes via its Close button", async () => {
   fireEvent.press(screen.getByLabelText("Notes"));
   await screen.findByText("No notes yet.");
 
-  fireEvent.press(screen.getByText("Close"));
+  fireEvent.press(screen.getByLabelText("Close"));
 
   await waitFor(() => expect(screen.queryByText("No notes yet.")).toBeNull());
 });
@@ -1178,6 +1202,57 @@ test("deactivating the tool restores long-press-for-notes on the paragraph", asy
   expect(screen.queryByTestId("markable-paragraph-0")).toBeNull();
 });
 
+test("a second colour over a highlight replaces the part it covers", async () => {
+  // Two marks over the same words used to pile up: the renderers resolved
+  // that by creation time, and erasing next door -- which deletes and
+  // recreates what it trims -- could bring the buried colour back to the top.
+  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("alpha beta gamma delta"));
+  mockListAnnotations.mockResolvedValue([
+    {
+      id: "a1",
+      document_version_id: "v1",
+      type: "highlight",
+      block_index: 0,
+      start_offset: 0,
+      end_offset: 22,
+      note_text: null,
+      color: "yellow",
+      created_at: "2026-01-01",
+    },
+  ]);
+
+  renderScreen();
+  await screen.findByText("alpha beta gamma delta");
+
+  fireEvent.press(screen.getByLabelText("Highlight — green"));
+  await markLetters("alpha beta gamma delta", 6, 15); // "beta gamma"
+
+  await waitFor(() => expect(mockDeleteAnnotation).toHaveBeenCalledWith("d1", "a1"));
+  // The yellow either side comes back...
+  expect(mockCreateAnnotation).toHaveBeenCalledWith("d1", {
+    type: "highlight",
+    block_index: 0,
+    start_offset: 0,
+    end_offset: 6,
+    color: "yellow",
+  });
+  expect(mockCreateAnnotation).toHaveBeenCalledWith("d1", {
+    type: "highlight",
+    block_index: 0,
+    start_offset: 16,
+    end_offset: 22,
+    color: "yellow",
+  });
+  // ...and only the new colour covers the words that were marked.
+  expect(mockCreateAnnotation).toHaveBeenCalledWith("d1", {
+    type: "highlight",
+    block_index: 0,
+    start_offset: 6,
+    end_offset: 16,
+    color: "green",
+  });
+});
+
 test("the eraser splits a highlight when the erased words are in the middle", async () => {
   mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("alpha beta gamma delta"));
   mockListAnnotations.mockResolvedValue([
@@ -1243,6 +1318,12 @@ test("the eraser removes a highlight entirely with no remainder when fully erase
   expect(mockCreateAnnotation).not.toHaveBeenCalled();
 });
 
+/** The lesson's whole deck is listed on demand, from the Flashcards tab's
+ * header -- press it, having already pressed Flashcards. */
+async function openAllCards() {
+  fireEvent.press(await screen.findByText(/^All cards \(/));
+}
+
 function lessonCard(overrides: Record<string, unknown> = {}) {
   return {
     id: "f1",
@@ -1273,7 +1354,7 @@ test("a card can be excluded from reviews straight from the runner", async () =>
 
   await waitFor(() => expect(mockSetFlashcardSuspension).toHaveBeenCalledWith("f1", true));
   expect(
-    await screen.findByText("Excluded from reviews. You can include it again below."),
+    await screen.findByText("Excluded from reviews. You can include it again from All cards."),
   ).toBeTruthy();
 });
 
@@ -1288,6 +1369,7 @@ test("an excluded card is still listed, and can be included again", async () => 
   await screen.findByText("Hello world");
 
   fireEvent.press(screen.getByText("Flashcards"));
+  await openAllCards();
 
   expect(await screen.findByText("Not in rotation")).toBeTruthy();
   expect(screen.getByText(/1 excluded/)).toBeTruthy();
@@ -1306,6 +1388,7 @@ test("the lesson list offers exclusion on official cards the learner cannot edit
   await screen.findByText("Hello world");
 
   fireEvent.press(screen.getByText("Flashcards"));
+  await openAllCards();
 
   // Suspension writes the caller's own review state, so it applies to shared
   // content; editing and deleting do not.
@@ -1342,6 +1425,7 @@ test("cancelling an edit discards the draft instead of committing it later", asy
   await screen.findByText("Hello world");
 
   fireEvent.press(screen.getByText("Flashcards"));
+  await openAllCards();
   fireEvent.press(await screen.findByText("Edit"));
 
   fireEvent.changeText(screen.getByLabelText("Front"), "xxx");
@@ -1363,6 +1447,7 @@ test("a failed include/exclude toggle is reported, not swallowed", async () => {
   await screen.findByText("Hello world");
 
   fireEvent.press(screen.getByText("Flashcards"));
+  await openAllCards();
   fireEvent.press(await screen.findByText("Include in reviews"));
 
   // This toggle is the only route back into the rotation, so silence would
@@ -1381,6 +1466,7 @@ test("a lesson whose every card is excluded does not claim to have none", async 
   await screen.findByText("Hello world");
 
   fireEvent.press(screen.getByText("Flashcards"));
+  await openAllCards();
 
   await screen.findByText("Not in rotation");
   expect(screen.queryByText(/No flashcards for this lesson yet/)).toBeNull();
@@ -1459,6 +1545,7 @@ test("an official card offers Retire to an admin, never Edit", async () => {
   await screen.findByText("Hello world");
 
   fireEvent.press(screen.getByText("Flashcards"));
+  await openAllCards();
 
   expect(await screen.findByText("Retire")).toBeTruthy();
   expect(screen.queryByText("Edit")).toBeNull();
@@ -1703,17 +1790,8 @@ test("the contents show the whole chapter: its title, each sub-chapter, and ever
 
   // Any lesson in the chapter opens, not only this sub-chapter's.
   fireEvent.press(screen.getByText("Third lesson"));
-  // The contents stay open on the lesson it leads to.
-  expect(router.push).toHaveBeenCalledWith("/learn/d3?toc=1");
-});
-
-test("a lesson opened from the contents arrives with them still open", async () => {
-  mockTocParam = "1";
-  mockGetDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
-  mockListDocuments.mockResolvedValue([]);
-
-  renderScreen();
-  await screen.findByText("Hello world");
-
-  expect(await screen.findByText("Lessons in this chapter")).toBeTruthy();
+  // And the drawer closes behind it: on a phone it covers the lesson it
+  // would otherwise be hiding.
+  expect(router.push).toHaveBeenCalledWith("/learn/d3");
+  await waitFor(() => expect(screen.queryByText("Chapter One")).toBeNull());
 });

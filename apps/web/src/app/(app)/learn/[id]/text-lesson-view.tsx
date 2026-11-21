@@ -11,7 +11,7 @@ import {
 } from "react";
 
 import type { Annotation, ExtractedContent } from "@lp/contracts";
-import { highlightIndex } from "@lp/ui";
+import { highlightIndex, splitSegmentsAt, wordEndAfter } from "@lp/ui";
 
 import { NoteIcon } from "@/components/icons";
 import { spliceAnnotations } from "@/lib/text-offset";
@@ -265,14 +265,28 @@ const Paragraph = memo(function Paragraph({
   sources?: { start: number; end: number }[];
   onOpenNote: (annotationId: string) => void;
 }) {
-  const segments = spliceAnnotations(text, annotations);
   // Block-level notes (no offsets) predate range-anchored ones; their bubble
   // sits at the end of the paragraph.
   const blockNotes = annotations.filter((a) => a.type === "margin_note" && a.start_offset === null);
+  const rangeNotes = annotations.filter(
+    (a): a is Annotation & { start_offset: number; end_offset: number } =>
+      a.type === "margin_note" && a.start_offset !== null && a.end_offset !== null,
+  );
+  // A bubble goes after the word its note stops in, never inside it: a note
+  // taken from a drag that ended mid-word used to break the word around a
+  // 22px circle. The word's end is not an annotation boundary, so the runs
+  // are cut there too -- `wordEndAfter` and `splitSegmentsAt` do the same job
+  // in the phone's reader.
+  const bubbleOffset = (note: Annotation) => wordEndAfter(text, note.end_offset ?? 0);
+  const segments = splitSegmentsAt(
+    spliceAnnotations(text, annotations),
+    rangeNotes.map(bubbleOffset),
+  );
 
   let cursor = 0;
   let letterCursor = 0;
   const children: ReactNode[] = [];
+  const bubbled = new Set<string>();
 
   segments.forEach((segment, segmentIndex) => {
     const start = cursor;
@@ -337,19 +351,32 @@ const Paragraph = memo(function Paragraph({
           {pieces}
         </span>,
       );
-      if (end === annotation.end_offset) {
-        children.push(
-          <NoteBubble
-            key={`n${segmentIndex}`}
-            noteId={annotation.id}
-            onClick={() => onOpenNote(annotation.id)}
-          />,
-        );
-      }
     } else {
       children.push(<span key={segmentIndex}>{pieces}</span>);
     }
+
+    // Read from the paragraph's notes rather than from whichever annotation
+    // won this run: a highlight drawn across a note wins the run and used to
+    // take the bubble down with it, leaving the note unreachable.
+    for (const note of rangeNotes) {
+      if (bubbled.has(note.id) || bubbleOffset(note) !== end) continue;
+      bubbled.add(note.id);
+      children.push(
+        <NoteBubble key={`n${note.id}`} noteId={note.id} onClick={() => onOpenNote(note.id)} />,
+      );
+    }
   });
+
+  // A note anchored past the end of the text it was written on -- a
+  // paragraph edited shorter under it. `spliceAnnotations` clamps it, so no
+  // run ends where it does; its bubble goes last rather than nowhere.
+  for (const note of rangeNotes) {
+    if (!bubbled.has(note.id)) {
+      children.push(
+        <NoteBubble key={`n${note.id}`} noteId={note.id} onClick={() => onOpenNote(note.id)} />,
+      );
+    }
+  }
 
   return (
     <p data-block-index={blockIndex} className="my-2">
