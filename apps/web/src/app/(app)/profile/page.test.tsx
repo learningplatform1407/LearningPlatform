@@ -95,7 +95,8 @@ test("shows what the people you follow did lately, only once you follow someone"
 
   expect(await screen.findByText("People you follow")).toBeInTheDocument();
   expect(await screen.findByText(/is on a 3-day streak/)).toBeInTheDocument();
-  expect(listFollowingActivity).toHaveBeenCalledWith({ limit: 5 });
+  // Three, with "See all" beside it for the rest (RECENT_ACTIVITY_SHOWN).
+  expect(listFollowingActivity).toHaveBeenCalledWith({ limit: 3 });
   expect(screen.getByRole("link", { name: "See all activity" })).toHaveAttribute(
     "href",
     "/profile/people?tab=activity",

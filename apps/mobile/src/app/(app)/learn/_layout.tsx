@@ -8,16 +8,11 @@ import { Stack } from "expo-router";
 // Wrapping the whole subtree in one explicit Stack here keeps it collapsed
 // under "Learn", matching how the flat lectures/ folder used to behave.
 //
-// A lesson opened from the contents drawer (`toc=1`) appears in place, with
-// the drawer already open on it, instead of sliding in: moving through a
-// chapter should feel like turning a page, not leaving one.
+// Every lesson slides in. A lesson opened from the contents drawer used to
+// appear in place instead, so that the drawer -- which came along via
+// `?toc=1` -- seemed to stay put; the drawer now closes behind the lesson it
+// opens (learn/[id].tsx), and a screen that arrives with no animation under a
+// drawer that is no longer there just looks like a jump cut.
 export default function LearnLayout() {
-  return (
-    <Stack
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        animation: (route.params as { toc?: string } | undefined)?.toc === "1" ? "none" : "default",
-      })}
-    />
-  );
+  return <Stack screenOptions={{ headerShown: false }} />;
 }

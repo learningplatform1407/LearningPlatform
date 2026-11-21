@@ -315,7 +315,7 @@ test("offers no notice for a day that was already answered", async () => {
 
   expect(await screen.findByText("Answered correctly, 2/2 points.")).toBeTruthy();
   expect(screen.queryByText("Question of the day available")).toBeNull();
-  expect(screen.queryByText("Close")).toBeNull();
+  expect(screen.queryByLabelText("Close")).toBeNull();
 });
 
 test("stays quiet when the bank holds no question", async () => {
@@ -325,7 +325,7 @@ test("stays quiet when the bank holds no question", async () => {
 
   expect(await screen.findByText("No question today.")).toBeTruthy();
   expect(screen.queryByText("Question of the day available")).toBeNull();
-  expect(screen.queryByText("Close")).toBeNull();
+  expect(screen.queryByLabelText("Close")).toBeNull();
 });
 
 test("a past day that was not answered shows the question with no way to answer", async () => {
@@ -424,8 +424,8 @@ test("opening an empty-bank day does not silence a question published later", as
   const first = renderScreen();
   fireEvent.press(await screen.findByText("Question of the day"));
   await screen.findByText("There is no question today. Check back tomorrow.");
-  fireEvent.press(screen.getByText("Close"));
-  await waitFor(() => expect(screen.queryByText("Close")).toBeNull());
+  fireEvent.press(screen.getByLabelText("Close"));
+  await waitFor(() => expect(screen.queryByLabelText("Close")).toBeNull());
   expect(await AsyncStorage.getItem("lp.qotd.dismissed")).toBeNull();
   first.unmount();
 

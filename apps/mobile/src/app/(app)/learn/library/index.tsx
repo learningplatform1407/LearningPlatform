@@ -1,21 +1,12 @@
 import { coverColorForTitle } from "@lp/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-  useWindowDimensions,
-} from "react-native";
+import { FlatList, Pressable, Text, View, useWindowDimensions } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { useI18n } from "@/lib/i18n";
 import { fontSizes, fontWeights, shadows, spacing } from "@/lib/theme";
-import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { makeStyles } from "@/lib/theme-context";
 import { ScreenHeader } from "@/lib/ui/primitives";
 
 interface BookRow {
@@ -25,16 +16,22 @@ interface BookRow {
   countLabel: string;
 }
 
+/**
+ * The shelf of books, for browsing.
+ *
+ * The "New book" form that used to sit at the bottom of it for an admin is
+ * gone: library authoring is web-only (`/admin/library`), for the reason
+ * recorded in docs/architecture/README.md -- create controls do not belong on
+ * the page every learner reads. The feed composer is the one thing an admin
+ * posts from the phone.
+ */
 export default function LibraryScreen() {
   const styles = useStyles();
   const { t } = useI18n();
-  const colors = useThemeColors();
-  const queryClient = useQueryClient();
   // Half the row each, computed: with `flex: 1` a book alone on the last
   // shelf came out wider than the pair above it.
   const { width: screenWidth } = useWindowDimensions();
   const coverWidth = (screenWidth - spacing.xl * 2 - spacing.md) / 2;
-  const me = useQuery({ queryKey: ["me"], queryFn: () => getApiClient().getMe() });
   const books = useQuery({
     queryKey: ["books"],
     queryFn: () => getApiClient().listBooks(),
@@ -44,21 +41,7 @@ export default function LibraryScreen() {
     queryFn: () => getApiClient().listDocuments("none"),
   });
 
-  const [title, setTitle] = useState("");
-  const [createError, setCreateError] = useState<string | null>(null);
-
-  const createBookMutation = useMutation({
-    mutationFn: () => getApiClient().createBook({ title }),
-    onSuccess: () => {
-      setTitle("");
-      queryClient.invalidateQueries({ queryKey: ["books"] });
-    },
-    onError: (err) => {
-      setCreateError(err instanceof Error ? err.message : t("library.createFailed"));
-    },
-  });
-
-  if (me.isPending || books.isPending || uncategorized.isPending) {
+  if (books.isPending || uncategorized.isPending) {
     return (
       <View style={styles.container}>
         <Text style={styles.loading}>{t("common.loading")}</Text>
@@ -76,7 +59,6 @@ export default function LibraryScreen() {
     );
   }
 
-  const isAdmin = me.data?.role === "admin";
   const uncategorizedLessons = uncategorized.data ?? [];
   const hasUncategorized = uncategorizedLessons.length > 0;
   const bookRows: BookRow[] = books.data.map((book) => ({
@@ -138,30 +120,6 @@ export default function LibraryScreen() {
           </Pressable>
         );
       }}
-      ListFooterComponent={
-        isAdmin ? (
-          <View style={styles.uploadForm}>
-            <Text style={styles.uploadHeading}>{t("library.newBook")}</Text>
-            <Text style={styles.label}>{t("library.bookTitle")}</Text>
-            <TextInput style={styles.input} value={title} onChangeText={setTitle} />
-
-            {createError && <Text style={styles.error}>{createError}</Text>}
-
-            <Pressable
-              style={[styles.button, styles.uploadButton]}
-              onPress={() => createBookMutation.mutate()}
-              disabled={createBookMutation.isPending || !title}
-              accessibilityRole="button"
-            >
-              {createBookMutation.isPending ? (
-                <ActivityIndicator color={colors.primaryForeground} />
-              ) : (
-                <Text style={styles.uploadButtonText}>{t("library.createBook")}</Text>
-              )}
-            </Pressable>
-          </View>
-        ) : undefined
-      }
     />
   );
 }
@@ -239,51 +197,6 @@ const useStyles = makeStyles((colors) => ({
   empty: {
     fontSize: fontSizes.sm,
     color: colors.mutedForeground,
-  },
-  uploadForm: {
-    marginTop: spacing.xl,
-    paddingTop: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    gap: spacing.sm,
-  },
-  uploadHeading: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
-  },
-  label: {
-    fontSize: fontSizes.sm,
-    color: colors.mutedForeground,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    fontSize: 15,
-    color: colors.foreground,
-    backgroundColor: colors.background,
-  },
-  button: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    alignItems: "center",
-    alignSelf: "flex-start",
-  },
-  uploadButton: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-    borderRadius: 10,
-  },
-  uploadButtonText: {
-    color: colors.primaryForeground,
-    fontWeight: fontWeights.medium,
-    fontSize: fontSizes.sm,
   },
   error: {
     color: colors.danger,

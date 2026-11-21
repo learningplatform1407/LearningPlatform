@@ -48,11 +48,12 @@ the system grows.
 
 ## Where admin authoring lives
 
-Admin content tools stay **contextual-inline on mobile**, next to the content
-they create: books and chapters on `/learn/library`, lecture upload inside the
-book you are viewing. On web this was the rule for everything until library
-authoring moved out (see the fourth exception below) — the feed composer, the
-two bulk importers, and question-of-the-day still follow it as described here.
+Admin content tools are **contextual-inline**, next to the content they
+create — the feed composer above the list it writes into, on both platforms.
+That was once the rule for everything, including library authoring; library
+authoring has since moved out of the pages learners browse on both platforms
+(see the fourth exception below), so on mobile the feed composer is now the
+only inline admin form there is.
 
 The two exceptions are the bulk JSON importers (`/question-bank/manage`,
 `/learn/flashcards/manage`), because a dry-run-then-commit workflow does not
@@ -82,10 +83,16 @@ pages now hide them unconditionally — admin or not. The browsing components
 (book grid, chapter list, sub-chapter list, lesson list) are reused as-is via
 a `showAdminTools` prop rather than duplicated, so there is still exactly one
 copy of each form; it is just reached from `/admin/library` instead of
-rendered inline. Mobile was not touched, so its library screens still have
-the forms inline — the inverse of the importers/question-of-the-day
-asymmetry above: **mobile admins can create/upload there and web admins
-cannot**, until mobile gets the same treatment.
+rendered inline.
+
+Mobile has since had the same treatment, with one difference: there is no
+`/admin/library` on the phone, so the forms were **removed** rather than
+moved. A phone is not where anyone uploads a lecture PDF or plans a chapter
+tree, and the inline forms were the only reason the Library screens knew
+anyone's role at all. This is the same trade the importers and
+question-of-the-day make: **library authoring happens on the web**, and from
+the phone an admin posts announcements and nothing else. Learners get the
+full Library on both platforms, as always.
 
 `/admin` is a directory for the importers and question-of-the-day, and now
 also hosts library authoring itself at `/admin/library` — which still
