@@ -2131,3 +2131,41 @@ describe("admin review words", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("the text-size control", () => {
+  function pdfDocument() {
+    return {
+      ...readyDocumentWithParagraph("Hello world"),
+      lecture_pdf: {
+        status: "ready",
+        error_message: null,
+        storage_path: "lectures/book.pdf",
+        page_count: 3,
+      },
+    };
+  }
+
+  test("is not offered over a PDF page, which has no type to resize", async () => {
+    getDocument.mockResolvedValue(pdfDocument());
+    renderPage();
+    await screen.findByText(para("Hello world"));
+
+    // Text mode: offered.
+    expect(screen.getByRole("button", { name: "Text size" })).toBeInTheDocument();
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "PDF" }));
+    await screen.findByTestId("pdf-lesson-view");
+
+    // PDF mode: gone, rather than there and dead. The zoom dots are the
+    // equivalent over there.
+    expect(screen.queryByRole("button", { name: "Text size" })).not.toBeInTheDocument();
+  });
+
+  test("is offered on Review, which is prose whichever mode the lesson is in", async () => {
+    getDocument.mockResolvedValue(pdfDocument());
+    searchParams = new URLSearchParams("tab=review");
+    renderPage();
+
+    expect(await screen.findByRole("button", { name: "Text size" })).toBeInTheDocument();
+  });
+});

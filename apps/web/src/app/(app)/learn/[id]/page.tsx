@@ -641,7 +641,11 @@ export default function LecturePage() {
         tool={tool}
         viewMode={mode}
         onLessonTab={activeTab === "lesson"}
-        textScaleAvailable={activeTab === "lesson" || activeTab === "review"}
+        // Review, and the Lesson tab only in Text mode: a PDF page is a
+        // rendered bitmap with no type to resize, so the control was there
+        // and dead. The zoom dots are the equivalent over there. Same
+        // reasoning as DESIGN-13, which stopped at the tab boundary.
+        textScaleAvailable={(activeTab === "lesson" && mode === "text") || activeTab === "review"}
         canUndo={mode === "pdf" ? pdfCanUndo : undoDepth > 0}
         tocOpen={tocOpen}
         onToggleToc={() => setTocOpen((open) => !open)}

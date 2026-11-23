@@ -1827,7 +1827,13 @@ test("the tool notch stays reachable with the pen in hand", async () => {
   expect(notch.maxHeight).toBe("58%");
   expect(notch.top).toBe("30%");
 
-  // And Aa is still there to be pressed, rather than under the tab bar.
+  // A PDF page has no type to resize, so Aa is not offered over there --
+  // it used to render and do nothing at all.
+  expect(screen.queryByLabelText("Text size")).toBeNull();
+
+  // In Text mode it is there, and reachable rather than under the tab bar.
+  fireEvent.press(screen.getByText("Text"));
+  await screen.findByText("Hello world");
   const textSize = screen.getByLabelText("Text size");
   fireEvent.press(textSize);
   expect(textSize).toBeTruthy();

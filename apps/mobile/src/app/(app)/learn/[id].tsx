@@ -2306,7 +2306,13 @@ export default function LectureScreen() {
           noteAvailable={activeTab === "lesson" && lessonViewMode === "text"}
           onContents={() => setActiveDrawer("toc")}
           onExplain={() => setExplainComingSoonVisible(true)}
-          textScaleAvailable={activeTab === "lesson" || activeTab === "review"}
+          // Review, and the Lesson tab only in Text mode: a PDF page is a
+          // rendered bitmap with no type to resize, so the control was
+          // there and dead. Same reasoning as DESIGN-13, which stopped at
+          // the tab boundary.
+          textScaleAvailable={
+            (activeTab === "lesson" && lessonViewMode === "text") || activeTab === "review"
+          }
           onTextScale={() =>
             setTextScale(
               (current) => TEXT_SCALES[(TEXT_SCALES.indexOf(current) + 1) % TEXT_SCALES.length]!,
