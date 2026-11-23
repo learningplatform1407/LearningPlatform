@@ -39,6 +39,12 @@ the system grows.
   write but not on read, why mobile has separate read and draw modes when web
   does not, and that mobile needs a dev client because Expo Go cannot load
   `react-native-pdf`.
+- [`review-words.md`](./review-words.md) — which words the Review tab hides,
+  now marked by an admin from inside the lesson rather than guessed from the
+  text. Records why the longest-non-stopword heuristic was removed rather than
+  tuned, why the request carries offsets and the server slices the answer, why
+  overlapping gaps are refused, what unmarking a word takes with it, and why
+  the existing generated cards were left in place.
 - [`password-reset.md`](./password-reset.md) — email recovery and
   change-password, both pure Supabase Auth with no backend involvement.
   Records why the form deliberately cannot say whether an address is
@@ -93,6 +99,14 @@ anyone's role at all. This is the same trade the importers and
 question-of-the-day make: **library authoring happens on the web**, and from
 the phone an admin posts announcements and nothing else. Learners get the
 full Library on both platforms, as always.
+
+Marking a lesson's **review words** (see
+[`review-words.md`](./review-words.md)) is the **fifth exception**, and the
+mildest: the tool _is_ contextual-inline — it sits in the lesson's own tool
+notch, gated on `me.data?.role === "admin"` like the feed composer — it is
+just web-only. Choosing which word in a paragraph is worth recalling is
+authoring, and wants the same keyboard and screen that library authoring does.
+Learners get Review in full on both platforms.
 
 `/admin` is a directory for the importers and question-of-the-day, and now
 also hosts library authoring itself at `/admin/library` — which still

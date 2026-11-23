@@ -11,6 +11,10 @@ export type LessonTool =
   | { kind: "pen"; color: SwatchIndex; size: PenSize }
   | { kind: "eraser" }
   | { kind: "note" }
+  // Admin only: marks which words the Review tab hides. Offered from the
+  // lesson itself, because the only way to choose a good gap is to read the
+  // sentence around it (docs/architecture/review-words.md).
+  | { kind: "cloze" }
   | null;
 
 export function colorName(index: SwatchIndex): HighlightColorName {
@@ -27,10 +31,12 @@ export function pickSwatch(tool: LessonTool, color: SwatchIndex): LessonTool {
 }
 
 /** Whether a tool can be used in a given view. The pen draws on PDF pages
- * only; notes anchor to lesson text only (PDF highlights have no notes). */
+ * only; notes anchor to lesson text only (PDF highlights have no notes), and
+ * so do review words -- a cloze card is a pair of offsets into an extracted
+ * paragraph, which only the text view renders. */
 export function toolAvailable(kind: NonNullable<LessonTool>["kind"], mode: LessonViewMode) {
   if (kind === "pen") return mode === "pdf";
-  if (kind === "note") return mode === "text";
+  if (kind === "note" || kind === "cloze") return mode === "text";
   return true;
 }
 

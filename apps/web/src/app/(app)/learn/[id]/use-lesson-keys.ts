@@ -11,6 +11,10 @@ export interface LessonKeyHandlers {
   pen: () => void;
   note: () => void;
   explain: () => void;
+  /** Admin only, and a no-op for everyone else. */
+  reviewWords: () => void;
+  /** The PDF's writing margins. */
+  margins: () => void;
   undo: () => void;
   clear: () => void;
 }
@@ -49,6 +53,8 @@ export function useLessonKeys(enabled: boolean, handlers: LessonKeyHandlers) {
       else if (key === "p") h.pen();
       else if (key === "w") h.note();
       else if (key === "q") h.explain();
+      else if (key === "d") h.reviewWords();
+      else if (key === "m") h.margins();
       else if (key === "z") h.undo();
       else if (key === "escape") h.clear();
       else return;

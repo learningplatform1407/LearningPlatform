@@ -23,6 +23,11 @@ import { ExpandableRow } from "@/components/expandable-row";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatTile } from "@/components/stat-tile";
 import { OptionChoice, QuestionRevealPanel } from "@/components/question-reveal";
+import {
+  QUESTION_CARD_ATTR,
+  QuestionKeysHint,
+  useQuestionKeys,
+} from "@/components/use-question-keys";
 import { PageHeader } from "@/components/page-header";
 import { PageMain } from "@/components/page-main";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
@@ -497,8 +502,24 @@ function QuestionCard({
     );
   }
 
+  const answerable = reveal === undefined && !locked && !disabled;
+  // A quiz question has no id of its own in the session payload; its
+  // position in the quiz is what identifies it.
+  useQuestionKeys(`exam-${question.position}`, {
+    optionCount: question.options.length,
+    choose: (index) => {
+      const option = question.options[index];
+      if (option && answerable) toggle(option.id);
+    },
+    submit:
+      answerable && selected.length > 0 ? () => onAnswer(question.position, selected) : undefined,
+  });
+
   return (
-    <div className="border-t border-border pt-md">
+    <div
+      {...{ [QUESTION_CARD_ATTR]: `exam-${question.position}` }}
+      className="border-t border-border pt-md"
+    >
       <p className="mb-2.5 font-bold text-foreground">
         {question.position + 1}. {question.prompt}
       </p>
@@ -515,6 +536,7 @@ function QuestionCard({
                 text={option.text}
                 checked={selected.includes(option.id)}
                 disabled={disabled || locked}
+                keyHint={t("questions.chooseKey", { key: index + 1 })}
                 onChange={() => toggle(option.id)}
               />
             </li>
@@ -534,18 +556,20 @@ function QuestionCard({
           })}
         </p>
       ) : (
-        <Button
-          type="button"
-          className="mt-sm"
-          disabled={disabled || selected.length === 0}
-          onClick={() => onAnswer(question.position, selected)}
-        >
-          {!answered
-            ? t("exams.saveAnswer")
-            : changed
-              ? t("exams.updateAnswer")
-              : t("exams.answerSaved")}
-        </Button>
+        <div className="mt-sm flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            disabled={disabled || selected.length === 0}
+            onClick={() => onAnswer(question.position, selected)}
+          >
+            {!answered
+              ? t("exams.saveAnswer")
+              : changed
+                ? t("exams.updateAnswer")
+                : t("exams.answerSaved")}
+          </Button>
+          <QuestionKeysHint optionCount={question.options.length} />
+        </div>
       )}
     </div>
   );

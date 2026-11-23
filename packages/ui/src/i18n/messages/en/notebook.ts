@@ -9,6 +9,8 @@ export const notebook = {
   untitled: "Untitled note",
   empty: "No notes yet.",
   drawing: "Drawing",
+  fromLesson: "From {lesson}",
+  noLesson: "Not from a lesson",
   newText: "+ Text",
   newDrawing: "+ Drawing",
   noteTitle: "Title",

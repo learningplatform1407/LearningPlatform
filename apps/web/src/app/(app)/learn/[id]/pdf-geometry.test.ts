@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   highlightHit,
   lettersFromTextItems,
+  pageLayout,
   rectsForRange,
   strokeHit,
   strokePath,
@@ -171,5 +172,39 @@ describe("wordsForQuote", () => {
 
   test("null when the page doesn't contain it", () => {
     expect(wordsForQuote(words, "goodbye")).toBeNull();
+  });
+});
+
+describe("pageLayout", () => {
+  test("off, the page is the whole width and there are no margins", () => {
+    expect(pageLayout(920, false)).toEqual({
+      pageWidth: 920,
+      marginWidth: 0,
+      marginFraction: 0,
+    });
+  });
+
+  test("on, the page and both margins add up to exactly the width available", () => {
+    // Every width a reading column plausibly takes, at every zoom step.
+    for (const across of [300, 301, 599, 760, 920, 921, 1333, 2760]) {
+      const { pageWidth, marginWidth } = pageLayout(across, true);
+      expect(pageWidth + 2 * marginWidth).toBe(across);
+      // Whole pixels, so nothing lands on a half-pixel boundary.
+      expect(Number.isInteger(pageWidth)).toBe(true);
+      expect(Number.isInteger(marginWidth)).toBe(true);
+    }
+  });
+
+  test("each margin is about 18% of the page", () => {
+    const { pageWidth, marginWidth, marginFraction } = pageLayout(920, true);
+    expect(marginWidth / pageWidth).toBeCloseTo(0.18, 2);
+    // The fraction is the *rounded* width's, not the nominal 0.18, so the
+    // geometry the ink is stored in matches the geometry it is drawn in.
+    expect(marginFraction).toBe(marginWidth / pageWidth);
+  });
+
+  test("a column with no width yet asks for nothing", () => {
+    expect(pageLayout(0, true)).toEqual({ pageWidth: 0, marginWidth: 0, marginFraction: 0 });
+    expect(pageLayout(-5, true).pageWidth).toBe(0);
   });
 });

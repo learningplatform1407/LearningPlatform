@@ -429,6 +429,7 @@ describe("notebookEntryResponseSchema", () => {
       content: "Idea for the project",
       strokes: null,
       source_document_id: null,
+      source_document_title: null,
       created_at: "2026-09-08T22:10:05.372022Z",
       updated_at: "2026-09-08T22:10:05.372022Z",
     };
@@ -458,6 +459,7 @@ describe("notebookEntryResponseSchema", () => {
         },
       ],
       source_document_id: null,
+      source_document_title: null,
       created_at: "2026-09-08T22:10:05.372022Z",
       updated_at: "2026-09-08T22:10:05.372022Z",
     };
@@ -472,6 +474,24 @@ describe("notebookEntryResponseSchema", () => {
       content: "Jotted while reading",
       strokes: null,
       source_document_id: "2879a273-236d-429e-985b-db6c43672a1b",
+      source_document_title: "Ortopedie I",
+      created_at: "2026-09-08T22:10:05.372022Z",
+      updated_at: "2026-09-08T22:10:05.372022Z",
+    };
+
+    expect(notebookEntryResponseSchema.safeParse(payload).success).toBe(true);
+  });
+
+  test("accepts a note whose lesson has since been deleted", () => {
+    // source_document_id is SET NULL on delete, so the note survives with
+    // neither id nor title -- the same shape as one never tied to a lesson.
+    const payload = {
+      id: "70daa13f-1836-4b32-85b3-6dbe96388f3e",
+      type: "text",
+      content: "Jotted while reading",
+      strokes: null,
+      source_document_id: null,
+      source_document_title: null,
       created_at: "2026-09-08T22:10:05.372022Z",
       updated_at: "2026-09-08T22:10:05.372022Z",
     };
@@ -486,6 +506,7 @@ describe("notebookEntryResponseSchema", () => {
       content: null,
       strokes: null,
       source_document_id: null,
+      source_document_title: null,
       created_at: "2026-09-08T22:10:05.372022Z",
       updated_at: "2026-09-08T22:10:05.372022Z",
     };

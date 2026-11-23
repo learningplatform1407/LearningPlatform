@@ -7,6 +7,7 @@ import type {
   Chapter,
   ChapterCreateRequest,
   ClozeCard,
+  ClozeCardCreateRequest,
   ClozeDueCard,
   ClozeRating,
   ClozeReviewState,
@@ -792,6 +793,20 @@ export function createApiClient(config: ApiClientConfig) {
       }),
     listClozeCards: (documentId: string) =>
       request<ClozeCard[]>(`/v1/documents/${documentId}/cloze-cards`),
+    /** Admin only: marks a passage of one paragraph as a review word. The
+     * answer is sliced from the lesson server-side, so only the offsets
+     * travel -- see docs/architecture/review-words.md. */
+    markClozeCard: (documentId: string, data: ClozeCardCreateRequest) =>
+      request<ClozeCard>(`/v1/documents/${documentId}/cloze-cards`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    /** Admin only: unmarks a review word, and with it every learner's
+     * progress against that word. */
+    unmarkClozeCard: (documentId: string, clozeCardId: string) =>
+      request<void>(`/v1/documents/${documentId}/cloze-cards/${clozeCardId}`, {
+        method: "DELETE",
+      }),
     listDueClozeCards: (documentId: string) =>
       request<ClozeDueCard[]>(`/v1/documents/${documentId}/cloze-cards/due`),
     submitClozeReview: (documentId: string, clozeCardId: string, rating: ClozeRating) =>

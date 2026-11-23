@@ -40,9 +40,23 @@ const STROKE_WIDTH = 0.006;
 // DrawingCanvas's ERASER_RADIUS so the two feel the same.
 const ERASER_RADIUS = 0.02;
 
-function strokePath(stroke: Stroke, width: number, height: number): string {
+/** The x range, in stored units, that the canvas's width covers. The whole
+ * surface by default; a PDF page with writing margins passes a wider span,
+ * so ink beside the page keeps page coordinates (see pdf-lesson-view). */
+export interface XSpan {
+  from: number;
+  to: number;
+}
+
+const FULL_SPAN: XSpan = { from: 0, to: 1 };
+
+function strokePath(stroke: Stroke, width: number, height: number, span: XSpan): string {
+  const scale = width / (span.to - span.from);
   return stroke.points
-    .map((point, index) => `${index === 0 ? "M" : "L"}${point.x * width},${point.y * height}`)
+    .map(
+      (point, index) =>
+        `${index === 0 ? "M" : "L"}${(point.x - span.from) * scale},${point.y * height}`,
+    )
     .join(" ");
 }
 
@@ -97,6 +111,10 @@ interface DrawingCanvasProps {
   /** Each point the eraser passes over, for a parent that erases more than
    * strokes there (a PDF page's highlights). */
   onErasePoint?: (point: StrokePoint) => void;
+  /** The x range this canvas's width covers, in stored units. Defaults to
+   * the whole surface; a PDF page with writing margins widens it so a
+   * stroke in a margin is stored at an x outside [0, 1]. */
+  xSpan?: XSpan;
   /** After a finished draw or erase gesture, once `onChange` has run. */
   onGestureEnd?: () => void;
 }
@@ -113,6 +131,7 @@ export function DrawingCanvas({
   penSize: penSizeProp,
   onErasePoint,
   onGestureEnd,
+  xSpan = FULL_SPAN,
 }: DrawingCanvasProps) {
   const { t } = useI18n();
   const styles = useStyles();
@@ -155,8 +174,9 @@ export function DrawingCanvas({
 
   function pointFromEvent(event: GestureResponderEvent): StrokePoint {
     const { locationX, locationY, force } = event.nativeEvent;
+    const alongX = size.width > 0 ? locationX / size.width : 0;
     return {
-      x: size.width > 0 ? Math.min(1, Math.max(0, locationX / size.width)) : 0,
+      x: Math.min(xSpan.to, Math.max(xSpan.from, xSpan.from + alongX * (xSpan.to - xSpan.from))),
       y: size.height > 0 ? Math.min(1, Math.max(0, locationY / size.height)) : 0,
       pressure: force || undefined,
     };
@@ -238,6 +258,9 @@ export function DrawingCanvas({
   }
 
   const displayStrokes = erasingPreview ?? strokes;
+  // A stroke's width is a fraction of one unit of x (the page), not of this
+  // canvas, so widening the span must not thicken the ink.
+  const unitWidth = size.width / (xSpan.to - xSpan.from);
 
   return (
     <View style={explicitSize ? styles.containerOverlay : styles.container}>
@@ -333,9 +356,9 @@ export function DrawingCanvas({
             {displayStrokes.map((stroke, index) => (
               <Path
                 key={index}
-                d={strokePath(stroke, size.width, size.height)}
+                d={strokePath(stroke, size.width, size.height, xSpan)}
                 stroke={stroke.color}
-                strokeWidth={Math.max(1, stroke.width * size.width)}
+                strokeWidth={Math.max(1, stroke.width * unitWidth)}
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 fill="none"
@@ -347,9 +370,10 @@ export function DrawingCanvas({
                   { color, width: strokeWidth, points: drawingStroke },
                   size.width,
                   size.height,
+                  xSpan,
                 )}
                 stroke={color}
-                strokeWidth={Math.max(1, strokeWidth * size.width)}
+                strokeWidth={Math.max(1, strokeWidth * unitWidth)}
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 fill="none"

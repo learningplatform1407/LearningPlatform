@@ -21,6 +21,40 @@ export function firstLine(content: string): string {
   return line?.trim() ?? "";
 }
 
+/**
+ * Which lesson a note was written in, under its title in a list.
+ *
+ * Notes are one pool browsed whole, so a list of them spans lessons and the
+ * titles alone ("Untitled note", "Drawing") cannot tell two apart. Renders
+ * nothing for a note that belongs to no lesson -- in a list, no line reads
+ * as "not from a lesson" without repeating it down every row.
+ */
+function SourceLine({ entry }: { entry: NotebookEntry }) {
+  const { t } = useI18n();
+  const styles = useStyles();
+  if (!entry.source_document_title) return null;
+  return (
+    <Text style={styles.rowSource} numberOfLines={1}>
+      {t("notebook.fromLesson", { lesson: entry.source_document_title })}
+    </Text>
+  );
+}
+
+/** The same provenance above an open note, where -- unlike in a list --
+ * "not from a lesson" is worth saying, because a blank line there would just
+ * look like missing data. */
+export function NoteSource({ entry }: { entry: NotebookEntry }) {
+  const { t } = useI18n();
+  const styles = useStyles();
+  return (
+    <Text style={styles.rowSource}>
+      {entry.source_document_title
+        ? t("notebook.fromLesson", { lesson: entry.source_document_title })
+        : t("notebook.noLesson")}
+    </Text>
+  );
+}
+
 export function NotebookEntryList({
   entries,
   selectedEntryId,
@@ -46,14 +80,18 @@ export function NotebookEntryList({
             accessibilityState={{ selected: active }}
           >
             {entry.type === "text" ? (
-              <Text style={[styles.rowTitle, active && styles.rowTitleActive]} numberOfLines={1}>
-                {firstLine(entry.content ?? "") || t("notebook.untitled")}
-              </Text>
+              <>
+                <Text style={[styles.rowTitle, active && styles.rowTitleActive]} numberOfLines={1}>
+                  {firstLine(entry.content ?? "") || t("notebook.untitled")}
+                </Text>
+                <SourceLine entry={entry} />
+              </>
             ) : (
               <View style={styles.drawingRow}>
                 <Text style={[styles.rowTitle, active && styles.rowTitleActive]}>
                   {t("notebook.drawing")}
                 </Text>
+                <SourceLine entry={entry} />
                 <DrawingThumbnail strokes={entry.strokes ?? []} />
               </View>
             )}
@@ -198,6 +236,7 @@ export function NotebookEntryEditor({
 
   return (
     <View style={styles.editor}>
+      {entry && <NoteSource entry={entry} />}
       {resolvedType === "text" ? (
         <View style={styles.textBox}>
           <TextInput
@@ -286,6 +325,12 @@ const useStyles = makeStyles((colors) => ({
   },
   rowTitleActive: {
     fontWeight: fontWeights.extrabold,
+  },
+  rowSource: {
+    fontSize: fontSizes.caption,
+    lineHeight: 17,
+    fontWeight: fontWeights.semibold,
+    color: colors.mutedForeground,
   },
   drawingRow: {
     gap: spacing.xs,

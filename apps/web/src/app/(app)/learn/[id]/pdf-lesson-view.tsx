@@ -27,6 +27,7 @@ import { useI18n } from "@/lib/i18n";
 import { colorName, type LessonTool } from "./lesson-tools";
 import {
   highlightHit,
+  pageLayout,
   rectsForRange,
   strokeHit,
   strokePath,
@@ -94,6 +95,8 @@ interface PdfLessonViewProps {
   tool?: LessonTool;
   /** Page width as a percentage of the reading column. */
   zoom?: number;
+  /** Side margins to write notes in, either side of every page. */
+  margins?: boolean;
   onUndoChange?: (canUndo: boolean) => void;
   onOutline?: (items: PdfOutlineItem[]) => void;
   /** Passages to paint in the quiz-source orange ("See in lesson"). */
@@ -114,6 +117,7 @@ export function PdfLessonView({
   pageCount,
   tool = null,
   zoom = 100,
+  margins = false,
   onUndoChange,
   onOutline,
   sourceQuotes = null,
@@ -319,7 +323,12 @@ export function PdfLessonView({
   // endpoint refuses a write past the server's page_count, so offering a
   // page beyond it would mean drawing that can't be saved.
   const numPages = Math.min(pdfDoc.numPages, pageCount);
-  const pageWidth = Math.round((columnWidth * zoom) / 100);
+  // Ink in a margin is stored in the same page-normalised coordinates as ink
+  // on the page, just outside [0, 1] -- so a stroke beside the text keeps
+  // its place next to the words at every zoom and on every screen, and every
+  // mark already made on a page is untouched by turning margins on. Only
+  // highlights stay clamped to the sheet, because they anchor to words.
+  const { pageWidth, marginWidth } = pageLayout(Math.round((columnWidth * zoom) / 100), margins);
 
   return (
     // Zoomed past the column, the pages scroll sideways inside it rather
@@ -333,6 +342,7 @@ export function PdfLessonView({
             documentId={documentId}
             pageNumber={i + 1}
             width={pageWidth}
+            marginWidth={marginWidth}
             defaultAspect={firstAspect}
             tool={tool}
             penSeen={penSeen}
@@ -467,6 +477,7 @@ function PdfPage({
   documentId,
   pageNumber,
   width,
+  marginWidth,
   defaultAspect,
   tool,
   penSeen,
@@ -480,6 +491,8 @@ function PdfPage({
   documentId: string;
   pageNumber: number;
   width: number;
+  /** Each margin's width in pixels; 0 with margins off. */
+  marginWidth: number;
   defaultAspect: number;
   tool: LessonTool;
   penSeen: boolean;
@@ -508,6 +521,10 @@ function PdfPage({
   const aspect = viewport ? viewport.height / viewport.width : defaultAspect;
   const height = Math.round(width * aspect);
   const pointsWide = viewport?.width ?? 600;
+  const totalWidth = width + 2 * marginWidth;
+  // The margins' real size in page units (pageLayout), which is what ink in
+  // them is stored in.
+  const marginFraction = width > 0 ? marginWidth / width : 0;
 
   useEffect(() => {
     const sheet = sheetRef.current;
@@ -581,10 +598,17 @@ function PdfPage({
     enabled: near,
   });
 
+  /** A pointer position in page units, measured off the sheet so a point on
+   * the page keeps the coordinates it always had. The margins extend the x
+   * range either side; y stays on the page, since the margins are exactly
+   * as tall as it is. */
   function pointOf(event: { clientX: number; clientY: number }): StrokePoint {
     const rect = sheetRef.current!.getBoundingClientRect();
     return {
-      x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
+      x: Math.min(
+        1 + marginFraction,
+        Math.max(-marginFraction, (event.clientX - rect.left) / rect.width),
+      ),
       y: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
     };
   }
@@ -780,87 +804,136 @@ function PdfPage({
   const shown = erasing ?? ink;
   const marking = tool !== null && tool.kind !== "note";
 
+  // Tinted only while the pen or eraser is in hand: a faint panel beside
+  // every page of a 400-page book would be noise, but at the moment the pen
+  // comes out it is the only thing that says "you can write here".
+  const inkTool = tool?.kind === "pen" || tool?.kind === "eraser";
+
   return (
+    // The page and its margins. Margins off (marginWidth 0) makes this
+    // exactly the sheet, as it was before they existed.
     <div
-      id={pageElementId(pageNumber)}
-      ref={sheetRef}
-      role="img"
-      aria-label={t("lesson.pdfView.page", { number: pageNumber })}
-      style={{ width, height }}
-      className="book-page relative mx-auto mb-md bg-white shadow-page select-none [-webkit-touch-callout:none]"
+      style={{ width: totalWidth, height }}
+      className="relative mx-auto mb-md select-none [-webkit-touch-callout:none]"
     >
-      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
-      {failed && (
-        <p className="absolute inset-0 flex items-center justify-center text-sm text-[#c8372d]">
-          This page couldn&apos;t be drawn.
-        </p>
+      {marginWidth > 0 && inkTool && (
+        <>
+          {/* Decorative: the page beside them carries the accessible name,
+              and the ink itself is not something a screen reader can read. */}
+          <div
+            aria-hidden="true"
+            style={{ width: marginWidth }}
+            className="pointer-events-none absolute top-0 left-0 h-full rounded-l-sm bg-muted/60"
+          />
+          <div
+            aria-hidden="true"
+            style={{ width: marginWidth }}
+            className="pointer-events-none absolute top-0 right-0 h-full rounded-r-sm bg-muted/60"
+          />
+        </>
       )}
 
-      {/* Highlights, then ink, positioned in page units so they scale with
-          the page for free. */}
-      <div className="pointer-events-none absolute inset-0">
-        {shown.highlights.map((highlight, h) =>
-          highlight.rects.map(([x0, y0, x1, y1], r) => (
-            <i
-              key={`${h}-${r}`}
-              className={`absolute rounded-[1px] mix-blend-multiply ${HIGHLIGHT_FILL[highlightIndex(highlight.color)]}`}
-              style={rectStyle(x0, y0, x1, y1)}
-            />
-          )),
-        )}
-        {/* Quiz sources: orange fill with an underline (design.md §1). */}
-        {sourceRects?.map(([x0, y0, x1, y1], r) => (
-          <i
-            key={`s${r}`}
-            data-source=""
-            className="absolute rounded-[1px] bg-[rgba(255,140,0,0.22)] shadow-[inset_0_-2px_#ff7a00]"
-            style={rectStyle(x0, y0, x1, y1)}
-          />
-        ))}
-        {preview?.map(([x0, y0, x1, y1], r) => (
-          <i
-            key={`p${r}`}
-            className="absolute rounded-[1px] bg-[rgba(47,111,159,0.16)]"
-            style={rectStyle(x0, y0, x1, y1)}
-          />
-        ))}
-        {flashY && (
-          <i
-            key={flashY.at}
-            className="absolute right-[4%] left-[4%] h-[3%] animate-[heading-flash_1.6s_ease_forwards] rounded-[3px] bg-[rgba(255,200,0,0.5)]"
-            style={{ top: `${Math.max(0, flashY.y * 100 - 1)}%` }}
-          />
-        )}
-      </div>
+      {/* The page and the ink on it, inverted as one unit in dark mode
+          (design.md §13). The ink has to be inside this, not beside it:
+          `.book-page` is what carries the filter, and ink left outside it
+          stayed its drawn colour while the page under it flipped --
+          graphite on a now-dark page. The margin tints are deliberately
+          outside, because they are theme colours that already follow the
+          theme and must not be inverted a second time. */}
+      <div className="book-page absolute inset-0">
+        <div
+          id={pageElementId(pageNumber)}
+          ref={sheetRef}
+          role="img"
+          aria-label={t("lesson.pdfView.page", { number: pageNumber })}
+          style={{ width, height, left: marginWidth }}
+          className="absolute top-0 bg-white shadow-page"
+        >
+          <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
+          {failed && (
+            <p className="absolute inset-0 flex items-center justify-center text-sm text-[#c8372d]">
+              This page couldn&apos;t be drawn.
+            </p>
+          )}
 
-      <svg
-        viewBox={`0 0 1000 ${1000 * aspect}`}
-        preserveAspectRatio="none"
-        className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
-        aria-hidden="true"
-      >
-        {shown.strokes.map((stroke, i) => (
-          <path
-            key={i}
-            d={strokePath(stroke.points, 1000, 1000 * aspect)}
-            fill="none"
-            stroke={stroke.color}
-            strokeWidth={stroke.width * 1000}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        ))}
-        {draft && tool?.kind === "pen" && (
-          <path
-            d={strokePath(draft.points, 1000, 1000 * aspect)}
-            fill="none"
-            stroke={pageColors.pens[tool.color]}
-            strokeWidth={draft.width * 1000}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        )}
-      </svg>
+          {/* Highlights, positioned in page units so they scale with the page
+            for free. Word-anchored, so they never leave the sheet. */}
+          <div className="pointer-events-none absolute inset-0">
+            {shown.highlights.map((highlight, h) =>
+              highlight.rects.map(([x0, y0, x1, y1], r) => (
+                <i
+                  key={`${h}-${r}`}
+                  className={`absolute rounded-[1px] mix-blend-multiply ${HIGHLIGHT_FILL[highlightIndex(highlight.color)]}`}
+                  style={rectStyle(x0, y0, x1, y1)}
+                />
+              )),
+            )}
+            {/* Quiz sources: orange fill with an underline (design.md §1). */}
+            {sourceRects?.map(([x0, y0, x1, y1], r) => (
+              <i
+                key={`s${r}`}
+                data-source=""
+                className="absolute rounded-[1px] bg-[rgba(255,140,0,0.22)] shadow-[inset_0_-2px_#ff7a00]"
+                style={rectStyle(x0, y0, x1, y1)}
+              />
+            ))}
+            {preview?.map(([x0, y0, x1, y1], r) => (
+              <i
+                key={`p${r}`}
+                className="absolute rounded-[1px] bg-[rgba(47,111,159,0.16)]"
+                style={rectStyle(x0, y0, x1, y1)}
+              />
+            ))}
+            {flashY && (
+              <i
+                key={flashY.at}
+                className="absolute right-[4%] left-[4%] h-[3%] animate-[heading-flash_1.6s_ease_forwards] rounded-[3px] bg-[rgba(255,200,0,0.5)]"
+                style={{ top: `${Math.max(0, flashY.y * 100 - 1)}%` }}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Ink over the page *and* its margins: the viewBox starts a margin's
+          width to the left of the page and ends one to the right, so a
+          stroke keeps page coordinates wherever it was drawn and every
+          stroke made before margins existed lands exactly where it did.
+
+          Clipped to that box (SVG's default), which is what hides margin ink
+          again when the margins are turned off: the strokes are still
+          stored, and still saved by every later edit, but the viewBox is
+          then only the page and they fall outside it. This used to be
+          `overflow-visible`, which let them paint into the gutter beside the
+          page instead of disappearing with the margins they were drawn in. */}
+        <svg
+          viewBox={`${-1000 * marginFraction} 0 ${1000 * (1 + 2 * marginFraction)} ${1000 * aspect}`}
+          preserveAspectRatio="none"
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          aria-hidden="true"
+        >
+          {shown.strokes.map((stroke, i) => (
+            <path
+              key={i}
+              d={strokePath(stroke.points, 1000, 1000 * aspect)}
+              fill="none"
+              stroke={stroke.color}
+              strokeWidth={stroke.width * 1000}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ))}
+          {draft && tool?.kind === "pen" && (
+            <path
+              d={strokePath(draft.points, 1000, 1000 * aspect)}
+              fill="none"
+              stroke={pageColors.pens[tool.color]}
+              strokeWidth={draft.width * 1000}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
+        </svg>
+      </div>
 
       {marking && (
         <div

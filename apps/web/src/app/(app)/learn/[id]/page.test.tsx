@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
+import { ApiClientError } from "@lp/api-client";
+
 import { ToastProvider } from "@/components/toast";
 import { ThemeProvider } from "@/lib/theme";
 
@@ -32,6 +34,10 @@ const updateNotebookEntry = vi.fn();
 const deleteNotebookEntry = vi.fn();
 const listDocuments = vi.fn();
 const getQuestionBankTree = vi.fn();
+const getMe = vi.fn();
+const listClozeCards = vi.fn();
+const markClozeCard = vi.fn();
+const unmarkClozeCard = vi.fn();
 
 vi.mock("@/lib/api-client.browser", () => ({
   getBrowserApiClient: () => ({
@@ -58,6 +64,10 @@ vi.mock("@/lib/api-client.browser", () => ({
     deleteNotebookEntry,
     listDocuments,
     getQuestionBankTree,
+    getMe,
+    listClozeCards,
+    markClozeCard,
+    unmarkClozeCard,
   }),
 }));
 
@@ -132,6 +142,7 @@ function entry(overrides: Record<string, unknown> = {}) {
     content: "",
     strokes: null,
     source_document_id: "d1",
+    source_document_title: "Intro to Systems",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
     ...overrides,
@@ -216,7 +227,23 @@ beforeEach(() => {
   deleteNotebookEntry.mockReset();
   listDocuments.mockReset().mockResolvedValue([]);
   getQuestionBankTree.mockReset();
+  getMe.mockReset().mockResolvedValue({ id: "u1", email: "l@example.com", role: "user" });
+  listClozeCards.mockReset().mockResolvedValue([]);
+  markClozeCard.mockReset().mockResolvedValue({});
+  unmarkClozeCard.mockReset().mockResolvedValue(undefined);
 });
+
+function clozeCard(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "c1",
+    document_id: "d1",
+    block_index: 0,
+    start_offset: 0,
+    end_offset: 5,
+    created_at: "2026-01-01",
+    ...overrides,
+  };
+}
 
 /** A hidden cloze gap, hints on or off: "[ m___ ]" or "[ … ]". */
 const GAP = /^\[ .+ \]$/;
@@ -1738,7 +1765,12 @@ describe("LecturePage", () => {
     listNotebookEntries.mockResolvedValue([
       entry({ id: "n1", content: "First note", created_at: "2026-01-01T10:00:00Z" }),
       entry({ id: "n2", content: "Second note", created_at: "2026-01-02T10:00:00Z" }),
-      entry({ id: "other", content: "Another lesson's", source_document_id: "d9" }),
+      entry({
+        id: "other",
+        content: "Another lesson's",
+        source_document_id: "d9",
+        source_document_title: "Ortopedie I",
+      }),
     ]);
     updateNotebookEntry.mockResolvedValue(entry({ id: "n1", content: "First note, edited" }));
 
@@ -1765,7 +1797,12 @@ describe("LecturePage", () => {
     getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
     listNotebookEntries.mockResolvedValue([
       entry({ id: "n1", content: "First note" }),
-      entry({ id: "other", content: "Another lesson's", source_document_id: "d9" }),
+      entry({
+        id: "other",
+        content: "Another lesson's",
+        source_document_id: "d9",
+        source_document_title: "Ortopedie I",
+      }),
     ]);
     updateNotebookEntry.mockResolvedValue(
       entry({ id: "other", content: "Another lesson's, edited" }),
@@ -1780,7 +1817,7 @@ describe("LecturePage", () => {
     await user.click(screen.getByRole("button", { name: "All notes" }));
     const list = screen.getByRole("navigation", { name: "All notes" });
     expect(within(list).getByRole("button", { name: "First note" })).toBeInTheDocument();
-    await user.click(within(list).getByRole("button", { name: "Another lesson's" }));
+    await user.click(within(list).getByRole("button", { name: /Another lesson's/ }));
 
     // Opened in the panel, not on the Notebook page, and editable there.
     expect(screen.getByText("From your notebook")).toBeInTheDocument();
@@ -1792,6 +1829,45 @@ describe("LecturePage", () => {
       content: "Another lesson's, edited",
     });
     expect(screen.getByText("Note 1 of 1")).toBeInTheDocument();
+  });
+
+  test("a note from elsewhere names its own lesson, in the list and once open", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph("Hello world"));
+    listNotebookEntries.mockResolvedValue([
+      entry({ id: "n1", content: "First note" }),
+      entry({
+        id: "other",
+        content: "Another lesson's",
+        source_document_id: "d9",
+        source_document_title: "Ortopedie I",
+      }),
+      entry({
+        id: "loose",
+        content: "Written on its own",
+        source_document_id: null,
+        source_document_title: null,
+      }),
+    ]);
+
+    renderPage();
+    await screen.findByText(para("Hello world"));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Notebook and AI chat" }));
+    await user.click(await screen.findByRole("button", { name: "All notes" }));
+
+    // "Untitled"/"Drawing" titles can't tell two lessons' notes apart, so
+    // the row carries the lesson.
+    const list = screen.getByRole("navigation", { name: "All notes" });
+    expect(
+      within(list).getByRole("button", { name: /Another lesson's\s*From Ortopedie I/ }),
+    ).toBeInTheDocument();
+    expect(within(list).getByRole("button", { name: "Written on its own" })).toBeInTheDocument();
+
+    // Open it: the meta line names where it came from, not where we are.
+    await user.click(within(list).getByRole("button", { name: /Another lesson's/ }));
+    const panel = screen.getByRole("complementary", { name: "Notebook and AI chat" });
+    expect(within(panel).getByText("Ortopedie I")).toBeInTheDocument();
+    expect(within(panel).queryByText("Intro to Systems")).not.toBeInTheDocument();
   });
 
   test("+ starts a note tagged with this lesson; an empty one is never created", async () => {
@@ -1978,5 +2054,118 @@ describe("LecturePage", () => {
       "href",
       "/learn/library/b1",
     );
+  });
+});
+
+describe("admin review words", () => {
+  const PARAGRAPH = "Mitochondria generate cellular energy constantly.";
+
+  async function openAsAdmin(cards: Record<string, unknown>[] = []) {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph(PARAGRAPH));
+    getMe.mockResolvedValue({ id: "a1", email: "a@example.com", role: "admin" });
+    listClozeCards.mockResolvedValue(cards);
+    renderPage();
+    await screen.findByText(para(PARAGRAPH));
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Review words" }));
+  }
+
+  test("are not offered to a learner", async () => {
+    getDocument.mockResolvedValue(readyDocumentWithParagraph(PARAGRAPH));
+    renderPage();
+    await screen.findByText(para(PARAGRAPH));
+
+    await waitFor(() => expect(getMe).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "Review words" })).not.toBeInTheDocument();
+    // And the answer key is never even fetched for them.
+    expect(listClozeCards).not.toHaveBeenCalled();
+  });
+
+  test("a drag over a word marks it, with the offsets it covered", async () => {
+    await openAsAdmin();
+
+    dragWords("cellular", "cellular");
+
+    await waitFor(() =>
+      expect(markClozeCard).toHaveBeenCalledWith("d1", {
+        block_index: 0,
+        start_offset: PARAGRAPH.indexOf("cellular"),
+        end_offset: PARAGRAPH.indexOf("cellular") + "cellular".length,
+      }),
+    );
+    expect(await screen.findByText("Hidden in Review.")).toBeInTheDocument();
+  });
+
+  test("a drag over a word already marked takes it off again", async () => {
+    const start = PARAGRAPH.indexOf("cellular");
+    await openAsAdmin([
+      clozeCard({ id: "c-cellular", start_offset: start, end_offset: start + 8 }),
+    ]);
+
+    dragWords("cellular", "cellular");
+
+    await waitFor(() => expect(unmarkClozeCard).toHaveBeenCalledWith("d1", "c-cellular"));
+    expect(markClozeCard).not.toHaveBeenCalled();
+    expect(await screen.findByText("No longer hidden in Review.")).toBeInTheDocument();
+  });
+
+  test("the words already marked are underlined while the tool is in hand", async () => {
+    await openAsAdmin([clozeCard({ start_offset: 0, end_offset: 12 })]);
+
+    // One letter per span, so the mark shows as an attribute on each letter
+    // of "Mitochondria" and on none of the word after it.
+    await waitFor(() => expect(letterOf("Mitochondria", "first")).toHaveAttribute("data-cloze"));
+    expect(letterOf("Mitochondria", "last")).toHaveAttribute("data-cloze");
+    expect(letterOf("generate", "first")).not.toHaveAttribute("data-cloze");
+  });
+
+  test("an overlap refused by the server says so rather than failing silently", async () => {
+    markClozeCard.mockRejectedValue(
+      new ApiClientError(409, { code: "overlapping_card", message: "no" }),
+    );
+    await openAsAdmin();
+
+    dragWords("cellular", "cellular");
+
+    expect(
+      await screen.findByText("That passage already holds a review word."),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("the text-size control", () => {
+  function pdfDocument() {
+    return {
+      ...readyDocumentWithParagraph("Hello world"),
+      lecture_pdf: {
+        status: "ready",
+        error_message: null,
+        storage_path: "lectures/book.pdf",
+        page_count: 3,
+      },
+    };
+  }
+
+  test("is not offered over a PDF page, which has no type to resize", async () => {
+    getDocument.mockResolvedValue(pdfDocument());
+    renderPage();
+    await screen.findByText(para("Hello world"));
+
+    // Text mode: offered.
+    expect(screen.getByRole("button", { name: "Text size" })).toBeInTheDocument();
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "PDF" }));
+    await screen.findByTestId("pdf-lesson-view");
+
+    // PDF mode: gone, rather than there and dead. The zoom dots are the
+    // equivalent over there.
+    expect(screen.queryByRole("button", { name: "Text size" })).not.toBeInTheDocument();
+  });
+
+  test("is offered on Review, which is prose whichever mode the lesson is in", async () => {
+    getDocument.mockResolvedValue(pdfDocument());
+    searchParams = new URLSearchParams("tab=review");
+    renderPage();
+
+    expect(await screen.findByRole("button", { name: "Text size" })).toBeInTheDocument();
   });
 });

@@ -436,6 +436,15 @@ export const clozeDueCardResponseSchema = clozeCardResponseSchema.extend({
   next_intervals: nextIntervalsSchema,
 });
 
+/** An admin marking one passage of one paragraph as a review word.
+ * Offsets only: the answer text is sliced out of the lesson server-side, so
+ * a card can never disagree with the paragraph it points into. */
+export const clozeCardCreateRequestSchema = z.object({
+  block_index: z.number().int().min(0),
+  start_offset: z.number().int().min(0),
+  end_offset: z.number().int().min(1),
+});
+
 export const clozeRatingRequestSchema = z.object({
   rating: clozeRatingSchema,
 });
@@ -566,6 +575,10 @@ export const notebookEntryResponseSchema = z.object({
   content: z.string().nullable(),
   strokes: z.array(strokeSchema).nullable(),
   source_document_id: z.string().nullable(),
+  /** The lesson the note was written in, for showing where a note came
+   * from. Null both for a note written outside any lesson and for one whose
+   * lesson has since been deleted. */
+  source_document_title: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 });

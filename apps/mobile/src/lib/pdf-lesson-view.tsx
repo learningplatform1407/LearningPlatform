@@ -26,6 +26,24 @@ const RENDER_MARGIN_SCREENS = 1;
 // Normalised hit radius when erasing highlights, as for strokes.
 const ERASE_RADIUS = 0.02;
 
+/**
+ * How much of a page's width each writing margin takes. Matches the web's
+ * MARGIN_FRACTION, and so does the storage: ink in a margin keeps
+ * page-normalised coordinates, just outside [0, 1], so a note written beside
+ * the text on one platform lands in the same place on the other.
+ *
+ * **Every page has them here, with no toggle** -- unlike the web, where they
+ * are a tool-notch preference. Not a product whim: toggling them resized
+ * every mounted page and re-windowed which pages are mounted, all in one
+ * frame, and AndroidPdfViewer's render thread crashes when a queued bitmap
+ * job finds the document it was for recycled ("Get page pdf document null",
+ * RenderingHandler.handleMessage -> renderPageBitmap -> openPage). That race
+ * is the library's, and it is not ours to fix; what is ours is not to put a
+ * button on it. Constant margins mean page size changes only on rotation,
+ * exactly as before they existed.
+ */
+const MARGIN_FRACTION = 0.18;
+
 /** A tool from the lesson's tool notch, as it applies to a PDF page. */
 export type PdfTool =
   | { type: "highlight"; color: string }
@@ -202,7 +220,13 @@ export function PdfLessonView({
     cache: true,
     cacheFileName: `lecture-${storagePath.replace(/[^\w.-]/g, "_")}`,
   };
-  const pageHeight = width * aspect;
+  // The page makes room for its margins rather than the column growing, so
+  // no page is ever pushed off the side of the screen. The margins are
+  // rounded to whole points first and the page takes the rest, so the three
+  // always add up to exactly the column's width.
+  const marginWidth = Math.round((width * MARGIN_FRACTION) / (1 + 2 * MARGIN_FRACTION));
+  const pageWidth = width - 2 * marginWidth;
+  const pageHeight = pageWidth * aspect;
   const renderFrom = viewportTop - top - viewportHeight * RENDER_MARGIN_SCREENS;
   const renderTo = viewportTop - top + viewportHeight * (1 + RENDER_MARGIN_SCREENS);
 
@@ -219,8 +243,9 @@ export function PdfLessonView({
               documentId={documentId}
               page={page}
               source={source}
-              width={width}
+              width={pageWidth}
               height={pageHeight}
+              marginWidth={marginWidth}
               rendered={near && (page === 1 || firstLoaded)}
               tool={tool}
               onMarkingChange={onMarkingChange}
@@ -244,6 +269,7 @@ function PdfPage({
   source,
   width,
   height,
+  marginWidth,
   rendered,
   tool,
   onMarkingChange,
@@ -256,6 +282,8 @@ function PdfPage({
   source: { uri: string; cache: boolean; cacheFileName: string };
   width: number;
   height: number;
+  /** Each margin's width in points. */
+  marginWidth: number;
   rendered: boolean;
   tool: PdfTool;
   onMarkingChange?: (marking: boolean) => void;
@@ -395,13 +423,35 @@ function PdfPage({
   const shownHighlights = erasedHighlights ?? highlights;
   const previewRects = preview ? rectsForWords(runOf(...preview)) : [];
 
+  const inkTool = tool?.type === "pen" || tool?.type === "eraser";
+  // The margins' real size in page units, from their rounded point width --
+  // not the nominal MARGIN_FRACTION -- so a touch on the page maps to the
+  // coordinate it always had, to the point.
+  const marginFraction = width > 0 ? marginWidth / width : 0;
+
   return (
+    // The page and its writing margins.
     <View
-      style={[styles.page, { width, height }]}
-      accessibilityLabel={t("lesson.pdfView.page", { number: page })}
-      testID={`pdf-page-${page}`}
+      style={[styles.pageRow, { width: width + 2 * marginWidth, height }]}
+      testID={`pdf-page-row-${page}`}
     >
-      {/* The page image takes no touches at all.
+      {inkTool && (
+        <>
+          {/* Tinted only while the pen or eraser is in hand: a faint panel
+              beside every page of a 400-page book would be noise, but at
+              the moment the pen comes out it is the only thing that says
+              "you can write here". */}
+          <View style={[styles.margin, { width: marginWidth, left: 0 }]} />
+          <View style={[styles.margin, { width: marginWidth, right: 0 }]} />
+        </>
+      )}
+
+      <View
+        style={[styles.page, { width, height, left: marginWidth }]}
+        accessibilityLabel={t("lesson.pdfView.page", { number: page })}
+        testID={`pdf-page-${page}`}
+      >
+        {/* The page image takes no touches at all.
 
           `scrollEnabled={false}` stops the native viewer from scrolling, but
           not from *claiming* the gesture: on iOS, PDFKit's own scroll view
@@ -410,80 +460,126 @@ function PdfPage({
           worked. Nothing here wants the viewer's gestures -- zoom and paging
           are off, and marking and ink are the sibling layers below -- so the
           whole subtree opts out and drags reach the lesson's ScrollView. */}
-      {rendered ? (
-        <View style={styles.layer} pointerEvents="none">
-          <Pdf
-            source={source}
-            page={page}
-            singlePage
-            fitPolicy={0}
-            spacing={0}
-            scrollEnabled={false}
-            enableDoubleTapZoom={false}
-            // react-native-pdf defaults this to true, which on Android routes
-            // the download through an all-trusting client that throws ("Use of
-            // own trust manager but none defined") and never loads. Off is the
-            // fix and the right posture for a signed HTTPS URL.
-            trustAllCerts={false}
-            style={[styles.pdf, { width, height }]}
-            onLoadComplete={(_pages, _path, size) => onLoaded(size)}
-            onError={(error) => {
-              // Logged, since the native view's message is the only account
-              // of what went wrong; the learner sees the generic one.
-              console.warn("[lecture-pdf] native render failed:", page, error);
-              onFailed();
-            }}
-          />
-        </View>
-      ) : (
-        <Text style={styles.placeholder}>{t("lesson.pdfView.page", { number: page })}</Text>
-      )}
-
-      <View style={styles.layer} pointerEvents="none">
-        {shownHighlights.flatMap((highlight, h) =>
-          highlight.rects.map(([x0, y0, x1, y1], r) => (
-            <View
-              key={`${h}-${r}`}
-              testID="pdf-highlight"
-              style={{
-                position: "absolute",
-                left: x0 * width,
-                top: y0 * height,
-                width: (x1 - x0) * width,
-                height: (y1 - y0) * height,
-                backgroundColor: colors[`highlight${highlightIndex(highlight.color)}`],
+        {rendered ? (
+          <View style={styles.layer} pointerEvents="none">
+            <Pdf
+              source={source}
+              page={page}
+              singlePage
+              fitPolicy={0}
+              spacing={0}
+              scrollEnabled={false}
+              enableDoubleTapZoom={false}
+              // react-native-pdf defaults this to true, which on Android routes
+              // the download through an all-trusting client that throws ("Use of
+              // own trust manager but none defined") and never loads. Off is the
+              // fix and the right posture for a signed HTTPS URL.
+              trustAllCerts={false}
+              style={[styles.pdf, { width, height }]}
+              onLoadComplete={(_pages, _path, size) => onLoaded(size)}
+              onError={(error) => {
+                // Logged, since the native view's message is the only account
+                // of what went wrong; the learner sees the generic one.
+                console.warn("[lecture-pdf] native render failed:", page, error);
+                onFailed();
               }}
             />
-          )),
+          </View>
+        ) : (
+          <Text style={styles.placeholder}>{t("lesson.pdfView.page", { number: page })}</Text>
         )}
-        {previewRects.map(([x0, y0, x1, y1], r) => (
+
+        <View style={styles.layer} pointerEvents="none">
+          {shownHighlights.flatMap((highlight, h) =>
+            highlight.rects.map(([x0, y0, x1, y1], r) => (
+              <View
+                key={`${h}-${r}`}
+                testID="pdf-highlight"
+                style={{
+                  position: "absolute",
+                  left: x0 * width,
+                  top: y0 * height,
+                  width: (x1 - x0) * width,
+                  height: (y1 - y0) * height,
+                  backgroundColor: colors[`highlight${highlightIndex(highlight.color)}`],
+                }}
+              />
+            )),
+          )}
+          {previewRects.map(([x0, y0, x1, y1], r) => (
+            <View
+              key={`preview-${r}`}
+              testID="pdf-mark-preview"
+              style={[
+                styles.preview,
+                {
+                  left: x0 * width,
+                  top: y0 * height,
+                  width: (x1 - x0) * width,
+                  height: (y1 - y0) * height,
+                },
+              ]}
+            />
+          ))}
+        </View>
+
+        {/* Press and hold, then drag, to mark -- the text view's gesture. A
+            quick swipe still scrolls the lesson; the scroll is locked only
+            once a mark is under way. Inside the page, because it measures
+            touches against the page's own width. */}
+        {marking && (
           <View
-            key={`preview-${r}`}
-            testID="pdf-mark-preview"
-            style={[
-              styles.preview,
-              {
-                left: x0 * width,
-                top: y0 * height,
-                width: (x1 - x0) * width,
-                height: (y1 - y0) * height,
-              },
-            ]}
+            style={styles.layer}
+            testID={`pdf-mark-layer-${page}`}
+            accessibilityLabel={t("lesson.pdfView.markWords", { number: page })}
+            onStartShouldSetResponder={() => true}
+            onResponderGrant={(event) => {
+              const { locationX, locationY, pageX, pageY } = event.nativeEvent;
+              gesture.current = {
+                x: locationX,
+                y: locationY,
+                pageX,
+                pageY,
+                timer: setTimeout(beginMark, MARK_HOLD_MS),
+                anchor: null,
+                current: null,
+              };
+            }}
+            onResponderMove={(event) => {
+              const g = gesture.current;
+              if (!g) return;
+              const x = g.x + (event.nativeEvent.pageX - g.pageX);
+              const y = g.y + (event.nativeEvent.pageY - g.pageY);
+              if (g.anchor === null) {
+                if (Math.hypot(x - g.x, y - g.y) > MARK_SLOP) clearTimeout(g.timer);
+                return;
+              }
+              const index = letters ? wordAt(letters, x / width, y / height) : null;
+              if (index === null || index === g.current) return;
+              g.current = index;
+              setPreview([g.anchor, index]);
+            }}
+            onResponderTerminationRequest={() => gesture.current?.anchor == null}
+            onResponderRelease={() => finishMark(true)}
+            onResponderTerminate={() => finishMark(false)}
           />
-        ))}
+        )}
       </View>
 
-      {/* Ink on top: read-only until the pen or eraser is picked up. */}
-      <View
-        style={styles.layer}
-        pointerEvents={tool?.type === "pen" || tool?.type === "eraser" ? "auto" : "none"}
-      >
+      {/* Ink last, over the page *and* its margins: the canvas covers the
+          whole row but keeps page coordinates, so a stroke in a margin is
+          stored at an x outside [0, 1] and every stroke made before margins
+          existed lands exactly where it did. While a highlight is being
+          dragged this layer takes no touches, so they reach the mark layer
+          on the page beneath it. */}
+      <View style={styles.inkLayer} pointerEvents={inkTool ? "auto" : "none"}>
         <DrawingCanvas
           strokes={strokes}
-          width={width}
+          width={width + 2 * marginWidth}
           height={height}
+          xSpan={{ from: -marginFraction, to: 1 + marginFraction }}
           pageKey={page}
-          readOnly={!(tool?.type === "pen" || tool?.type === "eraser")}
+          readOnly={!inkTool}
           tool={tool?.type === "eraser" ? "eraser" : "pen"}
           penColor={tool?.type === "pen" ? tool.color : undefined}
           penSize={tool?.type === "pen" ? tool.size : undefined}
@@ -499,47 +595,6 @@ function PdfPage({
           onGestureEnd={finishGesture}
         />
       </View>
-
-      {/* Press and hold, then drag, to mark -- the text view's gesture. A
-          quick swipe still scrolls the lesson; the scroll is locked only
-          once a mark is under way. */}
-      {marking && (
-        <View
-          style={styles.layer}
-          testID={`pdf-mark-layer-${page}`}
-          accessibilityLabel={t("lesson.pdfView.markWords", { number: page })}
-          onStartShouldSetResponder={() => true}
-          onResponderGrant={(event) => {
-            const { locationX, locationY, pageX, pageY } = event.nativeEvent;
-            gesture.current = {
-              x: locationX,
-              y: locationY,
-              pageX,
-              pageY,
-              timer: setTimeout(beginMark, MARK_HOLD_MS),
-              anchor: null,
-              current: null,
-            };
-          }}
-          onResponderMove={(event) => {
-            const g = gesture.current;
-            if (!g) return;
-            const x = g.x + (event.nativeEvent.pageX - g.pageX);
-            const y = g.y + (event.nativeEvent.pageY - g.pageY);
-            if (g.anchor === null) {
-              if (Math.hypot(x - g.x, y - g.y) > MARK_SLOP) clearTimeout(g.timer);
-              return;
-            }
-            const index = letters ? wordAt(letters, x / width, y / height) : null;
-            if (index === null || index === g.current) return;
-            g.current = index;
-            setPreview([g.anchor, index]);
-          }}
-          onResponderTerminationRequest={() => gesture.current?.anchor == null}
-          onResponderRelease={() => finishMark(true)}
-          onResponderTerminate={() => finishMark(false)}
-        />
-      )}
     </View>
   );
 }
@@ -548,7 +603,22 @@ const useStyles = makeStyles((colors) => ({
   column: {
     gap: PAGE_GAP,
   },
+  // The page and its writing margins, side by side. The page is placed
+  // absolutely inside it, so the margins are beside the page rather than
+  // taking width off it.
+  pageRow: {
+    position: "relative",
+  },
+  margin: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    backgroundColor: colors.muted,
+    borderRadius: 4,
+  },
   page: {
+    position: "absolute",
+    top: 0,
     backgroundColor: "#FFFFFF",
     borderRadius: 4,
     overflow: "hidden",
@@ -569,6 +639,18 @@ const useStyles = makeStyles((colors) => ({
     left: 0,
     right: 0,
     bottom: 0,
+  },
+  // Clipped to the page and its margins, which is what hides margin ink
+  // again when the margins are turned off: the strokes are still stored, and
+  // still saved by every later edit, but this box is then only the page and
+  // they fall outside it.
+  inkLayer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: "hidden",
   },
   // The mark under way, before it is saved: the text view's preview tint.
   preview: {

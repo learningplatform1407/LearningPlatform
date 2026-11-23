@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.srs.scheduler import ReviewRating
 from app.srs.schemas import NextIntervalsResponse
@@ -16,6 +16,25 @@ class ClozeCardResponse(BaseModel):
     start_offset: int
     end_offset: int
     created_at: datetime
+
+
+class ClozeCardCreateRequest(BaseModel):
+    """An admin marking one passage of one paragraph as a review word.
+
+    Offsets only, no answer text: the server slices the answer out of the
+    lesson itself (app/cloze/service.py::create_cloze_card), so a card can
+    never disagree with the paragraph it points into.
+    """
+
+    block_index: int = Field(ge=0)
+    start_offset: int = Field(ge=0)
+    end_offset: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _check_range(self) -> "ClozeCardCreateRequest":
+        if self.end_offset <= self.start_offset:
+            raise ValueError("end_offset must be greater than start_offset")
+        return self
 
 
 class ClozeDueCardResponse(ClozeCardResponse):

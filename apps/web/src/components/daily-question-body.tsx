@@ -8,7 +8,12 @@ import { useState } from "react";
 
 import { Button } from "@/components/button";
 import { DailyFollowing } from "@/components/daily-following";
-import { QuestionRevealPanel } from "@/components/question-reveal";
+import { OptionChoice, OptionReadOnly, QuestionRevealPanel } from "@/components/question-reveal";
+import {
+  QUESTION_CARD_ATTR,
+  QuestionKeysHint,
+  useQuestionKeys,
+} from "@/components/use-question-keys";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { useI18n } from "@/lib/i18n";
 
@@ -61,6 +66,33 @@ export function DailyQuestionBody({ day }: { day: DailyQuestion }) {
     },
   });
 
+  const isSingle = question?.kind === "single";
+  const options = question?.options ?? [];
+  // The three states below are exclusive; only this one takes the keys.
+  const answerable = question !== null && !day.attempt && day.answerable && !answer.isPending;
+
+  function toggle(optionId: string) {
+    if (isSingle) {
+      setSelected([optionId]);
+      return;
+    }
+    setSelected((previous) =>
+      previous.includes(optionId)
+        ? previous.filter((id) => id !== optionId)
+        : [...previous, optionId],
+    );
+  }
+
+  useQuestionKeys(question?.id ?? "", {
+    optionCount: options.length,
+    choose: (index) => {
+      const option = options[index];
+      if (option && answerable) toggle(option.id);
+    },
+    submit:
+      answerable && selected.length > 0 && question ? () => answer.mutate(question.id) : undefined,
+  });
+
   if (!question) {
     return <p className="text-sm text-muted-foreground">{t("daily.noneToday")}</p>;
   }
@@ -68,7 +100,7 @@ export function DailyQuestionBody({ day }: { day: DailyQuestion }) {
   if (day.attempt) {
     return (
       <>
-        <p className="text-sm font-medium text-foreground">{question.prompt}</p>
+        <p className="font-bold text-foreground">{question.prompt}</p>
         <QuestionRevealPanel reveal={day.attempt} />
         {/* Today only: a past day's answers are history, not company. */}
         {day.for_date === day.server_today && <DailyFollowing />}
@@ -83,53 +115,42 @@ export function DailyQuestionBody({ day }: { day: DailyQuestion }) {
     // revealing one here would burn it for them in a future quiz.
     return (
       <>
-        <p className="text-sm font-medium text-foreground">{question.prompt}</p>
-        <ul className="mt-sm flex flex-col gap-xs">
-          {question.options.map((option) => (
-            <li key={option.id} className="text-sm text-muted-foreground">
-              {option.text}
+        <p className="font-bold text-foreground">{question.prompt}</p>
+        <ul className="mt-sm">
+          {question.options.map((option, index) => (
+            <li key={option.id}>
+              <OptionReadOnly index={index} text={option.text} />
             </li>
           ))}
         </ul>
-        <p className="mt-md text-xs text-muted-foreground">{t("daily.closed")}</p>
+        <p className="mt-md text-caption text-muted-foreground">{t("daily.closed")}</p>
       </>
     );
   }
 
-  const isSingle = question.kind === "single";
-
-  function toggle(optionId: string) {
-    if (isSingle) {
-      setSelected([optionId]);
-      return;
-    }
-    setSelected((previous) =>
-      previous.includes(optionId)
-        ? previous.filter((id) => id !== optionId)
-        : [...previous, optionId],
-    );
-  }
-
   return (
-    <>
-      <p className="text-sm font-medium text-foreground">{question.prompt}</p>
-      <ul className="mt-sm flex flex-col gap-xs">
-        {question.options.map((option) => (
+    // The same letter circles and type scale as the question bank, so
+    // answering and the explanation that replaces it are one design rather
+    // than a small form that turns into a big panel.
+    <div {...{ [QUESTION_CARD_ATTR]: question.id }}>
+      <p className="font-bold text-foreground">{question.prompt}</p>
+      <ul className="mt-sm">
+        {question.options.map((option, index) => (
           <li key={option.id}>
-            <label className="flex items-center gap-xs text-sm text-foreground">
-              <input
-                type={isSingle ? "radio" : "checkbox"}
-                name={`qotd-${question.id}`}
-                checked={selected.includes(option.id)}
-                onChange={() => toggle(option.id)}
-              />
-              {option.text}
-            </label>
+            <OptionChoice
+              name={`qotd-${question.id}`}
+              kind={isSingle ? "single" : "multiple"}
+              index={index}
+              text={option.text}
+              checked={selected.includes(option.id)}
+              keyHint={t("questions.chooseKey", { key: index + 1 })}
+              onChange={() => toggle(option.id)}
+            />
           </li>
         ))}
       </ul>
 
-      <p className="mt-sm text-xs text-muted-foreground">
+      <p className="mt-sm text-caption font-bold text-muted-foreground">
         {isSingle ? t("questions.single") : t("questions.multiple")} ·{" "}
         {t("questions.points", { count: question.points_possible })} ·{" "}
         {t(`questions.difficulty.${question.difficulty}`)}
@@ -141,14 +162,16 @@ export function DailyQuestionBody({ day }: { day: DailyQuestion }) {
         </p>
       )}
 
-      <Button
-        type="button"
-        className="mt-md"
-        disabled={selected.length === 0 || answer.isPending}
-        onClick={() => answer.mutate(question.id)}
-      >
-        {answer.isPending ? t("questions.checking") : t("questions.check")}
-      </Button>
-    </>
+      <div className="mt-md flex flex-wrap items-center gap-3">
+        <Button
+          type="button"
+          disabled={selected.length === 0 || answer.isPending}
+          onClick={() => answer.mutate(question.id)}
+        >
+          {answer.isPending ? t("questions.checking") : t("questions.check")}
+        </Button>
+        <QuestionKeysHint optionCount={question.options.length} />
+      </div>
+    </div>
   );
 }

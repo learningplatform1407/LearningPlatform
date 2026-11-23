@@ -99,6 +99,21 @@ export function OptionChoice({
   );
 }
 
+/** An option with no answer to give and none to reveal: a past day's
+ * question of the day, closed before it was answered. Same row and circle as
+ * the two live states, so the three don't read as three different designs. */
+export function OptionReadOnly({ index, text }: { index: number; text: string }) {
+  const styles = useStyles();
+  return (
+    <View style={styles.optionRow}>
+      <View style={styles.letter}>
+        <Text style={[styles.letterText, styles.letterTextMuted]}>{optionLetter(index)}</Text>
+      </View>
+      <Text style={[styles.optionText, styles.optionBody, styles.letterTextMuted]}>{text}</Text>
+    </View>
+  );
+}
+
 /** A graded question with its answer key shown.
  *
  * Extracted from question-bank-list rather than copied: the colouring above
@@ -152,24 +167,31 @@ const useStyles = makeStyles((colors) => ({
     textTransform: "uppercase",
     color: colors.foreground,
   },
+  // The whole row is the Pressable. Its padding plus the 32pt circle puts
+  // it comfortably over the 44pt Apple and 48dp Android tap-target minimum,
+  // which the question of the day's own rows used to sit under.
   optionRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   optionBody: { flex: 1, gap: 4 },
   optionText: {
-    fontSize: fontSizes.base,
-    lineHeight: 22,
+    fontSize: fontSizes.body,
+    lineHeight: 26,
     color: colors.foreground,
   },
+  // 32px rather than the design's 28px, and shared by the answerable and
+  // the graded option: at 28 with a 13px letter, picking an answer read as a
+  // much smaller control than the explanation it turned into. Matches the
+  // web's LETTER_CIRCLE.
   letter: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 1.5,
     borderColor: colors.border,
     alignItems: "center",
@@ -179,15 +201,16 @@ const useStyles = makeStyles((colors) => ({
   letterWrong: { backgroundColor: colors.again, borderColor: colors.again },
   letterChosen: { backgroundColor: colors.foreground, borderColor: colors.foreground },
   letterText: {
-    fontSize: 13,
+    fontSize: fontSizes.sm,
     fontWeight: fontWeights.extrabold,
     color: colors.foreground,
   },
   letterTextOn: { color: "#FFFFFF" },
+  letterTextMuted: { color: colors.mutedForeground },
   letterTextChosen: { color: colors.background },
   rationale: {
-    fontSize: 14.5,
-    lineHeight: 20,
+    fontSize: fontSizes.ui,
+    lineHeight: 21,
     color: colors.mutedForeground,
   },
   verdictTrue: { fontWeight: fontWeights.bold, color: colors.good },

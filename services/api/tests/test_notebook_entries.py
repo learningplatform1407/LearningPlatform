@@ -1,5 +1,7 @@
 import hashlib
 import uuid
+from collections.abc import Callable
+from typing import Any
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -7,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
+from app.documents.models import Document
 from app.main import app
 from app.users.models import AccountSettings, Profile
 
@@ -199,7 +202,11 @@ def test_create_entry_with_source_document_records_soft_metadata(
     app.dependency_overrides.pop(get_current_user, None)
 
     assert response.status_code == 200
-    assert response.json()["source_document_id"] == document_id
+    body = response.json()
+    assert body["source_document_id"] == document_id
+    # The title rides along, so a list of notes can say which lesson each
+    # one came from without a request per note.
+    assert body["source_document_title"] == "Lesson"
 
 
 def test_create_entry_without_source_document_leaves_it_null(authed_client: TestClient) -> None:
@@ -208,3 +215,82 @@ def test_create_entry_without_source_document_leaves_it_null(authed_client: Test
     )
     assert response.status_code == 200
     assert response.json()["source_document_id"] is None
+    assert response.json()["source_document_title"] is None
+
+
+def test_listing_notes_names_the_lesson_each_one_came_from(
+    client: TestClient,
+    authenticated_user: AuthenticatedUser,
+    db_session: Session,
+    count_queries: Callable[[], Any],
+) -> None:
+    """The notebook is one pool browsed whole, so the lesson title is joined
+    in rather than fetched per note -- listing twice as many notes must not
+    cost twice as many queries."""
+    admin_user = AuthenticatedUser(id=uuid.uuid4(), email="admin@example.com")
+    document_id = _create_document(client, admin_user, db_session)
+
+    app.dependency_overrides[get_current_user] = lambda: authenticated_user
+    try:
+        for index in range(3):
+            client.post(
+                "/v1/notebook-entries",
+                json={
+                    "type": "text",
+                    "content": f"In the lesson {index}",
+                    "source_document_id": document_id,
+                },
+            )
+        client.post("/v1/notebook-entries", json={"type": "text", "content": "On its own"})
+
+        with count_queries() as total:
+            body = client.get("/v1/notebook-entries").json()
+        queries_for_four = total[0]
+
+        for index in range(4):
+            client.post(
+                "/v1/notebook-entries",
+                json={
+                    "type": "text",
+                    "content": f"More {index}",
+                    "source_document_id": document_id,
+                },
+            )
+        with count_queries() as total:
+            client.get("/v1/notebook-entries")
+        queries_for_eight = total[0]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert [e["source_document_title"] for e in body] == ["Lesson", "Lesson", "Lesson", None]
+    assert queries_for_eight == queries_for_four
+
+
+def test_a_note_outlives_the_lesson_it_was_written_in(
+    client: TestClient,
+    authenticated_user: AuthenticatedUser,
+    db_session: Session,
+) -> None:
+    """`source_document_id` is SET NULL on delete, so deleting the lesson
+    leaves the note -- reading as unattached, not as a dangling title."""
+    admin_user = AuthenticatedUser(id=uuid.uuid4(), email="admin@example.com")
+    document_id = _create_document(client, admin_user, db_session)
+
+    app.dependency_overrides[get_current_user] = lambda: authenticated_user
+    try:
+        client.post(
+            "/v1/notebook-entries",
+            json={"type": "text", "content": "Jotted", "source_document_id": document_id},
+        )
+        document = db_session.get(Document, uuid.UUID(document_id))
+        assert document is not None
+        db_session.delete(document)
+        db_session.commit()
+
+        entry = client.get("/v1/notebook-entries").json()[0]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert entry["content"] == "Jotted"
+    assert entry["source_document_id"] is None
+    assert entry["source_document_title"] is None

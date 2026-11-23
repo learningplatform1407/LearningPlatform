@@ -26,11 +26,19 @@ export function optionLetter(index: number): string {
   return String.fromCharCode(65 + index);
 }
 
-/** The design's option letter: a 28px circle (design.md §12). */
+/**
+ * The design's option letter (design.md §12), at 32px rather than its 28px.
+ *
+ * One constant for both the answerable option and the graded one, so the
+ * two states of a question are the same size: at 28px with a 13px letter,
+ * picking an answer read as a much smaller control than the explanation it
+ * turned into, which is the mismatch this size fixes. Anything that grows
+ * the row has to grow both halves, which is what sharing it guarantees.
+ */
 export const LETTER_CIRCLE =
-  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-[1.5px] border-border text-caption font-extrabold";
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[1.5px] border-border text-sm font-extrabold";
 
-const OPTION_ROW = "flex w-full items-start gap-3 border-b border-border py-2.5 text-left";
+export const OPTION_ROW = "flex w-full items-start gap-3 border-b border-border py-3 text-left";
 
 /** A graded question with its answer key shown.
  *
@@ -82,7 +90,7 @@ export function QuestionRevealPanel({ reveal }: { reveal: QuestionReveal }) {
                     {option.in_key ? t("questions.inAnswer") : ""}, {earned}
                   </span>
                 </span>
-                <span className="mt-1 block text-toc text-muted-foreground">
+                <span className="mt-1 block text-ui text-muted-foreground">
                   <b className={option.in_key ? "text-good" : "text-again"}>
                     {option.in_key ? t("questions.true") : t("questions.false")}
                   </b>
@@ -94,14 +102,19 @@ export function QuestionRevealPanel({ reveal }: { reveal: QuestionReveal }) {
         })}
       </ul>
       {reveal.explanation && (
-        <p className="mt-sm text-toc text-muted-foreground">{reveal.explanation}</p>
+        <p className="mt-sm text-ui text-muted-foreground">{reveal.explanation}</p>
       )}
     </div>
   );
 }
 
 /** One answerable option: a native radio/checkbox (kept for keyboard and
- * screen readers) visually replaced by the design's letter circle. */
+ * screen readers) visually replaced by the design's letter circle.
+ *
+ * `keyHint` is the number key that picks this option (web only, see
+ * use-question-keys), shown as the control's tooltip so the shortcut is
+ * discoverable from the option itself.
+ */
 export function OptionChoice({
   name,
   kind,
@@ -109,6 +122,7 @@ export function OptionChoice({
   text,
   checked,
   disabled,
+  keyHint,
   onChange,
 }: {
   name: string;
@@ -117,10 +131,11 @@ export function OptionChoice({
   text: string;
   checked: boolean;
   disabled?: boolean;
+  keyHint?: string;
   onChange: () => void;
 }) {
   return (
-    <label className={`${OPTION_ROW} cursor-pointer`}>
+    <label className={`${OPTION_ROW} cursor-pointer`} title={keyHint}>
       <input
         type={kind === "single" ? "radio" : "checkbox"}
         name={name}
@@ -135,7 +150,21 @@ export function OptionChoice({
       >
         {optionLetter(index)}
       </span>
-      <span className="flex-1 pt-0.5 text-foreground">{text}</span>
+      <span className="flex-1 pt-[3px] text-foreground">{text}</span>
     </label>
+  );
+}
+
+/** An option with no answer to give and none to reveal: a past day's
+ * question of the day, closed before it was answered. Same row and circle as
+ * the two live states, so the three don't read as three different designs. */
+export function OptionReadOnly({ index, text }: { index: number; text: string }) {
+  return (
+    <span className={OPTION_ROW}>
+      <span aria-hidden="true" className={`${LETTER_CIRCLE} text-muted-foreground`}>
+        {optionLetter(index)}
+      </span>
+      <span className="flex-1 pt-[3px] text-muted-foreground">{text}</span>
+    </span>
   );
 }
