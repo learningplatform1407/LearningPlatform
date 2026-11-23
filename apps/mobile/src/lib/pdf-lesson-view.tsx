@@ -2,11 +2,19 @@ import type { PageHighlight, PageWord, Stroke, StrokePoint } from "@lp/contracts
 import { clearHighlightRects, highlightIndex, pageColors, type PenSize } from "@lp/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, type LayoutChangeEvent, Text, View } from "react-native";
+import { Alert, type LayoutChangeEvent, ScrollView, Text, View } from "react-native";
 import Pdf from "react-native-pdf";
 
 import { getApiClient } from "@/lib/api-client";
 import { DrawingCanvas } from "@/lib/notebook-drawing-canvas";
+import {
+  clampZoom,
+  MIN_ZOOM,
+  pageBox,
+  pinchScale,
+  touchDistance,
+  type PageBox,
+} from "@/lib/pdf-zoom";
 import { supabase } from "@/lib/supabase";
 import { charWidth } from "@/lib/text-letters";
 import { fontSizes, shadows } from "@/lib/theme";
@@ -26,24 +34,6 @@ const RENDER_MARGIN_SCREENS = 1;
 // Normalised hit radius when erasing highlights, as for strokes.
 const ERASE_RADIUS = 0.02;
 
-/**
- * How much of a page's width each writing margin takes. Matches the web's
- * MARGIN_FRACTION, and so does the storage: ink in a margin keeps
- * page-normalised coordinates, just outside [0, 1], so a note written beside
- * the text on one platform lands in the same place on the other.
- *
- * **Every page has them here, with no toggle** -- unlike the web, where they
- * are a tool-notch preference. Not a product whim: toggling them resized
- * every mounted page and re-windowed which pages are mounted, all in one
- * frame, and AndroidPdfViewer's render thread crashes when a queued bitmap
- * job finds the document it was for recycled ("Get page pdf document null",
- * RenderingHandler.handleMessage -> renderPageBitmap -> openPage). That race
- * is the library's, and it is not ours to fix; what is ours is not to put a
- * button on it. Constant margins mean page size changes only on rotation,
- * exactly as before they existed.
- */
-const MARGIN_FRACTION = 0.18;
-
 /** A tool from the lesson's tool notch, as it applies to a PDF page. */
 export type PdfTool =
   | { type: "highlight"; color: string }
@@ -57,6 +47,8 @@ interface PdfLessonViewProps {
   /** The server's page count, known before the file downloads. */
   pageCount: number;
   tool: PdfTool;
+  /** True while a pinch is zooming: the screen locks its scroll. */
+  onZoomingChange?: (zooming: boolean) => void;
   /** The part of the lesson's scroll content on screen, in the same
    * coordinates as this view's own layout: pages near it are rendered. */
   viewportTop: number;
@@ -169,6 +161,7 @@ export function PdfLessonView({
   viewportTop,
   viewportHeight,
   onMarkingChange,
+  onZoomingChange,
   onSaveError,
 }: PdfLessonViewProps) {
   const { t } = useI18n();
@@ -178,6 +171,15 @@ export function PdfLessonView({
   const [aspect, setAspect] = useState(DEFAULT_ASPECT);
   const [firstLoaded, setFirstLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  // Committed zoom: it sizes the layout, so it changes once per pinch
+  // rather than once per frame. Sixty layout changes a second is what the
+  // native renderer cannot survive (pdf-zoom.ts).
+  const [zoom, setZoom] = useState(MIN_ZOOM);
+  // What the pinch has reached since, as a factor on top of `zoom`. Applied
+  // as a transform on the column, so the fingers get an answer immediately
+  // without anything being laid out or re-rendered underneath.
+  const [live, setLive] = useState(1);
+  const pinch = useRef<{ startDistance: number } | null>(null);
 
   const {
     data: signedUrl,
@@ -206,6 +208,23 @@ export function PdfLessonView({
     setTop(event.nativeEvent.layout.y);
   }
 
+  /** The zoom a pinch has reached, clamped, from the fingers' distance. */
+  function zoomOf(touches: readonly { pageX: number; pageY: number }[]): number | null {
+    const started = pinch.current;
+    const distance = touchDistance(touches);
+    if (!started || distance === null) return null;
+    return clampZoom(zoom * pinchScale(started.startDistance, distance));
+  }
+
+  function endPinch(touches: readonly { pageX: number; pageY: number }[]) {
+    const reached = zoomOf(touches);
+    pinch.current = null;
+    setLive(1);
+    onZoomingChange?.(false);
+    // Committed here and nowhere else: one layout change per gesture.
+    if (reached !== null) setZoom(reached);
+  }
+
   if (isError || failed) {
     return <Text style={styles.error}>{t("lesson.pdfView.loadFailed")}</Text>;
   }
@@ -220,45 +239,76 @@ export function PdfLessonView({
     cache: true,
     cacheFileName: `lecture-${storagePath.replace(/[^\w.-]/g, "_")}`,
   };
-  // The page makes room for its margins rather than the column growing, so
-  // no page is ever pushed off the side of the screen. The margins are
-  // rounded to whole points first and the page takes the rest, so the three
-  // always add up to exactly the column's width.
-  const marginWidth = Math.round((width * MARGIN_FRACTION) / (1 + 2 * MARGIN_FRACTION));
-  const pageWidth = width - 2 * marginWidth;
-  const pageHeight = pageWidth * aspect;
+  const box = pageBox(width, aspect, zoom);
   const renderFrom = viewportTop - top - viewportHeight * RENDER_MARGIN_SCREENS;
   const renderTo = viewportTop - top + viewportHeight * (1 + RENDER_MARGIN_SCREENS);
+  // Zoomed in, a page is wider than the column and has to be pannable. At
+  // fit-width it is exactly the column, so this stays inert rather than
+  // competing with the lesson's own scroll for every drag.
+  const pannable = box.rowWidth > width + 1;
 
   return (
-    <View onLayout={handleLayout} style={styles.column} testID="pdf-column">
-      {width > 0 &&
-        Array.from({ length: pageCount }, (_, index) => {
-          const page = index + 1;
-          const pageTop = index * (pageHeight + PAGE_GAP);
-          const near = pageTop + pageHeight >= renderFrom && pageTop <= renderTo;
-          return (
-            <PdfPage
-              key={page}
-              documentId={documentId}
-              page={page}
-              source={source}
-              width={pageWidth}
-              height={pageHeight}
-              marginWidth={marginWidth}
-              rendered={near && (page === 1 || firstLoaded)}
-              tool={tool}
-              onMarkingChange={onMarkingChange}
-              onSaveError={onSaveError}
-              onLoaded={(size) => {
-                if (page !== 1) return;
-                setFirstLoaded(true);
-                if (size.width > 0) setAspect(size.height / size.width);
-              }}
-              onFailed={() => setFailed(true)}
-            />
-          );
-        })}
+    <View onLayout={handleLayout} testID="pdf-column">
+      <ScrollView
+        horizontal
+        testID="pdf-pan"
+        scrollEnabled={pannable}
+        showsHorizontalScrollIndicator={pannable}
+        contentContainerStyle={styles.column}
+        // A pinch is two fingers; a pan is one. Claiming only the former
+        // leaves one-finger drags to the lesson's scroll and to the tools,
+        // which is the same "put the tool down to scroll" rule the pen
+        // follows -- a pinch is only offered with no tool in hand.
+        onStartShouldSetResponder={(event) =>
+          tool === null && event.nativeEvent.touches.length >= 2
+        }
+        onMoveShouldSetResponder={(event) => tool === null && event.nativeEvent.touches.length >= 2}
+        onResponderGrant={(event) => {
+          const distance = touchDistance(event.nativeEvent.touches);
+          if (distance === null) return;
+          pinch.current = { startDistance: distance };
+          onZoomingChange?.(true);
+        }}
+        onResponderMove={(event) => {
+          const reached = zoomOf(event.nativeEvent.touches);
+          if (reached !== null) setLive(reached / zoom);
+        }}
+        onResponderRelease={(event) => endPinch(event.nativeEvent.touches)}
+        onResponderTerminate={(event) => endPinch(event.nativeEvent.touches)}
+      >
+        <View
+          testID="pdf-pages"
+          // The live factor is a transform, never a layout: it answers the
+          // fingers at once and commits to `zoom` when they lift.
+          style={live === 1 ? styles.pages : [styles.pages, { transform: [{ scale: live }] }]}
+        >
+          {width > 0 &&
+            Array.from({ length: pageCount }, (_, index) => {
+              const page = index + 1;
+              const pageTop = index * (box.height + PAGE_GAP);
+              const near = pageTop + box.height >= renderFrom && pageTop <= renderTo;
+              return (
+                <PdfPage
+                  key={page}
+                  documentId={documentId}
+                  page={page}
+                  source={source}
+                  box={box}
+                  rendered={near && (page === 1 || firstLoaded)}
+                  tool={tool}
+                  onMarkingChange={onMarkingChange}
+                  onSaveError={onSaveError}
+                  onLoaded={(size) => {
+                    if (page !== 1) return;
+                    setFirstLoaded(true);
+                    if (size.width > 0) setAspect(size.height / size.width);
+                  }}
+                  onFailed={() => setFailed(true)}
+                />
+              );
+            })}
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -267,9 +317,7 @@ function PdfPage({
   documentId,
   page,
   source,
-  width,
-  height,
-  marginWidth,
+  box,
   rendered,
   tool,
   onMarkingChange,
@@ -280,10 +328,9 @@ function PdfPage({
   documentId: string;
   page: number;
   source: { uri: string; cache: boolean; cacheFileName: string };
-  width: number;
-  height: number;
-  /** Each margin's width in points. */
-  marginWidth: number;
+  /** The page's size at the current zoom, and the base size the image is
+   * rendered at and never re-rendered at (pdf-zoom.ts). */
+  box: PageBox;
   rendered: boolean;
   tool: PdfTool;
   onMarkingChange?: (marking: boolean) => void;
@@ -424,9 +471,10 @@ function PdfPage({
   const previewRects = preview ? rectsForWords(runOf(...preview)) : [];
 
   const inkTool = tool?.type === "pen" || tool?.type === "eraser";
+  const { width, height, marginWidth } = box;
   // The margins' real size in page units, from their rounded point width --
   // not the nominal MARGIN_FRACTION -- so a touch on the page maps to the
-  // coordinate it always had, to the point.
+  // coordinate it always had, to the point. A ratio, so zoom cancels out.
   const marginFraction = width > 0 ? marginWidth / width : 0;
 
   return (
@@ -461,7 +509,24 @@ function PdfPage({
           are off, and marking and ink are the sibling layers below -- so the
           whole subtree opts out and drags reach the lesson's ScrollView. */}
         {rendered ? (
-          <View style={styles.layer} pointerEvents="none">
+          // Rendered at the base size and scaled into its box, never laid
+          // out at the zoomed size: resizing a <Pdf> is what crashes
+          // AndroidPdfViewer's render thread (pdf-zoom.ts). transformOrigin
+          // anchors the scale top-left, so the page fills its box rather
+          // than growing out of its centre.
+          <View
+            pointerEvents="none"
+            testID={`pdf-page-image-${page}`}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: box.baseWidth,
+              height: box.baseHeight,
+              transform: [{ scale: box.scale }],
+              transformOrigin: "0% 0%",
+            }}
+          >
             <Pdf
               source={source}
               page={page}
@@ -475,7 +540,7 @@ function PdfPage({
               // own trust manager but none defined") and never loads. Off is the
               // fix and the right posture for a signed HTTPS URL.
               trustAllCerts={false}
-              style={[styles.pdf, { width, height }]}
+              style={[styles.pdf, { width: box.baseWidth, height: box.baseHeight }]}
               onLoadComplete={(_pages, _path, size) => onLoaded(size)}
               onError={(error) => {
                 // Logged, since the native view's message is the only account
@@ -601,6 +666,9 @@ function PdfPage({
 
 const useStyles = makeStyles((colors) => ({
   column: {
+    flexDirection: "column",
+  },
+  pages: {
     gap: PAGE_GAP,
   },
   // The page and its writing margins, side by side. The page is placed

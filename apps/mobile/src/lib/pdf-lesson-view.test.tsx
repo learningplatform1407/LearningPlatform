@@ -297,3 +297,131 @@ describe("writing margins", () => {
     expect(flatten(layer.props.style).overflow).toBe("hidden");
   });
 });
+
+describe("pinch to zoom", () => {
+  /** The box a page is laid out in, and the size its image is rendered at. */
+  function sizes(page = 1) {
+    const flatten = (style: unknown): Record<string, number> =>
+      Object.assign({}, ...[style].flat(5).filter(Boolean));
+    const row = flatten(screen.getByTestId(`pdf-page-row-${page}`).props.style);
+    const image = flatten(screen.getByTestId(`pdf-page-image-${page}`).props.style);
+    const transform = image.transform as unknown as { scale?: number }[] | undefined;
+    return { row: row.width, image: image.width, scale: transform?.[0]?.scale };
+  }
+
+  function touches(...xs: number[]) {
+    return { nativeEvent: { touches: xs.map((pageX) => ({ pageX, pageY: 100 })) } };
+  }
+
+  /**
+   * Drives the pinch through the responder props directly, rather than
+   * through fireEvent: the handlers live on a ScrollView, which the testing
+   * library treats specially and whose "responderGrant" it answers by
+   * calling onStartShouldSetResponder with no event at all. act() is what
+   * fireEvent would otherwise have done for us.
+   */
+  function pinchTo(from: [number, number], to: [number, number]) {
+    const surface = pinchSurface();
+    act(() => {
+      surface.props.onResponderGrant(touches(...from));
+      surface.props.onResponderMove(touches(...to));
+      surface.props.onResponderRelease(touches(...to));
+    });
+  }
+
+  /** The surface that claims a pinch: the horizontal pan around the pages. */
+  function pinchSurface() {
+    return screen.getByTestId("pdf-pan");
+  }
+
+  test("two fingers spreading zoom the page, and it commits when they lift", async () => {
+    renderView(null);
+    await layOutColumn(300);
+    expect(sizes().row).toBe(300);
+
+    pinchTo([100, 200], [50, 250]); // 100pt apart, then 200pt: twice
+
+    expect(sizes().row).toBe(600);
+  });
+
+  test("the page image is never resized, however far it is zoomed", async () => {
+    // The whole reason zoom is a transform: resizing a <Pdf> is what crashes
+    // AndroidPdfViewer's render thread (docs ink §6.2.1).
+    renderView(null);
+    await layOutColumn(300);
+    const atFit = sizes();
+    expect(atFit.image).toBe(220);
+    expect(atFit.scale).toBe(1);
+
+    pinchTo([100, 200], [0, 300]);
+
+    const zoomed = sizes();
+    expect(zoomed.image).toBe(220); // rendered size: unchanged
+    expect(zoomed.scale).toBe(3); // scaled into its box instead
+    expect(zoomed.row).toBe(900);
+  });
+
+  test("it does not zoom past three times, however hard you pull", async () => {
+    renderView(null);
+    await layOutColumn(300);
+
+    pinchTo([140, 160], [0, 1000]); // 20pt apart, then 1000pt: fifty times
+
+    expect(sizes().scale).toBe(3);
+  });
+
+  test("one finger is a scroll, not a pinch", async () => {
+    renderView(null);
+    await layOutColumn(300);
+    const surface = pinchSurface();
+
+    expect(surface.props.onStartShouldSetResponder(touches(100))).toBe(false);
+    expect(surface.props.onStartShouldSetResponder(touches(100, 200))).toBe(true);
+  });
+
+  test("with a tool in hand the touch belongs to the tool", async () => {
+    // Same rule the pen already follows: put it down to scroll -- and now,
+    // to zoom. It is also what keeps the pinch clear of the drawing
+    // responder entirely.
+    renderView({ type: "pen", color: "#1D1F23", size: "medium" });
+    await layOutColumn(300);
+
+    expect(pinchSurface().props.onStartShouldSetResponder(touches(100, 200))).toBe(false);
+  });
+
+  test("the lesson is told to stop scrolling while a pinch is under way", async () => {
+    const onZoomingChange = jest.fn();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PdfLessonView
+          documentId="d1"
+          storagePath="lectures/a.pdf"
+          pageCount={3}
+          tool={null}
+          viewportTop={0}
+          viewportHeight={800}
+          onZoomingChange={onZoomingChange}
+        />
+      </QueryClientProvider>,
+    );
+    await layOutColumn(300);
+
+    const surface = pinchSurface();
+    act(() => surface.props.onResponderGrant(touches(100, 200)));
+    expect(onZoomingChange).toHaveBeenLastCalledWith(true);
+
+    act(() => surface.props.onResponderRelease(touches(100, 200)));
+    expect(onZoomingChange).toHaveBeenLastCalledWith(false);
+  });
+
+  test("panning sideways is only offered once a page is wider than the column", async () => {
+    renderView(null);
+    await layOutColumn(300);
+    expect(pinchSurface().props.scrollEnabled).toBe(false);
+
+    pinchTo([100, 200], [50, 250]);
+
+    expect(pinchSurface().props.scrollEnabled).toBe(true);
+  });
+});

@@ -261,10 +261,48 @@ crashes the app. Giving mobile a narrower margin to claw some of that back is
 **not** a free change — the fraction is what the stored x range means, so the
 two platforms would stop agreeing on where a margin note sits.
 
-A proper fix is a follow-up: render the `<Pdf>` at a stable width and scale
-the container with a transform, so the native view never resizes. It needs a
-device to verify, which is why it is not in the change that introduced the
-margins.
+#### 6.2.2 Pinch to zoom, and why the toggle still cannot come back
+
+Mobile zooms by pinch instead (`apps/mobile/src/lib/pdf-zoom.ts`), which is
+the stable-width idea above, built: the `<Pdf>` is rendered at the fit-width
+**base** size and never re-rendered, and zoom grows the layout box the page
+occupies. The page image is transform-scaled into that box, anchored
+top-left with `transformOrigin`, which costs sharpness past about 2×.
+Everything else — the row, the margins, the highlights, the mark layer, the
+ink canvas — is laid out at the zoomed size, so it stays crisp and keeps
+sitting exactly where it sat. Stored ink is a fraction of the page either
+way, so nothing about zoom reaches the server and a stroke drawn at 3× is in
+the same place at 1×.
+
+`react-native-pdf` does expose `scale`/`minScale`/`maxScale`/
+`onScaleChanged`, and it is still no use here: it reports no **pan** offset,
+so the overlays could not follow content that panned without guessing. That
+is why its gestures were turned off to begin with.
+
+The gesture is the Responder system rather than `react-native-gesture-handler`
+— which is installed but used nowhere in the app, while every gesture in this
+file is already raw responder, and mixing the two around the drawing canvas
+is the sharp edge. A pinch is claimed only when two fingers are down **and no
+tool is in hand**: the same "put the tool down to scroll" rule the pen
+follows, which also keeps it clear of the drawing responder entirely. During
+the pinch the fingers get a transform on the page column — answered at once,
+nothing laid out underneath — and the zoom commits on release, so there is
+one layout change per gesture rather than sixty a second. Zoomed in, a
+horizontal `ScrollView` pans the page; at fit-width it is inert.
+
+Zoom here is an interim: it is a bitmap scaled past its rendered size, and
+the overlays still sit on the page rather than under one transform with it.
+[`mobile-pdf-canvas.md`](./mobile-pdf-canvas.md) plans the replacement — page
+and ink in one Skia surface — and that is where the toggle below, pencil-vs-
+finger, and sharpness at 3× all come from.
+
+**This does not bring the margins toggle back.** Zoom is safe because the
+base size does not depend on it. A margins toggle is not: the margins come
+out of the column's width, so turning them off makes the page itself wider —
+a new base size, and a resized `<Pdf>`. Making it safe would mean always
+rendering at the margined base size and treating "margins off" as a 1.36×
+zoom, which would leave the ordinary fit-width case looking at a scaled
+bitmap. Not worth it; margins stay unconditional here.
 
 ### 6.3 Three gotchas worth keeping
 
