@@ -343,6 +343,32 @@ scope. Mobile has no review-word tool, by the same argument that moved library
 authoring to the web. Mobile does not remember its text size, and now has no
 margins toggle to remember either — DESIGN-17 and REVIEW-7 respectively.
 
+## Epic: MOBILEPDF — One canvas, one transform
+
+Replaces the mobile lecture-PDF reader with page and ink in a single Skia
+surface under a single transform. Design:
+[`docs/architecture/mobile-pdf-canvas.md`](./docs/architecture/mobile-pdf-canvas.md).
+Nothing stored changes — strokes are already page-normalised — so there is no
+migration anywhere in this epic.
+
+| Key                | Summary                                        | Depends on  | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------ | ---------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **MOBILEPDF-0a**   | Vendor the upstream `recycle()` fix            | —           | `pnpm patch react-native-pdf` carrying [#1053](https://github.com/wonday/react-native-pdf/pull/1053)'s `RenderingDrain`: stop the renderer, drain queued tasks, wait for the in-flight page, then close. Fixes the root cause of `Get page pdf document null` for every trigger, not one at a time. Needs a `prebuild` + dev-client rebuild — and re-pinning `sdk.dir` and the iOS signing settings after it.                                                       |
+| **MOBILEPDF-0b**   | Window pages by index, not by pixel span       | —           | Mount the current page ± N instead of every page whose pixel span meets the viewport. A zoom or a margins change then cannot re-window several pages in one frame, which is the burst that lands a `recycle()` on a rendering page. Correct regardless of 0a, and the cheaper half.                                                                                                                                                                                 |
+| **MOBILEPDF-1**    | `GET /pages/{n}/image?scale=` + cache          | —           | pymupdf `get_pixmap` at three discrete scale steps, reusing the existing `lru_cache` of PDF bytes. Immutable per `(pdf, page, scale)`, so long `Cache-Control`. **Deliverable includes the measurement**: bytes per page per scale, and the storage implied by a 400-page book — phase 5 is decided by that number, not by taste.                                                                                                                                   |
+| **MOBILEPDF-2**    | Skia canvas renders page, highlights and ink   | MOBILEPDF-1 | Add `@shopify/react-native-skia`. One `<Canvas>` per page in page coordinates, still inside today's `ScrollView`, still no zoom. Behind a flag, with the old reader reachable. **Parity is the acceptance test**: a mark made before the change sits exactly where it sat, on both platforms. Confirm Skia's Jest mock before committing to it.                                                                                                                     |
+| **MOBILEPDF-3** 🔗 | One gesture surface: focal-point pinch and pan | MOBILEPDF-2 | `Gesture.Pinch()` + `Gesture.Pan()` into Reanimated shared values, the content point under the fingers staying under the fingers. PDF mode leaves the lesson's `ScrollView` and owns pan and zoom itself — the biggest structural change here, and why this is a sync point. Deletes `react-native-pdf` and `pdf-lesson-view.web.tsx`, closes REVIEW-7, and lets the margins toggle come back (REVIEW-3). **Device time on Android and an iPad before it is done.** |
+| **MOBILEPDF-4**    | Stylus draws, finger pans                      | MOBILEPDF-3 | `PointerType.STYLUS` is in gesture-handler 3.3.0 and every gesture event carries `pointerType` (verified). Retires "put the tool down to scroll" on mobile and matches the web's `penSeen` rule — including that a finger still draws until a stylus has been seen, or a phone without one could not annotate at all. The payoff for tablets.                                                                                                                       |
+| **MOBILEPDF-5**    | Tile the page images                           | MOBILEPDF-1 | **Only if MOBILEPDF-1's numbers say so.** Whole-page images at 3× may be perfectly affordable, and tiling is a lot of machinery to add on a guess.                                                                                                                                                                                                                                                                                                                  |
+
+**Deliberately not in this epic.** The web reader: pdf.js renders
+client-side and works, and gains nothing from a server-rendered page — the two
+converge in design, not implementation. Re-anchoring marks across a
+lecture-text replace, still the shared problem of four features (ink doc §4).
+And a commercial SDK (Nutrient, Apryse), which would hand us all four
+properties for money and a loss of control — the honest fallback if these
+phases slip, recorded so it is a decision rather than a surprise.
+
 ## Epic: ROADMAP (placeholder only)
 
 | Key           | Summary                              | Depends on   | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |

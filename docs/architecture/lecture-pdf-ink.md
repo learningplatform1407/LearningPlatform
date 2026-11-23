@@ -290,6 +290,12 @@ nothing laid out underneath — and the zoom commits on release, so there is
 one layout change per gesture rather than sixty a second. Zoomed in, a
 horizontal `ScrollView` pans the page; at fit-width it is inert.
 
+Zoom here is an interim: it is a bitmap scaled past its rendered size, and
+the overlays still sit on the page rather than under one transform with it.
+[`mobile-pdf-canvas.md`](./mobile-pdf-canvas.md) plans the replacement — page
+and ink in one Skia surface — and that is where the toggle below, pencil-vs-
+finger, and sharpness at 3× all come from.
+
 **This does not bring the margins toggle back.** Zoom is safe because the
 base size does not depend on it. A margins toggle is not: the margins come
 out of the column's width, so turning them off makes the page itself wider —

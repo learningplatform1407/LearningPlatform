@@ -45,6 +45,13 @@ the system grows.
   tuned, why the request carries offsets and the server slices the answer, why
   overlapping gaps are refused, what unmarking a word takes with it, and why
   the existing generated cards were left in place.
+- [`mobile-pdf-canvas.md`](./mobile-pdf-canvas.md) — **a plan, not a
+  record**: replacing the mobile lecture-PDF reader with page and ink in one
+  Skia surface under one transform. Records why `react-native-pdf` cannot get
+  there (no pan offset, a bitmap page, and a `recycle()` that races its own
+  render thread), what reader-and-annotate apps do instead, why
+  server-rendered page images reuse pymupdf and delete a native dependency,
+  and why none of it needs a migration.
 - [`password-reset.md`](./password-reset.md) — email recovery and
   change-password, both pure Supabase Auth with no backend involvement.
   Records why the form deliberately cannot say whether an address is
