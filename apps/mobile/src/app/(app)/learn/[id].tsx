@@ -1837,6 +1837,8 @@ export default function LectureScreen() {
   // A mark being dragged (MarkableParagraph, or a PDF page): the lesson
   // stops scrolling under the finger until it lifts.
   const [marking, setMarking] = useState(false);
+  // A pinch zooming a PDF page: the lesson must not scroll under it.
+  const [zooming, setZooming] = useState(false);
   function setActiveTool(tool: ActiveTool) {
     setActiveToolState(tool);
     setMarking(false);
@@ -2097,9 +2099,11 @@ export default function LectureScreen() {
           scrollEventThrottle={32}
           // With the pen or eraser up on a PDF page, a drag draws or erases;
           // put the tool down to scroll.
-          // A mark being dragged locks it too, until the finger lifts.
+          // A mark being dragged locks it too, until the finger lifts, and
+          // so does a pinch zooming a page.
           scrollEnabled={
             !marking &&
+            !zooming &&
             !(
               activeTab === "lesson" &&
               lessonViewMode === "pdf" &&
@@ -2186,6 +2190,7 @@ export default function LectureScreen() {
               viewportTop={pdfScrollTop}
               viewportHeight={windowHeight}
               onMarkingChange={setMarking}
+              onZoomingChange={setZooming}
               onSaveError={saveFailed}
             />
           )}
