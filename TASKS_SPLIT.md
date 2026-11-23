@@ -329,6 +329,8 @@ round of use on web. Notes:
 
 | **REVIEW-7** | 📱 Mobile pages crash the renderer when resized | REVIEW-3 | **Open.** AndroidPdfViewer renders bitmaps on its own `HandlerThread` and recycles the `PdfDocument` on detach without cancelling the jobs queued against it, so a burst of resizes and mounts lands one on a recycled document: `RuntimeException: Get page pdf document null`. Latent since the PDF reader landed — rotation is the other way to trigger it — and REVIEW-3 reached it with a button, which is why mobile has no margins toggle. The fix is to render each `<Pdf>` at a stable width and scale its container with a transform, so the native view never resizes; it needs a device to verify. Would also let mobile have the toggle. |
 
+| **REVIEW-8** | ✅ 📱 The tool notch outgrew the screen | | With the pen in hand it holds fourteen buttons, which at 34pt apiece ran from 30% down the screen to past the bottom of it — and the bottom tab bar sits over that, so the last of them (the rule and `Aa`) could be neither seen nor tapped. Capped at 58% of the screen and scrollable; with the 30% offset that always leaves room for the tab bar and the safe area. Latent since the notch gained the pen's nib sizes, found while testing REVIEW-3. |
+
 **Deliberately not done here.** Re-anchoring marks across a lecture-text
 replace: a cloze card, an annotation and a `source_quotes` match are all
 offsets into a paragraph, and all four features carry the same exposure. It is

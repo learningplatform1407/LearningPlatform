@@ -384,155 +384,178 @@ function ToolNotch({
   const styles = useStyles();
   const colors = useThemeColors();
   return (
+    // Bounded and scrollable, because the notch outgrows the screen: with
+    // the pen in hand it holds fourteen buttons, which at 34pt apiece ran
+    // from 30% of the way down the screen to past the bottom of it -- and
+    // the bottom tab bar sits over that, so the last ones (the rule and Aa)
+    // could be neither seen nor tapped. The cap is a percentage rather than
+    // window-minus-insets arithmetic: 30% down plus 58% tall always leaves
+    // room below for the tab bar and the safe area.
     <View
       style={styles.toolNotch}
       accessibilityRole="toolbar"
       accessibilityLabel={t("lesson.tools.label")}
     >
-      <Pressable
-        onPress={onContents}
-        style={styles.tool}
-        accessibilityRole="button"
-        accessibilityLabel={t("lesson.tools.contents")}
-        hitSlop={4}
+      <ScrollView
+        contentContainerStyle={styles.toolNotchTools}
+        showsVerticalScrollIndicator={false}
+        // The tools are a short list to flick through, not a page: this
+        // keeps a drag that starts on a button from being taken for a
+        // scroll and swallowing the tap.
+        directionalLockEnabled
       >
-        {/* The same chevron the drawer closes with (lib/overlay.tsx), so the
+        <Pressable
+          onPress={onContents}
+          style={styles.tool}
+          accessibilityRole="button"
+          accessibilityLabel={t("lesson.tools.contents")}
+          hitSlop={4}
+        >
+          {/* The same chevron the drawer closes with (lib/overlay.tsx), so the
             arrow reads as one control that turns round rather than two. */}
-        <ChevronRightIcon color={colors.foreground} size={22} />
-      </Pressable>
-      {toolsEnabled && (
-        <>
-          {HIGHLIGHT_COLORS.map((color) => {
-            const isActive =
-              activeTool?.type === "pen"
-                ? activeTool.color === color.pen
-                : activeTool?.type === "highlight" && activeTool.color === color.name;
-            return (
-              <Pressable
-                key={color.name}
-                onPress={() =>
-                  onToolChange(
-                    activeTool?.type === "pen"
-                      ? { ...activeTool, color: isActive ? PEN_GRAPHITE : color.pen }
-                      : isActive
-                        ? null
-                        : { type: "highlight", color: color.name },
-                  )
-                }
-                accessibilityRole="button"
-                accessibilityLabel={t("lesson.tools.highlight", {
-                  color: t(`colors.${color.name}`),
-                })}
-                accessibilityState={{ selected: isActive }}
-                style={styles.tool}
-                hitSlop={2}
-              >
-                <View
-                  style={[
-                    styles.swatch,
-                    { backgroundColor: color.swatch },
-                    isActive && styles.swatchActive,
-                  ]}
-                />
-              </Pressable>
-            );
-          })}
-          <View style={styles.toolSeparator} />
-          <Pressable
-            onPress={onExplain}
-            style={styles.tool}
-            accessibilityRole="button"
-            accessibilityLabel={t("lesson.tools.explain")}
-          >
-            <BulbIcon color={colors.mutedForeground} />
-          </Pressable>
-          {/* Notes anchor to a passage of text, so the tool is greyed out
-              over a PDF page the same way the pen is over the text. */}
-          <Pressable
-            onPress={() => onToolChange(activeTool?.type === "note" ? null : { type: "note" })}
-            disabled={!noteAvailable}
-            accessibilityRole="button"
-            accessibilityLabel={
-              noteAvailable ? t("lesson.tools.note") : t("lesson.tools.noteTextOnly")
-            }
-            accessibilityState={{ selected: activeTool?.type === "note", disabled: !noteAvailable }}
-            style={[
-              styles.tool,
-              activeTool?.type === "note" && styles.toolActive,
-              !noteAvailable && styles.toolDisabled,
-            ]}
-          >
-            <NoteIcon color={activeTool?.type === "note" ? colors.background : colors.foreground} />
-          </Pressable>
-          <Pressable
-            onPress={() =>
-              onToolChange(
+          <ChevronRightIcon color={colors.foreground} size={22} />
+        </Pressable>
+        {toolsEnabled && (
+          <>
+            {HIGHLIGHT_COLORS.map((color) => {
+              const isActive =
                 activeTool?.type === "pen"
-                  ? null
-                  : { type: "pen", color: PEN_GRAPHITE, size: penSize },
-              )
-            }
-            disabled={!penAvailable}
-            accessibilityRole="button"
-            accessibilityLabel={
-              penAvailable ? t("lesson.tools.pen") : t("lesson.tools.penPdfOnlyShort")
-            }
-            accessibilityState={{ selected: activeTool?.type === "pen", disabled: !penAvailable }}
-            style={[
-              styles.tool,
-              activeTool?.type === "pen" && styles.toolActive,
-              !penAvailable && styles.toolDisabled,
-            ]}
-          >
-            <PenIcon color={activeTool?.type === "pen" ? colors.background : colors.foreground} />
-          </Pressable>
-          {/* The nib sizes, only while the pen is in hand: a dot per size,
+                  ? activeTool.color === color.pen
+                  : activeTool?.type === "highlight" && activeTool.color === color.name;
+              return (
+                <Pressable
+                  key={color.name}
+                  onPress={() =>
+                    onToolChange(
+                      activeTool?.type === "pen"
+                        ? { ...activeTool, color: isActive ? PEN_GRAPHITE : color.pen }
+                        : isActive
+                          ? null
+                          : { type: "highlight", color: color.name },
+                    )
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={t("lesson.tools.highlight", {
+                    color: t(`colors.${color.name}`),
+                  })}
+                  accessibilityState={{ selected: isActive }}
+                  style={styles.tool}
+                  hitSlop={2}
+                >
+                  <View
+                    style={[
+                      styles.swatch,
+                      { backgroundColor: color.swatch },
+                      isActive && styles.swatchActive,
+                    ]}
+                  />
+                </Pressable>
+              );
+            })}
+            <View style={styles.toolSeparator} />
+            <Pressable
+              onPress={onExplain}
+              style={styles.tool}
+              accessibilityRole="button"
+              accessibilityLabel={t("lesson.tools.explain")}
+            >
+              <BulbIcon color={colors.mutedForeground} />
+            </Pressable>
+            {/* Notes anchor to a passage of text, so the tool is greyed out
+              over a PDF page the same way the pen is over the text. */}
+            <Pressable
+              onPress={() => onToolChange(activeTool?.type === "note" ? null : { type: "note" })}
+              disabled={!noteAvailable}
+              accessibilityRole="button"
+              accessibilityLabel={
+                noteAvailable ? t("lesson.tools.note") : t("lesson.tools.noteTextOnly")
+              }
+              accessibilityState={{
+                selected: activeTool?.type === "note",
+                disabled: !noteAvailable,
+              }}
+              style={[
+                styles.tool,
+                activeTool?.type === "note" && styles.toolActive,
+                !noteAvailable && styles.toolDisabled,
+              ]}
+            >
+              <NoteIcon
+                color={activeTool?.type === "note" ? colors.background : colors.foreground}
+              />
+            </Pressable>
+            <Pressable
+              onPress={() =>
+                onToolChange(
+                  activeTool?.type === "pen"
+                    ? null
+                    : { type: "pen", color: PEN_GRAPHITE, size: penSize },
+                )
+              }
+              disabled={!penAvailable}
+              accessibilityRole="button"
+              accessibilityLabel={
+                penAvailable ? t("lesson.tools.pen") : t("lesson.tools.penPdfOnlyShort")
+              }
+              accessibilityState={{ selected: activeTool?.type === "pen", disabled: !penAvailable }}
+              style={[
+                styles.tool,
+                activeTool?.type === "pen" && styles.toolActive,
+                !penAvailable && styles.toolDisabled,
+              ]}
+            >
+              <PenIcon color={activeTool?.type === "pen" ? colors.background : colors.foreground} />
+            </Pressable>
+            {/* The nib sizes, only while the pen is in hand: a dot per size,
               drawn at that size, as on the web. */}
-          {activeTool?.type === "pen" &&
-            PEN_SIZES.map((nib) => (
-              <Pressable
-                key={nib}
-                onPress={() => onPenSize(nib)}
-                accessibilityRole="button"
-                accessibilityLabel={t("notebook.penSize", { size: t(`penSizes.${nib}`) })}
-                accessibilityState={{ selected: activeTool.size === nib }}
-                style={[styles.tool, activeTool.size === nib && styles.toolSelected]}
-                hitSlop={2}
-              >
-                <View
-                  style={[
-                    styles.penSizeDot,
-                    { width: 4 * PEN_SIZE_SCALE[nib], height: 4 * PEN_SIZE_SCALE[nib] },
-                  ]}
-                />
-              </Pressable>
-            ))}
-          <Pressable
-            onPress={() => onToolChange(activeTool?.type === "eraser" ? null : { type: "eraser" })}
-            accessibilityRole="button"
-            accessibilityLabel={t("lesson.tools.eraser")}
-            accessibilityState={{ selected: activeTool?.type === "eraser" }}
-            style={[styles.tool, activeTool?.type === "eraser" && styles.toolActive]}
-          >
-            <EraserIcon
-              color={activeTool?.type === "eraser" ? colors.background : colors.foreground}
-            />
-          </Pressable>
-        </>
-      )}
-      {textScaleAvailable && (
-        <>
-          <View style={styles.toolSeparator} />
-          <Pressable
-            onPress={onTextScale}
-            style={styles.tool}
-            accessibilityRole="button"
-            accessibilityLabel={t("lesson.tools.textSize")}
-          >
-            <Text style={styles.toolAa}>Aa</Text>
-          </Pressable>
-        </>
-      )}
+            {activeTool?.type === "pen" &&
+              PEN_SIZES.map((nib) => (
+                <Pressable
+                  key={nib}
+                  onPress={() => onPenSize(nib)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("notebook.penSize", { size: t(`penSizes.${nib}`) })}
+                  accessibilityState={{ selected: activeTool.size === nib }}
+                  style={[styles.tool, activeTool.size === nib && styles.toolSelected]}
+                  hitSlop={2}
+                >
+                  <View
+                    style={[
+                      styles.penSizeDot,
+                      { width: 4 * PEN_SIZE_SCALE[nib], height: 4 * PEN_SIZE_SCALE[nib] },
+                    ]}
+                  />
+                </Pressable>
+              ))}
+            <Pressable
+              onPress={() =>
+                onToolChange(activeTool?.type === "eraser" ? null : { type: "eraser" })
+              }
+              accessibilityRole="button"
+              accessibilityLabel={t("lesson.tools.eraser")}
+              accessibilityState={{ selected: activeTool?.type === "eraser" }}
+              style={[styles.tool, activeTool?.type === "eraser" && styles.toolActive]}
+            >
+              <EraserIcon
+                color={activeTool?.type === "eraser" ? colors.background : colors.foreground}
+              />
+            </Pressable>
+          </>
+        )}
+        {textScaleAvailable && (
+          <>
+            <View style={styles.toolSeparator} />
+            <Pressable
+              onPress={onTextScale}
+              style={styles.tool}
+              accessibilityRole="button"
+              accessibilityLabel={t("lesson.tools.textSize")}
+            >
+              <Text style={styles.toolAa}>Aa</Text>
+            </Pressable>
+          </>
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -2639,10 +2662,10 @@ const useStyles = makeStyles((colors) => ({
     position: "absolute",
     left: 0,
     top: "30%",
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    gap: 2,
-    alignItems: "center",
+    // Explicit, so the ScrollView inside has a width to lay out in, and
+    // capped so the notch can never reach the bottom tab bar.
+    width: 42,
+    maxHeight: "58%",
     backgroundColor: colors.background,
     borderWidth: 1,
     borderLeftWidth: 0,
@@ -2650,6 +2673,12 @@ const useStyles = makeStyles((colors) => ({
     borderTopRightRadius: 16,
     borderBottomRightRadius: 16,
     ...shadows.notch,
+  },
+  toolNotchTools: {
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    gap: 2,
+    alignItems: "center",
   },
   tool: {
     width: 34,

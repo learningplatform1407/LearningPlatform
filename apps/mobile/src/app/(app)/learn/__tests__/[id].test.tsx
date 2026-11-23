@@ -1795,3 +1795,40 @@ test("the contents show the whole chapter: its title, each sub-chapter, and ever
   expect(router.push).toHaveBeenCalledWith("/learn/d3");
   await waitFor(() => expect(screen.queryByText("Chapter One")).toBeNull());
 });
+
+test("the tool notch stays reachable with the pen in hand", async () => {
+  // Fourteen buttons at 34pt apiece ran past the bottom of the screen, and
+  // the bottom tab bar sits over that -- so the last of them (the rule and
+  // Aa) could be neither seen nor tapped. The notch is capped and scrolls.
+  mockGetDocument.mockResolvedValue({
+    ...readyDocumentWithParagraph("Hello world"),
+    lecture_pdf: {
+      status: "ready",
+      error_message: null,
+      storage_path: "lectures/book.pdf",
+      page_count: 12,
+    },
+  });
+
+  renderScreen();
+  await screen.findByText("Hello world");
+  fireEvent.press(screen.getByText("PDF"));
+  await screen.findByText("d1:lectures/book.pdf");
+
+  // The pen adds its three nib sizes, which is what tipped it over.
+  fireEvent.press(screen.getByLabelText("Pen"));
+  expect(await screen.findByLabelText("Pen size — medium")).toBeTruthy();
+
+  const flatten = (style: unknown): Record<string, unknown> =>
+    Object.assign({}, ...[style].flat(5).filter(Boolean));
+  const notch = flatten(screen.getByLabelText("Lesson tools").props.style);
+  // Capped well clear of the bottom: 30% down plus 58% tall leaves room for
+  // the tab bar and the safe area below it.
+  expect(notch.maxHeight).toBe("58%");
+  expect(notch.top).toBe("30%");
+
+  // And Aa is still there to be pressed, rather than under the tab bar.
+  const textSize = screen.getByLabelText("Text size");
+  fireEvent.press(textSize);
+  expect(textSize).toBeTruthy();
+});

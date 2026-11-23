@@ -221,6 +221,15 @@ margin ink paint into the gutter beside the page instead of disappearing with
 the margins it was drawn in. Nor can new margin ink be made while they are
 off: the pointer's x is clamped to the margins that exist, which is none.
 
+One thing the margins did **not** cause, found while testing them: with the
+pen in hand the mobile tool notch holds fourteen buttons, which at 34pt
+apiece ran from 30% down the screen to past the bottom of it -- and the
+bottom tab bar sits over that, so the last of them (the rule and `Aa`) could
+be neither seen nor tapped. It is now capped at 58% of the screen and
+scrolls, which with the 30% offset always leaves room below for the tab bar
+and the safe area. Latent since the notch gained the pen's nib sizes; the
+margins only made it somewhere people linger.
+
 #### 6.2.1 Why mobile has no toggle
 
 Toggling margins resizes every page. On mobile that meant, in one frame: a new
