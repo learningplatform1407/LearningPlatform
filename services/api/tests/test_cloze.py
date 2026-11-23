@@ -1,5 +1,7 @@
 import uuid
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,7 +11,7 @@ from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
 from app.books.models import Book
 from app.chapters.models import Chapter
-from app.cloze.generation import generate_cloze_spans
+from app.cloze.models import ClozeCard, ClozeReviewState
 from app.documents.models import Document, DocumentVersion
 from app.main import app
 from app.srs.scheduler import (
@@ -20,56 +22,6 @@ from app.srs.scheduler import (
 )
 from app.sub_chapters.models import SubChapter
 from app.users.models import AccountSettings, Profile
-
-# --- generate_cloze_spans (pure heuristic) ---------------------------------
-
-
-def test_generate_cloze_spans_picks_qualifying_words_capped_at_two() -> None:
-    blocks = [
-        {"type": "heading", "text": "Introduction", "page": 1},
-        {
-            "type": "paragraph",
-            "text": "The database index accelerates lookups significantly.",
-            "page": 1,
-        },
-    ]
-    spans = generate_cloze_spans(blocks)
-    # The heading is skipped entirely -- every span belongs to block 1.
-    assert [s["block_index"] for s in spans] == [1, 1]
-    assert [s["answer_text"] for s in spans] == ["database", "index"]
-
-
-def test_generate_cloze_spans_skips_short_words_and_stopwords() -> None:
-    blocks = [{"type": "paragraph", "text": "It is a big red dog that runs fast."}]
-    assert generate_cloze_spans(blocks) == []
-
-
-def test_generate_cloze_spans_picks_standalone_numbers() -> None:
-    # "In"/"it"/"was" are all stopwords or too short to qualify as words, so
-    # only the two numbers are left as candidates.
-    blocks = [{"type": "paragraph", "text": "In 1987 it was 42."}]
-    spans = generate_cloze_spans(blocks)
-    assert [s["answer_text"] for s in spans] == ["1987", "42"]
-
-
-def test_generate_cloze_spans_skips_images() -> None:
-    blocks = [{"type": "image", "page": 1, "image_path": "x.png"}]
-    assert generate_cloze_spans(blocks) == []
-
-
-def test_generate_cloze_spans_offsets_slice_back_to_the_answer() -> None:
-    text = "Mitochondria generate cellular energy constantly."
-    blocks = [{"type": "paragraph", "text": text}]
-    spans = generate_cloze_spans(blocks)
-    assert len(spans) == 2
-    for span in spans:
-        assert text[span["start_offset"] : span["end_offset"]] == span["answer_text"]
-
-
-def test_generate_cloze_spans_is_idempotent() -> None:
-    blocks = [{"type": "paragraph", "text": "The mitochondria produces cellular energy."}]
-    assert generate_cloze_spans(blocks) == generate_cloze_spans(blocks)
-
 
 # --- compute_next_state (pure SM-2 scheduler) ------------------------------
 
@@ -176,12 +128,34 @@ def owner_user() -> AuthenticatedUser:
     return AuthenticatedUser(id=uuid.uuid4(), email="owner@example.com")
 
 
+def _mark_words(db: Session, document_id: uuid.UUID, text: str, words: list[str]) -> None:
+    """Marks each word as a review word, the way an admin's POST would.
+
+    Written straight to the table rather than through the endpoint so the
+    learner-facing tests below don't each have to put on an admin hat first;
+    the endpoint's own validation has its own tests.
+    """
+    for word in words:
+        start = text.index(word)
+        db.add(
+            ClozeCard(
+                document_id=document_id,
+                block_index=0,
+                start_offset=start,
+                end_offset=start + len(word),
+                answer_text=word,
+            )
+        )
+    db.commit()
+
+
+READY_PARAGRAPH = "The mitochondria produces cellular energy constantly."
+
+
 @pytest.fixture
 def ready_document_id(db_session: Session, owner_user: AuthenticatedUser) -> uuid.UUID:
-    """A ready document with one paragraph that yields exactly two cloze
-    candidates ("mitochondria", "produces") -- "The"/"cellular"/"energy"/
-    "constantly" are excluded by the stopword/length rule, and the cap is
-    two per paragraph anyway."""
+    """A ready document with one paragraph and two words marked for review
+    ("mitochondria", "produces")."""
     db_session.add(Profile(id=owner_user.id, settings=AccountSettings(user_id=owner_user.id)))
     db_session.flush()
 
@@ -198,11 +172,8 @@ def ready_document_id(db_session: Session, owner_user: AuthenticatedUser) -> uui
         status="ready",
         extracted_content={
             "blocks": [
-                {
-                    "type": "paragraph",
-                    "text": "The mitochondria produces cellular energy constantly.",
-                    "page": 1,
-                }
+                {"type": "heading", "text": "Cell biology", "page": 1},
+                {"type": "paragraph", "text": READY_PARAGRAPH, "page": 1},
             ]
         },
     )
@@ -210,6 +181,19 @@ def ready_document_id(db_session: Session, owner_user: AuthenticatedUser) -> uui
     db_session.flush()
 
     document.current_version_id = version.id
+    db_session.commit()
+
+    for word in ("mitochondria", "produces"):
+        start = READY_PARAGRAPH.index(word)
+        db_session.add(
+            ClozeCard(
+                document_id=document.id,
+                block_index=1,
+                start_offset=start,
+                end_offset=start + len(word),
+                answer_text=word,
+            )
+        )
     db_session.commit()
     return document.id
 
@@ -219,7 +203,7 @@ def test_cloze_cards_require_auth(client: TestClient, ready_document_id: uuid.UU
     assert response.status_code == 401
 
 
-def test_list_cloze_cards_auto_generates_on_first_call(
+def test_list_cloze_cards_returns_the_words_an_admin_marked(
     authed_client: TestClient, ready_document_id: uuid.UUID
 ) -> None:
     response = authed_client.get(f"/v1/documents/{ready_document_id}/cloze-cards")
@@ -238,6 +222,21 @@ def test_list_cloze_cards_is_idempotent_across_repeated_calls(
     first = authed_client.get(f"/v1/documents/{ready_document_id}/cloze-cards").json()
     second = authed_client.get(f"/v1/documents/{ready_document_id}/cloze-cards").json()
     assert [c["id"] for c in first] == [c["id"] for c in second]
+
+
+def test_an_unmarked_lesson_has_no_review_words(
+    authed_client: TestClient, db_session: Session, owner_user: AuthenticatedUser
+) -> None:
+    """Nothing is generated from the text any more: a lesson has exactly the
+    words an admin marked, and until then Review has nothing to ask."""
+    db_session.add(Profile(id=owner_user.id, settings=AccountSettings(user_id=owner_user.id)))
+    db_session.commit()
+    document_id = _create_ready_document(
+        db_session, owner_user.id, "Unmarked", "Mitochondria generate cellular energy.", None
+    )
+
+    assert authed_client.get(f"/v1/documents/{document_id}/cloze-cards").json() == []
+    assert authed_client.get(f"/v1/documents/{document_id}/cloze-cards/due").json() == []
 
 
 def test_due_cards_include_never_reviewed_cards(
@@ -299,7 +298,6 @@ def test_review_requires_auth(client: TestClient, ready_document_id: uuid.UUID) 
 def test_review_of_unknown_card_404s(
     authed_client: TestClient, ready_document_id: uuid.UUID
 ) -> None:
-    authed_client.get(f"/v1/documents/{ready_document_id}/cloze-cards")  # ensure generation ran
     response = authed_client.post(
         f"/v1/documents/{ready_document_id}/cloze-cards/{uuid.uuid4()}/review",
         json={"rating": "good"},
@@ -362,6 +360,7 @@ def _create_ready_document(
     title: str,
     text: str,
     sub_chapter_id: uuid.UUID | None,
+    mark: list[str] | None = None,
 ) -> uuid.UUID:
     document = Document(title=title, created_by=owner_id, sub_chapter_id=sub_chapter_id)
     db_session.add(document)
@@ -381,6 +380,8 @@ def _create_ready_document(
 
     document.current_version_id = version.id
     db_session.commit()
+    if mark:
+        _mark_words(db_session, document.id, text, mark)
     return document.id
 
 
@@ -411,18 +412,20 @@ def test_review_summary_rolls_up_due_counts_through_the_hierarchy(
         db_session,
         owner_id,
         "Lesson A",
-        "The mitochondria produces cellular energy constantly.",
+        READY_PARAGRAPH,
         sub1.id,
+        ["mitochondria", "produces"],
     )
-    # Lesson B is never visited before the summary call below -- proves
-    # get_review_summary calls ensure_cloze_cards itself rather than relying
-    # on someone having opened the lesson's Review tab first.
+    # Lesson B is never visited before the summary call below: the summary
+    # reads each lesson's marked words itself rather than relying on someone
+    # having opened that lesson's Review tab first.
     lesson_b_id = _create_ready_document(
         db_session,
         owner_id,
         "Lesson B",
         "An alternative approach requires careful validation testing.",
         sub2.id,
+        ["alternative", "validation"],
     )
     uncategorized_id = _create_ready_document(
         db_session,
@@ -430,6 +433,7 @@ def test_review_summary_rolls_up_due_counts_through_the_hierarchy(
         "Lesson C",
         "Distributed systems introduce partial failure scenarios.",
         None,
+        ["Distributed", "scenarios"],
     )
 
     response = authed_client.get("/v1/me/review-summary")
@@ -439,7 +443,7 @@ def test_review_summary_rolls_up_due_counts_through_the_hierarchy(
     assert len(body["books"]) == 1
     book_body = body["books"][0]
     assert book_body["id"] == str(book.id)
-    assert book_body["due_count"] == 4  # 2 cards each from Lesson A and Lesson B
+    assert book_body["due_count"] == 4  # 2 words each from Lesson A and Lesson B
 
     chapters_by_title = {c["title"]: c for c in book_body["chapters"]}
     assert chapters_by_title["Chapter 1"]["due_count"] == 2
@@ -472,8 +476,9 @@ def test_review_summary_grading_reduces_the_count_but_keeps_the_lesson_listed(
         db_session,
         authenticated_user.id,
         "Solo Lesson",
-        "The mitochondria produces cellular energy constantly.",
+        READY_PARAGRAPH,
         None,
+        ["mitochondria", "produces"],
     )
 
     cards = authed_client.get(f"/v1/documents/{lesson_id}/cloze-cards").json()
@@ -511,3 +516,201 @@ def test_review_summary_includes_zero_due_nodes(
         b["title"] == "Empty Book" and b["due_count"] == 0 and b["chapters"] == []
         for b in body["books"]
     )
+
+
+# --- admin: marking and unmarking review words ------------------------------
+
+
+@pytest.fixture
+def admin_user() -> AuthenticatedUser:
+    return AuthenticatedUser(id=uuid.uuid4(), email="admin@example.com")
+
+
+@pytest.fixture
+def as_admin(
+    client: TestClient, admin_user: AuthenticatedUser, db_session: Session
+) -> Iterator[TestClient]:
+    db_session.add(
+        Profile(id=admin_user.id, role="admin", settings=AccountSettings(user_id=admin_user.id))
+    )
+    db_session.commit()
+    app.dependency_overrides[get_current_user] = lambda: admin_user
+    try:
+        yield client
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def _mark(client: TestClient, document_id: uuid.UUID, word: str) -> Any:
+    start = READY_PARAGRAPH.index(word)
+    return client.post(
+        f"/v1/documents/{document_id}/cloze-cards",
+        json={"block_index": 1, "start_offset": start, "end_offset": start + len(word)},
+    )
+
+
+def test_marking_a_word_adds_it_to_the_lesson(
+    as_admin: TestClient, ready_document_id: uuid.UUID
+) -> None:
+    response = _mark(as_admin, ready_document_id, "cellular")
+    assert response.status_code == 201
+    card = response.json()
+    assert (card["block_index"], card["start_offset"], card["end_offset"]) == (1, 26, 34)
+    # Still not sent to clients: the gap is rendered from the lesson text.
+    assert "answer_text" not in card
+
+    cards = as_admin.get(f"/v1/documents/{ready_document_id}/cloze-cards").json()
+    assert len(cards) == 3
+
+
+def test_the_answer_is_sliced_from_the_lesson_not_taken_from_the_request(
+    as_admin: TestClient, ready_document_id: uuid.UUID, db_session: Session
+) -> None:
+    card_id = _mark(as_admin, ready_document_id, "cellular").json()["id"]
+    card = db_session.get(ClozeCard, uuid.UUID(card_id))
+    assert card is not None
+    assert card.answer_text == "cellular"
+
+
+def test_marking_requires_an_admin(authed_client: TestClient, ready_document_id: uuid.UUID) -> None:
+    assert _mark(authed_client, ready_document_id, "cellular").status_code == 403
+
+
+def test_marking_requires_auth(client: TestClient, ready_document_id: uuid.UUID) -> None:
+    assert _mark(client, ready_document_id, "cellular").status_code == 401
+
+
+def test_marking_refuses_a_heading(as_admin: TestClient, ready_document_id: uuid.UUID) -> None:
+    response = as_admin.post(
+        f"/v1/documents/{ready_document_id}/cloze-cards",
+        json={"block_index": 0, "start_offset": 0, "end_offset": 4},
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_block"
+
+
+def test_marking_refuses_a_block_that_is_not_there(
+    as_admin: TestClient, ready_document_id: uuid.UUID
+) -> None:
+    response = as_admin.post(
+        f"/v1/documents/{ready_document_id}/cloze-cards",
+        json={"block_index": 99, "start_offset": 0, "end_offset": 4},
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_block"
+
+
+def test_marking_refuses_offsets_past_the_end_of_the_paragraph(
+    as_admin: TestClient, ready_document_id: uuid.UUID
+) -> None:
+    response = as_admin.post(
+        f"/v1/documents/{ready_document_id}/cloze-cards",
+        json={"block_index": 1, "start_offset": 0, "end_offset": 5_000},
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_offsets"
+
+
+def test_marking_refuses_whitespace(as_admin: TestClient, ready_document_id: uuid.UUID) -> None:
+    # The single space between "mitochondria" and "produces".
+    response = as_admin.post(
+        f"/v1/documents/{ready_document_id}/cloze-cards",
+        json={"block_index": 1, "start_offset": 16, "end_offset": 17},
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_offsets"
+
+
+def test_marking_refuses_an_empty_range(as_admin: TestClient, ready_document_id: uuid.UUID) -> None:
+    response = as_admin.post(
+        f"/v1/documents/{ready_document_id}/cloze-cards",
+        json={"block_index": 1, "start_offset": 4, "end_offset": 4},
+    )
+    assert response.status_code == 422
+
+
+def test_marking_refuses_a_passage_that_overlaps_an_existing_word(
+    as_admin: TestClient, ready_document_id: uuid.UUID
+) -> None:
+    """Two gaps over the same letters would nest, which the clients' splice
+    does not model -- so the second is refused rather than silently merged."""
+    response = as_admin.post(
+        f"/v1/documents/{ready_document_id}/cloze-cards",
+        json={"block_index": 1, "start_offset": 0, "end_offset": 16},  # "The mitochondria"
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "overlapping_card"
+
+
+def test_marking_allows_a_passage_that_only_touches_an_existing_word(
+    as_admin: TestClient, ready_document_id: uuid.UUID
+) -> None:
+    # "The " ends exactly where "mitochondria" starts -- adjacent, not
+    # overlapping. The trailing space is included, so it isn't blank.
+    response = as_admin.post(
+        f"/v1/documents/{ready_document_id}/cloze-cards",
+        json={"block_index": 1, "start_offset": 0, "end_offset": 4},
+    )
+    assert response.status_code == 201
+
+
+def test_unmarking_removes_the_word_and_its_review_progress(
+    act_as: Callable[[AuthenticatedUser], TestClient],
+    admin_user: AuthenticatedUser,
+    authenticated_user: AuthenticatedUser,
+    ready_document_id: uuid.UUID,
+    db_session: Session,
+) -> None:
+    # Two users in one test, so the signed-in one is switched explicitly
+    # rather than by fixture ordering -- `as_admin` and `authed_client`
+    # together would leave whichever resolved last in charge of both.
+    db_session.add(
+        Profile(id=admin_user.id, role="admin", settings=AccountSettings(user_id=admin_user.id))
+    )
+    db_session.commit()
+
+    learner = act_as(authenticated_user)
+    cards = learner.get(f"/v1/documents/{ready_document_id}/cloze-cards").json()
+    card_id = cards[0]["id"]
+    # A learner grades it before it is unmarked, so the cascade has something
+    # to take with it.
+    review = learner.post(
+        f"/v1/documents/{ready_document_id}/cloze-cards/{card_id}/review",
+        json={"rating": "good"},
+    )
+    assert review.status_code == 200
+    state_id = uuid.UUID(review.json()["id"])
+
+    admin = act_as(admin_user)
+    response = admin.delete(f"/v1/documents/{ready_document_id}/cloze-cards/{card_id}")
+    assert response.status_code == 204
+    assert db_session.get(ClozeCard, uuid.UUID(card_id)) is None
+    assert db_session.get(ClozeReviewState, state_id) is None
+
+    left = admin.get(f"/v1/documents/{ready_document_id}/cloze-cards").json()
+    assert [c["id"] for c in left] == [cards[1]["id"]]
+
+
+def test_unmarking_requires_an_admin(
+    authed_client: TestClient, ready_document_id: uuid.UUID
+) -> None:
+    cards = authed_client.get(f"/v1/documents/{ready_document_id}/cloze-cards").json()
+    response = authed_client.delete(
+        f"/v1/documents/{ready_document_id}/cloze-cards/{cards[0]['id']}"
+    )
+    assert response.status_code == 403
+
+
+def test_unmarking_a_word_from_another_lesson_404s(
+    as_admin: TestClient,
+    ready_document_id: uuid.UUID,
+    db_session: Session,
+    admin_user: AuthenticatedUser,
+) -> None:
+    other_id = _create_ready_document(
+        db_session, admin_user.id, "Other", READY_PARAGRAPH, None, ["mitochondria"]
+    )
+    other_card = as_admin.get(f"/v1/documents/{other_id}/cloze-cards").json()[0]
+
+    response = as_admin.delete(f"/v1/documents/{ready_document_id}/cloze-cards/{other_card['id']}")
+    assert response.status_code == 404

@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
-from app.cloze.service import ensure_cloze_cards
 from app.common.errors import ApiError
 from app.db.session import get_db
 from app.documents.dependencies import require_admin
@@ -78,11 +77,6 @@ def create_document(
     db: Session = Depends(get_db),
 ) -> DocumentResponse:
     document = register_document(db, admin.id, data)
-    # Cross-domain orchestration lives at the router layer, not inside
-    # documents/service.py, to avoid a documents.service <-> cloze.service
-    # import cycle (cloze.service also needs documents.service, for the
-    # review-summary aggregation).
-    ensure_cloze_cards(db, document)
     return _to_document_response(db, document)
 
 
@@ -130,9 +124,10 @@ def replace_lecture_text_route(
     _admin: AuthenticatedUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> DocumentResponse:
-    # Deliberately no ensure_cloze_cards call here, unlike create_document --
-    # flashcards/cloze cards/question-bank questions stay keyed on
-    # document_id alone and are left untouched by a lecture-text replace.
+    # Flashcards, cloze cards and question-bank questions stay keyed on
+    # document_id alone and are left untouched by a lecture-text replace --
+    # including the admin-marked review words, whose offsets a replace can
+    # shift. See docs/architecture/review-words.md.
     document = replace_lecture_text(db, document_id, data)
     return _to_document_response(db, document)
 

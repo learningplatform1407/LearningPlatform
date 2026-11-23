@@ -11,6 +11,8 @@ export const notebook: Messages["notebook"] = {
   untitled: "Notiță fără titlu",
   empty: "Nicio notiță deocamdată.",
   drawing: "Desen",
+  fromLesson: "Din {lesson}",
+  noLesson: "Nu e din nicio lecție",
   newText: "+ Text",
   newDrawing: "+ Desen",
   noteTitle: "Titlu",

@@ -7,6 +7,11 @@ import { useState } from "react";
 import { Button } from "@/components/button";
 import { Tag } from "@/components/chip";
 import { OptionChoice, OUTCOME_MARKS, QuestionRevealPanel } from "@/components/question-reveal";
+import {
+  QUESTION_CARD_ATTR,
+  QuestionKeysHint,
+  useQuestionKeys,
+} from "@/components/use-question-keys";
 import { getBrowserApiClient } from "@/lib/api-client.browser";
 import { useI18n } from "@/lib/i18n";
 
@@ -108,9 +113,22 @@ function QuestionCard({
   // an answer is checked, rather than waiting for the list to refetch.
   const latest = reveal ?? question.progress;
 
+  const answerable = reveal === null && !answer.isPending;
+  useQuestionKeys(question.id, {
+    optionCount: question.options.length,
+    choose: (index) => {
+      const option = question.options[index];
+      if (option && answerable) toggle(option.id);
+    },
+    // Nothing to check once the answer is on screen: Enter there would
+    // re-check an already-graded question.
+    submit: answerable && selected.length > 0 ? () => answer.mutate() : undefined,
+  });
+
   return (
     <li
       id={questionElementId(question.id)}
+      {...{ [QUESTION_CARD_ATTR]: question.id }}
       className="scroll-mt-[96px] border-t border-border py-[26px]"
     >
       <div className="mb-2.5 flex items-start justify-between gap-3">
@@ -155,6 +173,7 @@ function QuestionCard({
                 index={index}
                 text={option.text}
                 checked={selected.includes(option.id)}
+                keyHint={t("questions.chooseKey", { key: index + 1 })}
                 onChange={() => toggle(option.id)}
               />
             </li>
@@ -181,13 +200,16 @@ function QuestionCard({
             {t("questions.tryAgain")}
           </Button>
         ) : (
-          <Button
-            type="button"
-            disabled={selected.length === 0 || answer.isPending}
-            onClick={() => answer.mutate()}
-          >
-            {answer.isPending ? t("questions.checking") : t("questions.check")}
-          </Button>
+          <>
+            <Button
+              type="button"
+              disabled={selected.length === 0 || answer.isPending}
+              onClick={() => answer.mutate()}
+            >
+              {answer.isPending ? t("questions.checking") : t("questions.check")}
+            </Button>
+            <QuestionKeysHint optionCount={question.options.length} />
+          </>
         )}
         {/* Shown once checked, like the design: before that the passage
             would give the answer away. */}

@@ -7,7 +7,7 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { getApiClient } from "@/lib/api-client";
 import { DailyFollowing } from "@/lib/daily-following";
-import { QuestionRevealPanel } from "@/lib/question-reveal";
+import { OptionChoice, OptionReadOnly, QuestionRevealPanel } from "@/lib/question-reveal";
 import { fontSizes, fontWeights, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
 import { useI18n } from "@/lib/i18n";
@@ -85,10 +85,8 @@ export function DailyQuestionBody({ day }: { day: DailyQuestion }) {
       <View style={styles.body}>
         <Text style={styles.prompt}>{question.prompt}</Text>
         <View style={styles.optionList}>
-          {question.options.map((option) => (
-            <Text key={option.id} style={styles.closedOption}>
-              {option.text}
-            </Text>
+          {question.options.map((option, index) => (
+            <OptionReadOnly key={option.id} index={index} text={option.text} />
           ))}
         </View>
         <Text style={styles.hint}>{t("daily.closed")}</Text>
@@ -116,24 +114,20 @@ export function DailyQuestionBody({ day }: { day: DailyQuestion }) {
     <View style={styles.body}>
       <Text style={styles.prompt}>{question.prompt}</Text>
 
+      {/* The same letter circles and type scale as the question bank, so
+          answering and the explanation that replaces it are one design
+          rather than a small form that turns into a big panel. */}
       <View style={styles.optionList}>
-        {question.options.map((option) => {
-          const checked = selected.includes(option.id);
-          return (
-            <Pressable
-              key={option.id}
-              style={styles.optionRow}
-              onPress={() => toggle(option.id)}
-              accessibilityRole={isSingle ? "radio" : "checkbox"}
-              accessibilityState={{ checked }}
-            >
-              <Text style={styles.optionMark}>
-                {isSingle ? (checked ? "●" : "○") : checked ? "☑" : "☐"}
-              </Text>
-              <Text style={styles.optionText}>{option.text}</Text>
-            </Pressable>
-          );
-        })}
+        {question.options.map((option, index) => (
+          <OptionChoice
+            key={option.id}
+            kind={isSingle ? "single" : "multiple"}
+            index={index}
+            text={option.text}
+            checked={selected.includes(option.id)}
+            onPress={() => toggle(option.id)}
+          />
+        ))}
       </View>
 
       <Text style={styles.meta}>
@@ -165,38 +159,13 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.sm,
   },
   prompt: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
+    fontSize: fontSizes.body,
+    lineHeight: 26,
+    fontWeight: fontWeights.bold,
     color: colors.foreground,
   },
   optionList: {
-    gap: spacing.xs,
-  },
-  // The whole row is the Pressable, but with no vertical padding its height
-  // was just the text's line box -- around 17pt, well under the 44pt Apple
-  // and 48dp Android minimum. It read as "not tappable" because it very
-  // nearly wasn't.
-  optionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    minHeight: 44,
-    paddingVertical: spacing.xs,
-  },
-  optionMark: {
-    fontSize: fontSizes.xl,
-    color: colors.foreground,
-    width: 28,
-    textAlign: "center",
-  },
-  optionText: {
-    flex: 1,
-    fontSize: fontSizes.sm,
-    color: colors.foreground,
-  },
-  closedOption: {
-    fontSize: fontSizes.sm,
-    color: colors.mutedForeground,
+    marginTop: spacing.xs,
   },
   meta: {
     fontSize: fontSizes.xs,

@@ -39,8 +39,9 @@ replaces them.
 | Replacing the PDF wipes all ink, unconditionally                       | §3.                                                                                                                                                 |
 | Replacing the lecture text carries annotations forward by content hash | §4. The opposite choice, and the asymmetry is the point.                                                                                            |
 | Ink stored as a whole `Stroke[]` per page, replaced by PUT             | Matches `NotebookEntry.strokes`, already proven. Per-stroke rows would buy concurrent editing that one user on one page does not need.              |
-| Word highlights stored beside the ink, as rectangles                   | §6.2. Same row, same lifecycle (per user, per page, wiped on replace); rectangles in page units so any client can draw them without a text layer.   |
+| Word highlights stored beside the ink, as rectangles                   | §6.1. Same row, same lifecycle (per user, per page, wiped on replace); rectangles in page units so any client can draw them without a text layer.   |
 | Stroke points normalized to `[0, 1]`                                   | Zoom-independent: the same array renders correctly at any scale and on any screen, which is also what lets web and mobile share one storage format. |
+| Ink in a writing margin stored _outside_ `[0, 1]`                      | §6.2. The page stays the coordinate system; a margin is a wider window onto it, so turning margins on changes nothing already drawn.                |
 | `page_count` is the only page metadata stored                          | §5.                                                                                                                                                 |
 | Page rendering owned entirely by the clients                           | pdf.js on web, react-native-pdf on mobile. The backend never rasterizes a page; it stores a file and some ink.                                      |
 | Ink is per `(pdf, page, user)`, never shared                           | Annotations are personal. There is no "class notes" mode and no sharing surface.                                                                    |
@@ -130,7 +131,7 @@ never reuses) that the other pages then read from.
 The cost: no pinch-zoom on mobile. While the pen or eraser is up, a drag draws or erases, so the
 lesson stops scrolling until the tool is put down.
 
-### 6.2 Highlights on PDF pages
+### 6.1 Highlights on PDF pages
 
 Web PDF mode also has the reader's word-level marker. pdf.js's `getTextContent()` gives runs of text
 with positions; `pdf-geometry.ts` splits them into word boxes, and a drag snaps to whole words.
@@ -157,7 +158,71 @@ in-process cache by storage path, so reading page after page doesn't download th
 Nothing new is needed on PDF replace: the highlights are in the same row as the ink, and §3's
 cascade takes both.
 
-### 6.1 Three gotchas worth keeping
+### 6.2 Writing margins
+
+A reader can give every page a strip either side to write notes in, from a
+toggle in the lesson's tool notch (`M` on web). Off by default. It is a
+reader's preference, not a property of the PDF: nothing about the document
+changes, and two people reading the same lesson can disagree.
+
+**The page remains the coordinate system.** A margin is 18% of the page's
+width, and ink in the left one lands at an `x` between `-0.18` and `0`, in the
+right one between `1` and `1.18`. `y` stays in `[0, 1]`, because the margins
+are exactly as tall as the page. That single decision is what makes the
+feature cheap:
+
+- Every stroke drawn before margins existed renders exactly where it did.
+  Nothing migrates, and no stored array is rewritten on load.
+- A note written beside the text on the phone appears in the same place on the
+  web, since both platforms use the same fraction and the same units.
+- The eraser, the undo stack and the save payload need no changes at all — a
+  margin stroke is a stroke.
+- The backend needed no change either: `StrokePoint.x` was never bounded (only
+  **highlights** are clamped to `[0, 1]`, in `app/ink/schemas.py`, and they
+  stay that way because they anchor to words on the page).
+
+The page shrinks to make room rather than the column growing, so turning
+margins on at 100% zoom never introduces a sideways scroll. The margins are
+rounded to whole pixels first and the page takes the remainder, so the three
+add up to exactly the width available — rounding the page instead left it a
+fraction of a pixel too wide, which is a scrollbar. The clients derive the
+margin's size in page units from that rounded pixel width rather than from the
+nominal 18%, so a point on the page maps to the coordinate it always had.
+
+What stays on the page: highlights (word-anchored), quiz-source paint, the
+heading flash, and the press-and-hold mark gesture, which measures touches
+against the page's own width. What spans the margins: the ink layer and the
+pointer surface that draws into it.
+
+The ink layer spans the margins but still sits **inside** `.book-page`, the
+element carrying dark mode's `invert(.9) hue-rotate(180deg)` (design.md §13),
+so page and ink invert as one unit as they always did. Widening that layer
+without moving the filter with it left ink its drawn colour over a page that
+had flipped — graphite on a now-dark page. The margin tints are deliberately
+left outside the filter: they are theme colours that already follow the
+theme, and inverting them a second time would undo that. Mobile is unaffected
+either way, since React Native has no equivalent filter and never inverted
+pages. Margin strips are tinted only while the
+pen or the eraser is in hand — a faint panel beside every page of a 400-page
+book is noise, but at the moment the pen comes out it is the only thing that
+says "you can write here".
+
+**Turning margins off hides their ink, it never deletes it.** Both ink
+layers clip to the page and its margins, so with the margins gone that box is
+only the page and a stroke beside it falls outside. The strokes stay in
+`lesson_page_ink.strokes` and every later edit still saves them, because both
+clients build a save from the full stored array rather than from what is on
+screen; turning margins back on brings them back exactly where they were. The
+web layer had to stop being `overflow-visible` for this — it was letting
+margin ink paint into the gutter beside the page instead of disappearing with
+the margins it was drawn in. Nor can new margin ink be made while they are
+off: the pointer's x is clamped to the margins that exist, which is none.
+
+One platform difference: web remembers the toggle in `localStorage`
+(`lp-pdf-margins`), mobile holds it in session state, as mobile already does
+for the text size beside it.
+
+### 6.3 Three gotchas worth keeping
 
 **The pdf.js worker is a vendored static file.** `apps/web/public/pdf.worker.min.mjs` is a committed
 copy of pdfjs-dist's build output, loaded from an absolute URL rather than a bundler

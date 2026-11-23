@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRef, useState } from "react";
 
 import type { NotebookEntry } from "@lp/contracts";
@@ -20,6 +21,51 @@ import { DrawingCanvas, DrawingThumbnail } from "./drawing-canvas";
 export function firstLine(content: string): string {
   const line = content.split("\n").find((l) => l.trim().length > 0);
   return line?.trim() ?? "";
+}
+
+/**
+ * Which lesson a note was written in, under its title in a list.
+ *
+ * Notes are one pool browsed whole, so a list of them spans lessons and the
+ * titles alone ("Untitled note", "Drawing") cannot tell two apart. Renders
+ * nothing for a note that belongs to no lesson -- in a list, no line reads
+ * as "not from a lesson" without repeating it down every row.
+ */
+function SourceLine({ entry }: { entry: NotebookEntry }) {
+  const { t } = useI18n();
+  if (!entry.source_document_title) return null;
+  return (
+    <span className="block truncate text-caption font-semibold text-muted-foreground">
+      {t("notebook.fromLesson", { lesson: entry.source_document_title })}
+    </span>
+  );
+}
+
+/**
+ * The same provenance above an open note, where it can be a link back to
+ * the lesson -- and where, unlike in a list, "not from a lesson" is worth
+ * saying, because a blank line there would just look like missing data.
+ */
+export function NoteSource({ entry }: { entry: NotebookEntry }) {
+  const { t } = useI18n();
+  if (!entry.source_document_title) {
+    return (
+      <p className="text-caption font-semibold text-muted-foreground">{t("notebook.noLesson")}</p>
+    );
+  }
+  const label = t("notebook.fromLesson", { lesson: entry.source_document_title });
+  // The id goes null with the lesson while the title would too, so a title
+  // without an id cannot happen -- but it costs nothing to not link it.
+  return entry.source_document_id ? (
+    <Link
+      href={`/learn/${entry.source_document_id}`}
+      className="text-caption font-semibold text-accent hover:underline"
+    >
+      {label}
+    </Link>
+  ) : (
+    <p className="text-caption font-semibold text-muted-foreground">{label}</p>
+  );
 }
 
 export function useNotebookEntries() {
@@ -62,12 +108,18 @@ export function NotebookEntryList({
               className="block w-full rounded-sm px-sm py-1.5 text-left text-toc leading-snug font-semibold text-foreground hover:bg-muted aria-current:bg-muted aria-current:font-extrabold"
             >
               {entry.type === "text" ? (
-                <span className="block truncate">
-                  {firstLine(entry.content ?? "") || t("notebook.untitled")}
-                </span>
+                <>
+                  <span className="block truncate">
+                    {firstLine(entry.content ?? "") || t("notebook.untitled")}
+                  </span>
+                  <SourceLine entry={entry} />
+                </>
               ) : (
                 <span className="flex flex-col gap-xs">
-                  <span>{t("notebook.drawing")}</span>
+                  <span>
+                    <span className="block">{t("notebook.drawing")}</span>
+                    <SourceLine entry={entry} />
+                  </span>
                   <DrawingThumbnail strokes={entry.strokes ?? []} />
                 </span>
               )}
@@ -174,6 +226,7 @@ export function TextEntryEditor({
 
   return (
     <div className="flex flex-1 flex-col gap-sm">
+      {entry && <NoteSource entry={entry} />}
       <div className="flex min-h-[240px] flex-1 flex-col">
         <input
           type="text"
@@ -270,6 +323,7 @@ export function DrawingEntryEditor({
 
   return (
     <div className="flex flex-1 flex-col gap-sm">
+      {entry && <NoteSource entry={entry} />}
       <DrawingCanvas
         strokes={strokes}
         onChange={(next) => {

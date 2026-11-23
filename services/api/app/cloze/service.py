@@ -1,12 +1,13 @@
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.cloze.generation import generate_cloze_spans
 from app.cloze.models import ClozeCard, ClozeReviewState
 from app.cloze.schemas import (
+    ClozeCardCreateRequest,
     ReviewSummaryBook,
     ReviewSummaryChapter,
     ReviewSummaryLesson,
@@ -25,25 +26,82 @@ from app.srs.scheduler import (
 )
 
 
-def ensure_cloze_cards(db: Session, document: Document) -> None:
-    """Generates and persists this document's ClozeCards if it doesn't have
-    any yet. Called both right after a fresh upload finishes extraction
-    (app/documents/service.py) and lazily from the list/due functions below
-    -- the latter means every already-existing ready lesson gets cards on
-    its first read too, with no separate backfill migration needed."""
+def _ready_blocks(document: Document) -> list[dict[str, Any]]:
+    """This lesson's extracted blocks, or [] until extraction has succeeded.
+
+    A cloze card is a pair of offsets into one of these blocks, so nothing
+    can be marked before they exist and a card can only be validated
+    against them.
+    """
     if document.current_version is None or document.current_version.status != "ready":
-        return
-    existing = db.scalar(select(ClozeCard.id).where(ClozeCard.document_id == document.id).limit(1))
-    if existing is not None:
-        return
+        return []
     blocks = (document.current_version.extracted_content or {}).get("blocks", [])
-    for span in generate_cloze_spans(blocks):
-        db.add(ClozeCard(document_id=document.id, **span))
+    return blocks if isinstance(blocks, list) else []
+
+
+def create_cloze_card(db: Session, document: Document, data: ClozeCardCreateRequest) -> ClozeCard:
+    """Marks one passage of one paragraph as a review word.
+
+    `answer_text` is sliced from the lesson here rather than taken from the
+    request: the offsets are the only thing a client gets to choose, so a
+    card can never claim an answer the lesson does not actually say at that
+    position. Which is also what makes the Review tab's gap safe -- it is
+    rendered from the lesson text at those offsets, never from the stored
+    answer.
+    """
+    blocks = _ready_blocks(document)
+    block = blocks[data.block_index] if data.block_index < len(blocks) else None
+    if block is None:
+        raise ApiError(422, "invalid_block", "No such block in this lesson")
+    if block.get("type") != "paragraph":
+        raise ApiError(422, "invalid_block", "Review words can only be marked in paragraphs")
+    text = block.get("text") or ""
+    if data.end_offset > len(text):
+        raise ApiError(422, "invalid_offsets", "Offsets fall outside the paragraph")
+    answer_text = text[data.start_offset : data.end_offset]
+    if not answer_text.strip():
+        raise ApiError(422, "invalid_offsets", "A review word cannot be blank")
+
+    # Overlapping cards would render as nested gaps -- spliceClozeSpans on
+    # the clients assumes spans do not intersect -- so the overlap is
+    # refused rather than silently collapsed.
+    clash = db.scalar(
+        select(ClozeCard.id).where(
+            ClozeCard.document_id == document.id,
+            ClozeCard.block_index == data.block_index,
+            ClozeCard.start_offset < data.end_offset,
+            ClozeCard.end_offset > data.start_offset,
+        )
+    )
+    if clash is not None:
+        raise ApiError(409, "overlapping_card", "That passage already holds a review word")
+
+    card = ClozeCard(
+        document_id=document.id,
+        block_index=data.block_index,
+        start_offset=data.start_offset,
+        end_offset=data.end_offset,
+        answer_text=answer_text,
+    )
+    db.add(card)
+    db.commit()
+    db.refresh(card)
+    return card
+
+
+def delete_cloze_card(db: Session, document: Document, cloze_card_id: uuid.UUID) -> None:
+    """Unmarks a review word. Every learner's progress against it goes with
+    it (ClozeReviewState cascades on the FK) -- the word is no longer part
+    of the lesson, so there is nothing left for that progress to be about.
+    """
+    card = db.get(ClozeCard, cloze_card_id)
+    if card is None or card.document_id != document.id:
+        raise ApiError(404, "not_found", "Cloze card not found")
+    db.delete(card)
     db.commit()
 
 
 def list_cloze_cards(db: Session, document: Document) -> list[ClozeCard]:
-    ensure_cloze_cards(db, document)
     return list(
         db.scalars(
             select(ClozeCard)
@@ -117,7 +175,6 @@ def submit_cloze_review(
 
 
 def _lesson_summary(db: Session, document: Document, user_id: uuid.UUID) -> ReviewSummaryLesson:
-    ensure_cloze_cards(db, document)
     due_count = len(list_due_cloze_cards(db, document, user_id))
     return ReviewSummaryLesson(id=document.id, title=document.title, due_count=due_count)
 
@@ -129,10 +186,10 @@ def get_review_summary(db: Session, user_id: uuid.UUID) -> ReviewSummaryResponse
 
     The structure comes from `load_content_tree` in four queries rather than
     the nested per-parent walk this used to do. Note the per-lesson cost
-    below is unchanged and still dominates: `_lesson_summary` generates and
-    reads that lesson's cloze cards, which cannot be batched while generation
-    is lazy per document. Flashcards avoids it by batching its counts into
-    one query; doing the same here is a separate change.
+    below is unchanged and still dominates: `_lesson_summary` reads that
+    lesson's cards and its review states, two queries per lesson.
+    Flashcards avoids it by batching its counts into one query; doing the
+    same here is a separate change.
     """
     tree = load_content_tree(db)
 

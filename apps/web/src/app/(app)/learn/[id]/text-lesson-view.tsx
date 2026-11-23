@@ -74,6 +74,7 @@ export function TextLessonView({
   onMark,
   onOpenNote,
   sources,
+  clozeWords,
 }: {
   blocks: ExtractedBlock[];
   annotations: Annotation[];
@@ -81,6 +82,16 @@ export function TextLessonView({
   textScale: number;
   /** Quiz-source passages per block, painted orange ("See in lesson"). */
   sources?: Map<number, { start: number; end: number }[]>;
+  /**
+   * The words the Review tab hides, per block, underlined in the cloze
+   * colour. Passed only while an admin holds the review-word tool: for a
+   * learner this would show every answer in the lesson at a glance.
+   *
+   * Painted per letter, like `sources`, rather than spliced into the
+   * annotation runs -- a review word is not an annotation and must not
+   * compete with a highlight for the run it overlaps.
+   */
+  clozeWords?: Map<number, { start: number; end: number }[]>;
   /** A finished drag (or tap) with a marking tool, split per block. */
   onMark: (ranges: BlockRange[]) => void;
   onOpenNote: (annotationId: string) => void;
@@ -237,6 +248,7 @@ export function TextLessonView({
             firstLetter={firstLetterIndex.get(index) ?? 0}
             annotations={annotationsByBlock.get(index) ?? NO_ANNOTATIONS}
             sources={sources?.get(index)}
+            clozeWords={clozeWords?.get(index)}
             onOpenNote={openNote}
           />
         );
@@ -255,6 +267,7 @@ const Paragraph = memo(function Paragraph({
   firstLetter,
   annotations,
   sources,
+  clozeWords,
   onOpenNote,
 }: {
   blockIndex: number;
@@ -263,6 +276,7 @@ const Paragraph = memo(function Paragraph({
   firstLetter: number;
   annotations: Annotation[];
   sources?: { start: number; end: number }[];
+  clozeWords?: { start: number; end: number }[];
   onOpenNote: (annotationId: string) => void;
 }) {
   // Block-level notes (no offsets) predate range-anchored ones; their bubble
@@ -313,7 +327,12 @@ const Paragraph = memo(function Paragraph({
               ? ""
               : undefined
           }
-          className="data-preview:bg-[rgba(47,111,159,0.16)] data-source:bg-[rgba(255,140,0,0.24)] data-source:shadow-[inset_0_-2px_#ff7a00]"
+          data-cloze={
+            clozeWords?.some((word) => letter.start < word.end && letter.end > word.start)
+              ? ""
+              : undefined
+          }
+          className="data-preview:bg-[rgba(47,111,159,0.16)] data-source:bg-[rgba(255,140,0,0.24)] data-source:shadow-[inset_0_-2px_#ff7a00] data-cloze:bg-cloze-bg data-cloze:shadow-[inset_0_-2px_var(--cloze)]"
         >
           {text.slice(letter.start, letter.end)}
         </span>,

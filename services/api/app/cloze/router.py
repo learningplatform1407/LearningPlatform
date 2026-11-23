@@ -6,18 +6,22 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthenticatedUser
 from app.cloze.schemas import (
+    ClozeCardCreateRequest,
     ClozeCardResponse,
     ClozeDueCardResponse,
     ClozeRatingRequest,
     ClozeReviewStateResponse,
 )
 from app.cloze.service import (
+    create_cloze_card,
+    delete_cloze_card,
     list_cloze_cards,
     list_due_cloze_cards_with_state,
     submit_cloze_review,
 )
 from app.common.errors import ApiError
 from app.db.session import get_db
+from app.documents.dependencies import require_admin
 from app.documents.models import Document
 from app.documents.service import get_document
 from app.srs.scheduler import preview_intervals, state_of
@@ -42,6 +46,34 @@ def read_cloze_cards(
 ) -> list[ClozeCardResponse]:
     document = _get_document_or_404(db, document_id)
     return [ClozeCardResponse.model_validate(c) for c in list_cloze_cards(db, document)]
+
+
+@router.post("", response_model=ClozeCardResponse, status_code=201)
+def create_cloze_card_route(
+    document_id: UUID,
+    data: ClozeCardCreateRequest,
+    _admin: AuthenticatedUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> ClozeCardResponse:
+    """Admin-only: which words the Review tab hides is authored, not guessed.
+
+    This replaced a heuristic that marked the first two long non-stopwords of
+    every paragraph, which made Review a quiz on whichever words happened to
+    be longest rather than on what the lesson is teaching.
+    """
+    document = _get_document_or_404(db, document_id)
+    return ClozeCardResponse.model_validate(create_cloze_card(db, document, data))
+
+
+@router.delete("/{cloze_card_id}", status_code=204)
+def delete_cloze_card_route(
+    document_id: UUID,
+    cloze_card_id: UUID,
+    _admin: AuthenticatedUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> None:
+    document = _get_document_or_404(db, document_id)
+    delete_cloze_card(db, document, cloze_card_id)
 
 
 @router.get("/due", response_model=list[ClozeDueCardResponse])

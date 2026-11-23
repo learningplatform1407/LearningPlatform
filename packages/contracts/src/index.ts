@@ -12,6 +12,7 @@ import type {
   challengeResponseSchema,
   chapterCreateRequestSchema,
   chapterResponseSchema,
+  clozeCardCreateRequestSchema,
   clozeCardResponseSchema,
   clozeDueCardResponseSchema,
   clozeRatingRequestSchema,
@@ -136,6 +137,7 @@ export type FlashcardSuspensionRequest = z.infer<typeof flashcardSuspensionReque
 export type ReviewRating = z.infer<typeof reviewRatingSchema>;
 export type ClozeRating = z.infer<typeof clozeRatingSchema>;
 export type ClozeCard = z.infer<typeof clozeCardResponseSchema>;
+export type ClozeCardCreateRequest = z.infer<typeof clozeCardCreateRequestSchema>;
 export type ClozeDueCard = z.infer<typeof clozeDueCardResponseSchema>;
 export type ClozeRatingRequest = z.infer<typeof clozeRatingRequestSchema>;
 export type ClozeReviewState = z.infer<typeof clozeReviewStateResponseSchema>;

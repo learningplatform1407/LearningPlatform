@@ -38,7 +38,7 @@ const WORDS = [
   { text: "Next", box: [0.1, 0.2, 0.25, 0.24] as [number, number, number, number], line: 2 },
 ];
 
-function renderView(tool: PdfTool) {
+function renderView(tool: PdfTool, margins = false) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
@@ -47,11 +47,19 @@ function renderView(tool: PdfTool) {
         storagePath="lectures/a.pdf"
         pageCount={3}
         tool={tool}
+        margins={margins}
         viewportTop={0}
         viewportHeight={800}
       />
     </QueryClientProvider>,
   );
+}
+
+/** Lays the column out at `width`, which is what gives the pages a size. */
+async function layOutColumn(width = 300) {
+  fireEvent(await screen.findByTestId("pdf-column"), "layout", {
+    nativeEvent: { layout: { x: 0, y: 0, width, height: 1000 } },
+  });
 }
 
 beforeEach(() => {
@@ -167,4 +175,119 @@ test("a quick swipe on a page is a scroll, not a mark", async () => {
 
   expect(screen.queryByTestId("pdf-mark-preview")).toBeNull();
   expect(mockUpdatePageInk).not.toHaveBeenCalled();
+});
+
+describe("writing margins", () => {
+  /** The page's own box, and the row holding it and its margins. */
+  function widths(page = 1): { page: number; row: number } {
+    const flatten = (style: unknown): Record<string, number> =>
+      Object.assign({}, ...[style].flat(5).filter(Boolean));
+    return {
+      page: flatten(screen.getByTestId(`pdf-page-${page}`).props.style).width!,
+      row: flatten(screen.getByTestId(`pdf-page-row-${page}`).props.style).width!,
+    };
+  }
+
+  test("off, a page fills the column exactly as it did before they existed", async () => {
+    renderView(null);
+    await layOutColumn(300);
+
+    expect(widths()).toEqual({ page: 300, row: 300 });
+  });
+
+  test("on, the page shrinks to make room rather than the column growing", async () => {
+    renderView(null, true);
+    await layOutColumn(300);
+
+    // 18% each side, rounded to whole points, with the page taking the
+    // rest -- so the three add up to the column exactly and no page ever
+    // overflows it.
+    const { page, row } = widths();
+    expect(row).toBe(300);
+    expect(page).toBe(220); // 300 - 2 * round(300 * 0.18 / 1.36)
+    expect(page + 2 * 40).toBe(300);
+  });
+
+  test("ink drawn in a margin is stored outside the page, and keeps its width", async () => {
+    renderView({ type: "pen", color: "#1D1F23", size: "medium" }, true);
+    await layOutColumn(300);
+
+    // One canvas per page; page 1's is the first.
+    const canvas = (await screen.findAllByLabelText("Drawing canvas"))[0]!;
+    // A short stroke in the left margin: 30pt in from the row's left edge,
+    // which is behind the page's own left edge.
+    fireEvent(canvas, "responderGrant", { nativeEvent: { locationX: 30, locationY: 100 } });
+    fireEvent(canvas, "responderMove", { nativeEvent: { locationX: 34, locationY: 140 } });
+    fireEvent(canvas, "responderRelease", { nativeEvent: {} });
+
+    await waitFor(() => expect(mockUpdatePageInk).toHaveBeenCalled());
+    const [, , body] = mockUpdatePageInk.mock.calls[0]!;
+    const stroke = body.strokes[0]!;
+    // -0.18 at the row's left edge, 0 at the page's: 30pt in lands between.
+    expect(stroke.points[0]!.x).toBeLessThan(0);
+    expect(stroke.points[0]!.x).toBeGreaterThan(-0.18);
+    // Widths are a fraction of the page, not of the wider row, so ink in a
+    // margin is exactly as thick as ink on the page.
+    expect(stroke.width).toBeCloseTo(0.006, 4);
+  });
+
+  test("ink already on a page is untouched by turning margins on", async () => {
+    const stroke = {
+      color: "#1D1F23",
+      width: 0.006,
+      points: [
+        { x: 0.2, y: 0.2 },
+        { x: 0.4, y: 0.3 },
+      ],
+    };
+    mockGetPageInk.mockResolvedValue({ strokes: [stroke], highlights: [] });
+
+    renderView({ type: "pen", color: "#1D1F23", size: "medium" }, true);
+    await layOutColumn(300);
+
+    // Nothing is rewritten on load: the stored points are still the stored
+    // points, which is what keeps a mark where it was drawn.
+    await waitFor(() => expect(mockGetPageInk).toHaveBeenCalledWith("d1", 1));
+    expect(mockUpdatePageInk).not.toHaveBeenCalled();
+  });
+
+  test("turning margins off hides margin ink without deleting it", async () => {
+    const marginStroke = {
+      color: "#1D1F23",
+      width: 0.006,
+      points: [
+        { x: -0.1, y: 0.2 },
+        { x: -0.05, y: 0.3 },
+      ],
+    };
+    mockGetPageInk.mockResolvedValue({ strokes: [marginStroke], highlights: [] });
+
+    // Margins off, with a stroke already drawn in one of them.
+    renderView({ type: "pen", color: "#1D1F23", size: "medium" }, false);
+    await layOutColumn(300);
+    await waitFor(() => expect(mockGetPageInk).toHaveBeenCalledWith("d1", 1));
+    // Waited on, not just requested: drawing before the stored ink has
+    // landed would save over it rather than alongside it.
+    await act(() => mockGetPageInk.mock.results[0]!.value);
+
+    // The ink layer clips to the page, so the margin stroke is out of sight
+    // rather than painted into the gutter beside it.
+    const flatten = (style: unknown): Record<string, unknown> =>
+      Object.assign({}, ...[style].flat(5).filter(Boolean));
+    const layer = screen.getByTestId("pdf-page-row-1").props.children.at(-1);
+    expect(flatten(layer.props.style).overflow).toBe("hidden");
+
+    // Drawing on the page now still saves the hidden stroke alongside the
+    // new one: hidden is hidden, not gone.
+    const canvas = (await screen.findAllByLabelText("Drawing canvas"))[0]!;
+    fireEvent(canvas, "responderGrant", { nativeEvent: { locationX: 90, locationY: 100 } });
+    fireEvent(canvas, "responderMove", { nativeEvent: { locationX: 120, locationY: 140 } });
+    fireEvent(canvas, "responderRelease", { nativeEvent: {} });
+
+    await waitFor(() => expect(mockUpdatePageInk).toHaveBeenCalled());
+    const [, , body] = mockUpdatePageInk.mock.calls[0]!;
+    expect(body.strokes).toHaveLength(2);
+    expect(body.strokes[0]).toEqual(marginStroke);
+    expect(body.strokes[1]!.points[0]!.x).toBeGreaterThan(0);
+  });
 });

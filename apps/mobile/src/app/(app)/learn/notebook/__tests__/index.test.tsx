@@ -73,3 +73,42 @@ test("+ Text and + Drawing navigate to the sentinel new-note routes", async () =
   fireEvent.press(screen.getByText("+ Drawing"));
   expect(router.push).toHaveBeenCalledWith("/learn/notebook/entry/new-drawing");
 });
+
+describe("where a note came from", () => {
+  test("names the lesson a note was written in", async () => {
+    mockListNotebookEntries.mockResolvedValue([
+      {
+        id: "n1",
+        type: "text",
+        content: "Tip and location",
+        strokes: null,
+        source_document_id: "d1",
+        source_document_title: "Ortopedie I",
+      },
+    ]);
+
+    renderScreen();
+
+    // Notes are one pool browsed whole, so "Tip and location" alone doesn't
+    // say which lesson it belongs to.
+    expect(await screen.findByText("From Ortopedie I")).toBeTruthy();
+  });
+
+  test("says nothing in the list for a note that belongs to no lesson", async () => {
+    mockListNotebookEntries.mockResolvedValue([
+      {
+        id: "n1",
+        type: "text",
+        content: "Written on its own",
+        strokes: null,
+        source_document_id: null,
+        source_document_title: null,
+      },
+    ]);
+
+    renderScreen();
+
+    await screen.findByText("Written on its own");
+    expect(screen.queryByText("Not from a lesson")).toBeNull();
+  });
+});

@@ -8,6 +8,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Annotation, AnnotationCreateRequest } from "@lp/contracts";
 import { clearHighlightRange, type PenSize } from "@lp/ui";
 
+import { ApiClientError } from "@lp/api-client";
+
 import { useToast } from "@/components/toast";
 import { questionElementId } from "@/components/question-bank-list";
 import { findQuote } from "@/lib/text-offset";
@@ -42,6 +44,7 @@ import { useLessonKeys } from "./use-lesson-keys";
 import { useTabSwipe } from "./use-tab-swipe";
 
 const TEXT_SCALE_KEY = "lp-text-scale";
+const MARGINS_KEY = "lp-pdf-margins";
 const UNDO_LIMIT = 80;
 const ZOOM_STEPS = [50, 75, 100, 125, 150, 200, 250, 300] as const;
 
@@ -56,6 +59,16 @@ function readTextScale(): TextScale {
     return (TEXT_SCALES as readonly number[]).includes(stored) ? (stored as TextScale) : 100;
   } catch {
     return 100;
+  }
+}
+
+/** Writing margins are off until asked for, and then stay on across
+ * lessons: a reader who writes in them wants them on every book. */
+function readMargins(): boolean {
+  try {
+    return window.localStorage.getItem(MARGINS_KEY) === "1";
+  } catch {
+    return false;
   }
 }
 
@@ -115,6 +128,9 @@ export default function LecturePage() {
   const [pdfCanUndo, setPdfCanUndo] = useState(false);
   const [pdfOutline, setPdfOutline] = useState<PdfOutlineItem[]>([]);
   const [zoom, setZoom] = useState(100);
+  const [margins, setMargins] = useState(() =>
+    typeof window === "undefined" ? false : readMargins(),
+  );
   const handleOutline = useCallback((items: PdfOutlineItem[]) => setPdfOutline(items), []);
 
   const { data, isPending, isError, error } = useQuery({
@@ -143,6 +159,41 @@ export default function LecturePage() {
     queryKey: ["annotations", params.id],
     queryFn: () => getBrowserApiClient().listAnnotations(params.id),
     enabled: version?.status === "ready",
+  });
+
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: () => getBrowserApiClient().getMe(),
+  });
+  const isAdmin = me.data?.role === "admin";
+
+  // Only fetched while an admin actually holds the review-word tool. The
+  // cards say where every gap in the lesson is, so a learner's reader never
+  // asks for them -- they would be the answer key to the Review tab.
+  const { data: clozeCards = [] } = useQuery({
+    queryKey: ["cloze-cards", params.id],
+    queryFn: () => getBrowserApiClient().listClozeCards(params.id),
+    enabled: isAdmin && tool?.kind === "cloze",
+  });
+  const clozeWords = new Map<number, { id: string; start: number; end: number }[]>();
+  if (tool?.kind === "cloze") {
+    for (const card of clozeCards) {
+      const list = clozeWords.get(card.block_index) ?? [];
+      list.push({ id: card.id, start: card.start_offset, end: card.end_offset });
+      clozeWords.set(card.block_index, list);
+    }
+  }
+
+  const markClozeWord = useMutation({
+    mutationFn: (range: BlockRange) =>
+      getBrowserApiClient().markClozeCard(params.id, {
+        block_index: range.blockIndex,
+        start_offset: range.start,
+        end_offset: range.end,
+      }),
+  });
+  const unmarkClozeWord = useMutation({
+    mutationFn: (cardId: string) => getBrowserApiClient().unmarkClozeCard(params.id, cardId),
   });
   // Gone (deleted, or undone away) means closed.
   const popoverNote = annotations.find((a) => a.id === popoverNoteId) ?? null;
@@ -237,6 +288,36 @@ export default function LecturePage() {
       if (removed.length === 0 && create.length === 0) return;
       const created = await apply(removed, create);
       pushUndo({ created, removed });
+      return;
+    }
+
+    if (tool.kind === "cloze") {
+      // One drag, one word: a drag that touches words already marked takes
+      // them off again, so the tool toggles rather than needing a separate
+      // eraser -- the same "press it again to turn it off" rule the markers
+      // follow (design.md §5). Otherwise the drag marks what it covers.
+      const range = ranges[0]!;
+      const overlapping = (clozeWords.get(range.blockIndex) ?? []).filter(
+        (word) => word.start < range.end && word.end > range.start,
+      );
+      try {
+        if (overlapping.length > 0) {
+          await Promise.all(overlapping.map((word) => unmarkClozeWord.mutateAsync(word.id)));
+          toast(t("lesson.review.wordUnmarked"));
+        } else {
+          await markClozeWord.mutateAsync(range);
+          toast(t("lesson.review.wordMarked"));
+        }
+      } catch (error) {
+        // The server refuses a passage that overlaps a word this client
+        // hasn't seen yet (another admin marking the same lesson).
+        const conflict = error instanceof ApiClientError && error.status === 409;
+        toast(conflict ? t("lesson.review.wordOverlaps") : t("lesson.review.markFailed"));
+      } finally {
+        await queryClient.invalidateQueries({ queryKey: ["cloze-cards", params.id] });
+        // The Review tab reads the due list, which this just changed.
+        await queryClient.invalidateQueries({ queryKey: ["cloze-cards", "due", params.id] });
+      }
       return;
     }
 
@@ -351,13 +432,22 @@ export default function LecturePage() {
 
   // -- Tools -----------------------------------------------------------
 
-  function chooseTool(kind: "pen" | "eraser" | "note") {
+  function chooseTool(kind: "pen" | "eraser" | "note" | "cloze") {
     if (!toolAvailable(kind, mode)) {
       toast(
-        kind === "pen" ? t("lesson.tools.penPdfOnlyToast") : t("lesson.tools.noteTextOnlyToast"),
+        kind === "pen"
+          ? t("lesson.tools.penPdfOnlyToast")
+          : kind === "cloze"
+            ? t("lesson.tools.reviewWordsTextOnlyToast")
+            : t("lesson.tools.noteTextOnlyToast"),
       );
       return;
     }
+    // Rarely used and not obvious, so picking it up says what it does. Said
+    // here rather than inside the updater below: an updater runs during
+    // render, and showing a toast from there updates the toast provider
+    // mid-render.
+    if (kind === "cloze" && tool?.kind !== "cloze") toast(t("lesson.tools.reviewWordsHint"));
     setTool((current) => {
       if (current?.kind === kind) return null;
       if (kind === "pen") {
@@ -384,6 +474,16 @@ export default function LecturePage() {
     setViewMode(next);
     // A tool that doesn't exist in the other view is put down.
     setTool((current) => (current && !toolAvailable(current.kind, next) ? null : current));
+  }
+
+  function toggleMargins() {
+    const next = !margins;
+    setMargins(next);
+    try {
+      window.localStorage.setItem(MARGINS_KEY, next ? "1" : "0");
+    } catch {
+      // Storage blocked: the choice just won't survive a reload.
+    }
   }
 
   function cycleTextScale() {
@@ -415,6 +515,15 @@ export default function LecturePage() {
     pen: () => chooseTool("pen"),
     note: () => chooseTool("note"),
     explain: () => toast(t("lesson.tools.explainSoon")),
+    reviewWords: () => {
+      // Not an admin: the key does nothing rather than explaining a tool
+      // they have never been offered.
+      if (isAdmin) chooseTool("cloze");
+    },
+    margins: () => {
+      if (mode === "pdf") toggleMargins();
+      else toast(t("lesson.tools.marginsPdfOnlyToast"));
+    },
     undo: () => void undo(),
     clear: () => setTool(null),
   });
@@ -542,6 +651,9 @@ export default function LecturePage() {
         onUndo={() => void undo()}
         textScale={textScale}
         onTextScale={cycleTextScale}
+        isAdmin={isAdmin}
+        margins={margins}
+        onMargins={toggleMargins}
       />
 
       <TocDrawer
@@ -619,6 +731,7 @@ export default function LecturePage() {
               pageCount={readyLecturePdf.page_count}
               tool={tool}
               zoom={zoom}
+              margins={margins}
               onUndoChange={setPdfCanUndo}
               onOutline={handleOutline}
               sourceQuotes={seeInLesson?.quotes ?? null}
@@ -652,6 +765,7 @@ export default function LecturePage() {
                   onMark={(ranges) => void handleMark(ranges)}
                   onOpenNote={openNote}
                   sources={sourcesByBlock}
+                  clozeWords={tool?.kind === "cloze" ? clozeWords : undefined}
                 />
               )}
             </>

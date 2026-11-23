@@ -437,6 +437,12 @@ function NotebookPane({
                 entry.type === "drawing"
                   ? t("lesson.panel.drawing")
                   : firstLine(entry.content ?? "") || t("lesson.panel.untitled"),
+              // Every row here belongs to some other lesson, or to none, and
+              // the titles ("Untitled", "Drawing") don't say which -- so the
+              // lesson is the line that makes this list readable at all.
+              subtitle: entry.source_document_title
+                ? t("notebook.fromLesson", { lesson: entry.source_document_title })
+                : undefined,
               current: entry.id === outsideId,
               onOpen: () => openFromList(entry.id, false),
             }))}
@@ -460,7 +466,12 @@ function NotebookPane({
       {!listing && current && (
         <>
           <p className="px-[18px] text-caption font-semibold text-muted-foreground">
-            <b className="text-foreground">{outside ? t("lesson.panel.notebook") : lessonTitle}</b>{" "}
+            {/* A note from elsewhere names its own lesson rather than this
+                one -- the whole point of opening it here is that it came
+                from somewhere else. */}
+            <b className="text-foreground">
+              {outside ? (outside.source_document_title ?? t("notebook.noLesson")) : lessonTitle}
+            </b>{" "}
             · {kindLabel}
             {current.createdAt && <> · {formatWhen(current.createdAt, locale)}</>}
           </p>
@@ -543,7 +554,14 @@ function NoteList({
   empty,
 }: {
   heading: string;
-  rows: { key: string; title: string; current: boolean; onOpen: () => void }[];
+  rows: {
+    key: string;
+    title: string;
+    /** Where the note came from, when the heading above doesn't already say. */
+    subtitle?: string;
+    current: boolean;
+    onOpen: () => void;
+  }[];
   empty: string;
 }) {
   return (
@@ -559,9 +577,14 @@ function NoteList({
                 type="button"
                 onClick={row.onOpen}
                 aria-current={row.current || undefined}
-                className="block w-full truncate rounded-sm px-2 py-1.5 text-left text-toc font-semibold text-foreground hover:bg-muted aria-current:bg-muted aria-current:font-extrabold"
+                className="block w-full rounded-sm px-2 py-1.5 text-left text-toc leading-snug font-semibold text-foreground hover:bg-muted aria-current:bg-muted aria-current:font-extrabold"
               >
-                {row.title}
+                <span className="block truncate">{row.title}</span>
+                {row.subtitle && (
+                  <span className="block truncate text-caption font-semibold text-muted-foreground">
+                    {row.subtitle}
+                  </span>
+                )}
               </button>
             </li>
           ))}

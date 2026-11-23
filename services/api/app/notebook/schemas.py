@@ -25,6 +25,10 @@ class NotebookEntryResponse(BaseModel):
     content: str | None
     strokes: list[Stroke] | None
     source_document_id: UUID | None
+    # Read off NotebookEntry.source_document_title (a property over the
+    # eager-loaded relationship), so "which lesson was this written in?"
+    # needs no second round-trip per note on the client.
+    source_document_title: str | None
     created_at: datetime
     updated_at: datetime
 

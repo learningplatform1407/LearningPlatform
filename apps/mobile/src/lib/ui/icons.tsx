@@ -87,6 +87,14 @@ export const EraserIcon = (p: IconProps) => (
   </Icon>
 );
 
+/** A page with two side margins ruled off: the PDF's writing margins. */
+export const MarginsIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <Rect x={3} y={4} width={18} height={16} rx={2} />
+    <Path d="M8 4v16M16 4v16" strokeDasharray="2.5 2.5" />
+  </Icon>
+);
+
 export const UndoIcon = (p: IconProps) => (
   <Icon {...p}>
     <Path d="M9 14L4 9l5-5" />

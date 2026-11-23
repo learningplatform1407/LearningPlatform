@@ -151,3 +151,62 @@ describe("NotebookPage", () => {
     expect(payload.strokes).toHaveLength(1);
   });
 });
+
+describe("where a note came from", () => {
+  function noteFrom(overrides: Record<string, unknown>) {
+    return {
+      id: "n1",
+      type: "text",
+      content: "Tip and location",
+      strokes: null,
+      source_document_id: null,
+      source_document_title: null,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      ...overrides,
+    };
+  }
+
+  test("names the lesson a note was written in", async () => {
+    listNotebookEntries.mockResolvedValue([
+      noteFrom({ source_document_id: "d1", source_document_title: "Ortopedie I" }),
+    ]);
+
+    renderPage();
+
+    expect(await screen.findByText("From Ortopedie I")).toBeInTheDocument();
+  });
+
+  test("says nothing in the list for a note that belongs to no lesson", async () => {
+    listNotebookEntries.mockResolvedValue([noteFrom({})]);
+
+    renderPage();
+
+    await screen.findByText("Tip and location");
+    expect(screen.queryByText(/^From /)).not.toBeInTheDocument();
+    expect(screen.queryByText("Not from a lesson")).not.toBeInTheDocument();
+  });
+
+  test("an open note links back to its lesson", async () => {
+    listNotebookEntries.mockResolvedValue([
+      noteFrom({ source_document_id: "d1", source_document_title: "Ortopedie I" }),
+    ]);
+
+    renderPage();
+    await userEvent.setup().click(await screen.findByRole("button", { name: /Tip and location/ }));
+
+    expect(await screen.findByRole("link", { name: "From Ortopedie I" })).toHaveAttribute(
+      "href",
+      "/learn/d1",
+    );
+  });
+
+  test("an open note with no lesson says so, rather than leaving a blank", async () => {
+    listNotebookEntries.mockResolvedValue([noteFrom({})]);
+
+    renderPage();
+    await userEvent.setup().click(await screen.findByRole("button", { name: /Tip and location/ }));
+
+    expect(await screen.findByText("Not from a lesson")).toBeInTheDocument();
+  });
+});

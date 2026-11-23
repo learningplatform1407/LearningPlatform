@@ -86,6 +86,23 @@ export const EraserIcon = (p: IconProps) => (
   </Icon>
 );
 
+/** A page with two side margins ruled off: the PDF's writing margins. */
+export const MarginsIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M8 4v16M16 4v16" strokeDasharray="2.5 2.5" />
+  </Icon>
+);
+
+/** A word with a gap under it: the review word an admin marks. */
+export const ClozeIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4 9h5M15 9h5" />
+    <path d="M9.5 15.5h5" strokeWidth={2.4} />
+    <path d="M11 6.5v5M13 6.5v5" strokeDasharray="2 2" />
+  </Icon>
+);
+
 export const UndoIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M9 14L4 9l5-5" />

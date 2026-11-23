@@ -2,6 +2,43 @@ import type { PageHighlight, Stroke, StrokePoint } from "@lp/contracts";
 
 import { findQuote } from "@/lib/text-offset";
 
+/**
+ * How much of a page's width each writing margin takes, when margins are on.
+ * Mirrored in apps/mobile/src/lib/pdf-lesson-view.tsx, so a note written
+ * beside the text lands in the same place on either platform.
+ */
+export const MARGIN_FRACTION = 0.18;
+
+/** A page and its two writing margins, in pixels, plus the margins' size in
+ * page units -- which is what ink in them is stored in. */
+export interface PageLayout {
+  pageWidth: number;
+  marginWidth: number;
+  /** Each margin as a fraction of the page's width: 0 with margins off. */
+  marginFraction: number;
+}
+
+/**
+ * Divides the width available between a page and its writing margins.
+ *
+ * The page shrinks to make room rather than the column growing, so turning
+ * margins on at 100% zoom never introduces a sideways scroll. The margins
+ * are rounded to whole pixels **first** and the page takes the remainder, so
+ * the three always add up to exactly `across` -- rounding the page instead
+ * left it a fraction of a pixel too wide, which is a scrollbar on every
+ * lesson. `marginFraction` is then derived from the rounded pixel width
+ * rather than from MARGIN_FRACTION, so a point on the page maps to the
+ * coordinate it always had, to the pixel.
+ */
+export function pageLayout(across: number, margins: boolean): PageLayout {
+  if (!margins || across <= 0) {
+    return { pageWidth: Math.max(0, across), marginWidth: 0, marginFraction: 0 };
+  }
+  const marginWidth = Math.round((across * MARGIN_FRACTION) / (1 + 2 * MARGIN_FRACTION));
+  const pageWidth = across - 2 * marginWidth;
+  return { pageWidth, marginWidth, marginFraction: marginWidth / pageWidth };
+}
+
 /** A word's -- or a letter's -- box on a page, in page units ([0, 1] of
  * width and height), with its position in reading order. Words are what
  * quoted passages are found by; letters are what marking moves by. */

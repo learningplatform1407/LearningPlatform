@@ -4,7 +4,15 @@ import type { ReactNode } from "react";
 
 import { HIGHLIGHT_COLOR_NAMES, PEN_SIZES, PEN_SIZE_SCALE, pageColors, type PenSize } from "@lp/ui";
 
-import { BulbIcon, EraserIcon, NoteIcon, PenIcon, UndoIcon } from "@/components/icons";
+import {
+  BulbIcon,
+  ClozeIcon,
+  EraserIcon,
+  MarginsIcon,
+  NoteIcon,
+  PenIcon,
+  UndoIcon,
+} from "@/components/icons";
 import { useToast } from "@/components/toast";
 import { useI18n } from "@/lib/i18n";
 
@@ -37,6 +45,9 @@ export function ToolNotch({
   textScaleAvailable,
   textScale,
   onTextScale,
+  isAdmin,
+  margins,
+  onMargins,
 }: {
   tool: LessonTool;
   viewMode: LessonViewMode;
@@ -46,12 +57,17 @@ export function ToolNotch({
   onToggleToc: () => void;
   onSwatch: (color: SwatchIndex) => void;
   onPenSize: (size: PenSize) => void;
-  onTool: (kind: "pen" | "eraser" | "note") => void;
+  onTool: (kind: "pen" | "eraser" | "note" | "cloze") => void;
   onUndo: () => void;
   /** Whether this tab renders prose the scale applies to (Lesson, Review). */
   textScaleAvailable: boolean;
   textScale: TextScale;
   onTextScale: () => void;
+  /** Admins get one extra tool: marking which words Review hides. */
+  isAdmin: boolean;
+  /** PDF side margins to write notes in, and the toggle for them. */
+  margins: boolean;
+  onMargins: () => void;
 }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -131,6 +147,25 @@ export function ToolNotch({
         >
           <NoteIcon />
         </ToolButton>
+        {isAdmin && (
+          <ToolButton
+            label={t("lesson.tools.reviewWords")}
+            title={
+              viewMode === "text"
+                ? t("lesson.tools.reviewWordsTitle")
+                : t("lesson.tools.reviewWordsTextOnly")
+            }
+            pressed={tool?.kind === "cloze"}
+            dimmed={!onLessonTab || !toolAvailable("cloze", viewMode)}
+            onClick={guard(
+              toolAvailable("cloze", viewMode),
+              t("lesson.tools.reviewWordsTextOnlyToast"),
+              () => onTool("cloze"),
+            )}
+          >
+            <ClozeIcon />
+          </ToolButton>
+        )}
         <ToolButton
           label={t("lesson.tools.pen")}
           title={viewMode === "pdf" ? t("lesson.tools.penTitle") : t("lesson.tools.penPdfOnly")}
@@ -179,22 +214,38 @@ export function ToolNotch({
           <UndoIcon />
         </ToolButton>
 
-        {/* Only the Lesson and Review tabs render prose that reads the scale,
-            so the control is hidden elsewhere rather than offered and inert.
-            This used to claim it "works on every tab"; it never did --
-            nothing on Quizzes or Flashcards consumes textScale. design.md §6
-            scopes it to those two. */}
+        {/* View preferences rather than marking tools, so they sit below a
+            separator of their own, and each is hidden where it would be
+            inert rather than offered and dead.
+
+            Text size: only the Lesson and Review tabs render prose that
+            reads the scale. This used to claim it "works on every tab"; it
+            never did -- nothing on Quizzes or Flashcards consumes
+            textScale. design.md §6 scopes it to those two.
+
+            Margins: there are no pages to put them beside in Text mode. */}
+        {(textScaleAvailable || viewMode === "pdf") && (
+          <span aria-hidden="true" className="my-[3px] h-px w-[22px] bg-border" />
+        )}
         {textScaleAvailable && (
-          <>
-            <span aria-hidden="true" className="my-[3px] h-px w-[22px] bg-border" />
-            <ToolButton
-              label={t("lesson.tools.textSize")}
-              title={t("lesson.tools.textSizeValue", { percent: textScale })}
-              onClick={onTextScale}
-            >
-              <span className="text-[13px] leading-none font-extrabold">Aa</span>
-            </ToolButton>
-          </>
+          <ToolButton
+            label={t("lesson.tools.textSize")}
+            title={t("lesson.tools.textSizeValue", { percent: textScale })}
+            onClick={onTextScale}
+          >
+            <span className="text-[13px] leading-none font-extrabold">Aa</span>
+          </ToolButton>
+        )}
+        {viewMode === "pdf" && (
+          <ToolButton
+            label={t("lesson.tools.margins")}
+            title={t("lesson.tools.marginsTitle")}
+            pressed={margins}
+            dimmed={!onLessonTab}
+            onClick={guard(true, "", onMargins)}
+          >
+            <MarginsIcon />
+          </ToolButton>
         )}
       </div>
     </aside>
