@@ -1,21 +1,18 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, screen } from "@testing-library/react-native";
 import { router } from "expo-router";
-import { TextInput } from "react-native";
 
 import LibraryScreen from "../index";
 
 const mockGetMe = jest.fn();
 const mockListBooks = jest.fn();
 const mockListDocuments = jest.fn();
-const mockCreateBook = jest.fn();
 
 jest.mock("@/lib/api-client", () => ({
   getApiClient: () => ({
     getMe: mockGetMe,
     listBooks: mockListBooks,
     listDocuments: mockListDocuments,
-    createBook: mockCreateBook,
   }),
 }));
 
@@ -37,7 +34,6 @@ beforeEach(() => {
   mockGetMe.mockReset();
   mockListBooks.mockReset();
   mockListDocuments.mockReset().mockResolvedValue([]);
-  mockCreateBook.mockReset();
   (router.push as jest.Mock).mockReset();
 });
 
@@ -91,31 +87,15 @@ test("shows an empty state when there are no books and nothing uncategorized", a
   expect(await screen.findByText("No books yet.")).toBeTruthy();
 });
 
-test("hides the new-book form for a non-admin", async () => {
-  mockGetMe.mockResolvedValue(STUDENT_ME);
+test("offers no authoring here, to an admin least of all", async () => {
+  // Library authoring is web-only (/admin/library). This screen is what
+  // every learner browses, and an admin browsing it sees the same thing.
+  mockGetMe.mockResolvedValue(ADMIN_ME);
   mockListBooks.mockResolvedValue([]);
 
   renderScreen();
 
   await screen.findByText("No books yet.");
   expect(screen.queryByText("New book")).toBeNull();
-});
-
-test("an admin can create a new book", async () => {
-  mockGetMe.mockResolvedValue(ADMIN_ME);
-  mockListBooks.mockResolvedValue([]);
-  mockCreateBook.mockResolvedValue({
-    id: "b1",
-    title: "New Book",
-    order_index: 0,
-    chapter_count: 0,
-  });
-
-  renderScreen();
-
-  await screen.findByText("New book");
-  fireEvent.changeText(screen.UNSAFE_getByType(TextInput), "New Book");
-  fireEvent.press(screen.getByRole("button", { name: "Create book" }));
-
-  await waitFor(() => expect(mockCreateBook).toHaveBeenCalledWith({ title: "New Book" }));
+  expect(screen.queryByRole("button", { name: "Create book" })).toBeNull();
 });

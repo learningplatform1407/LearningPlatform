@@ -137,7 +137,7 @@ export const lesson: Messages["lesson"] = {
       few: "Următoarea recapitulare peste {count} zile.",
       other: "Următoarea recapitulare peste {count} de zile.",
     }),
-    excluded: "Exclus din recapitulări. Îl poți include din nou mai jos.",
+    excluded: "Exclus din recapitulări. Îl poți include din nou din Toate cartonașele.",
     loadFailed: "Cartonașele nu s-au putut încărca.",
     addCard: "Adaugă un cartonaș",
     none: "Niciun cartonaș pentru această lecție deocamdată. Adaugă-le pe ale tale sau revino pentru cele oficiale.",
@@ -146,6 +146,7 @@ export const lesson: Messages["lesson"] = {
     controls: "Comenzile cartonașelor",
     excludeThis: "Exclude acest cartonaș din recapitulări",
     allCards: "Toate cartonașele din această lecție",
+    allCardsCount: "Toate cartonașele ({count})",
     excludedCount: " · {count} excluse",
     manageFailed:
       "Cartonașele acestei lecții nu s-au putut încărca, așa că cele excluse nu pot fi gestionate acum.",

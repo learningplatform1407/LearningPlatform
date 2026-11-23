@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { formatMonthYear } from "@lp/ui";
+import { formatMonthYear, RECENT_ACTIVITY_SHOWN } from "@lp/ui";
 import Link from "next/link";
 
 import { ActivityList } from "@/components/activity-list";
@@ -37,7 +37,7 @@ export default function ProfilePage() {
   const followsAnyone = (following.data?.length ?? 0) > 0;
   const activity = useQuery({
     queryKey: ["activity", "recent"],
-    queryFn: () => getBrowserApiClient().listFollowingActivity({ limit: 5 }),
+    queryFn: () => getBrowserApiClient().listFollowingActivity({ limit: RECENT_ACTIVITY_SHOWN }),
     enabled: followsAnyone,
   });
 

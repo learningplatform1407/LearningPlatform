@@ -11,6 +11,7 @@ import type {
 } from "@lp/contracts";
 import {
   HIGHLIGHT_COLOR_NAMES,
+  clearHighlightRange,
   clozeGap,
   describeInterval,
   findQuote,
@@ -18,6 +19,8 @@ import {
   formatInterval,
   highlightIndex,
   pageColors,
+  splitSegmentsAt,
+  wordEndAfter,
   PEN_SIZES,
   PEN_SIZE_SCALE,
   type PenSize,
@@ -62,6 +65,7 @@ import {
   BulbIcon,
   BulbOffIcon,
   CardsIcon,
+  ChevronRightIcon,
   EraserIcon,
   NoteIcon,
   PenIcon,
@@ -167,7 +171,6 @@ function AnnotatedParagraph({
   const colors = useThemeColors();
   const body = useScaledBody();
   const blockAnnotations = annotations.filter((a) => a.block_index === blockIndex);
-  const segments = splitBySources(spliceAnnotations(text, blockAnnotations), sources);
   // Notes anchored to a passage draw on the passage, with their marker right
   // after it (see below). Only a note with no offsets belongs to the whole
   // block, and those -- the ones made before notes could be anchored, and
@@ -188,6 +191,17 @@ function AnnotatedParagraph({
   const rangeNotes = blockAnnotations.filter(
     (a): a is Annotation & { start_offset: number; end_offset: number } =>
       a.type === "margin_note" && a.start_offset !== null && a.end_offset !== null,
+  );
+
+  // A marker goes after the word its note stops in, not at the exact letter
+  // the drag ended on -- a bubble in the middle of a word breaks the word in
+  // two (`wordEndAfter`). Those offsets are rarely an annotation boundary, so
+  // the runs are cut there as well; without that the marker would have no
+  // segment to follow and would fall to the end of the paragraph.
+  const markerOffset = (note: Annotation) => wordEndAfter(text, note.end_offset ?? 0);
+  const segments = splitSegmentsAt(
+    splitBySources(spliceAnnotations(text, blockAnnotations), sources),
+    rangeNotes.map(markerOffset),
   );
 
   function noteMarker(note: Annotation) {
@@ -239,9 +253,9 @@ function AnnotatedParagraph({
       ),
     );
 
-    // The note's bubble, inline where its passage ends.
+    // The note's bubble, inline after the passage it is anchored to.
     for (const note of rangeNotes) {
-      if (marked.has(note.id) || note.end_offset !== end) continue;
+      if (marked.has(note.id) || markerOffset(note) !== end) continue;
       marked.add(note.id);
       pieces.push(noteMarker(note));
     }
@@ -382,7 +396,9 @@ function ToolNotch({
         accessibilityLabel={t("lesson.tools.contents")}
         hitSlop={4}
       >
-        <Text style={styles.toolChevron}>›</Text>
+        {/* The same chevron the drawer closes with (lib/overlay.tsx), so the
+            arrow reads as one control that turns round rather than two. */}
+        <ChevronRightIcon color={colors.foreground} size={22} />
       </Pressable>
       {toolsEnabled && (
         <>
@@ -617,7 +633,16 @@ function MarkableParagraph({
   const points = [...cuts].sort((a, b) => a - b);
   const pieces = points.slice(0, -1).map((from, i) => {
     const to = points[i + 1]!;
-    const mark = marks.find((a) => a.start_offset! <= from && from < a.end_offset!);
+    // The most recent of the marks covering this piece, as spliceAnnotations
+    // resolves them for the tool-down view -- `find` took whichever the
+    // server happened to list first, so marking over a highlight in another
+    // colour left the old colour showing while the tool was still in hand.
+    const mark = marks
+      .filter((a) => a.start_offset! <= from && from < a.end_offset!)
+      .reduce<Annotation | undefined>(
+        (latest, a) => (latest && latest.created_at > a.created_at ? latest : a),
+        undefined,
+      );
     const previewed = preview !== null && preview.start <= from && from < preview.end;
     return (
       <Text
@@ -975,6 +1000,13 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // The lesson's whole deck, listed on demand. It used to sit open at the
+  // bottom of the tab, below the card being reviewed and its grade buttons,
+  // which put the one thing you manage cards from (including getting an
+  // excluded one back) behind a scroll nobody takes -- and pushed the card
+  // itself up the screen on a lesson with many cards. It opens from the
+  // header now, beside Add a card.
+  const [listingAll, setListingAll] = useState(false);
 
   const deckQuery = useQuery({
     queryKey: ["flashcards", "due", documentId, scope],
@@ -1052,15 +1084,15 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
   const completed = gradedIds.size - againCards.length;
   const revealed = currentCard !== undefined && revealedCardId === currentCard.id;
 
+  const lessonCards = cardsQuery.data ?? [];
+  const excludedCount = lessonCards.filter((card) => card.suspended).length;
+
   if (deckQuery.isPending) {
     return <Text style={styles.hint}>{t("common.loading")}</Text>;
   }
   if (deckQuery.isError) {
     return <Text style={styles.errorText}>{t("lesson.flashcards.loadFailed")}</Text>;
   }
-
-  const lessonCards = cardsQuery.data ?? [];
-  const excludedCount = lessonCards.filter((card) => card.suspended).length;
 
   return (
     <View style={styles.flashcardsTab}>
@@ -1079,15 +1111,29 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
             setActionError(null);
           }}
         />
-        {!adding && (
-          <Pressable
-            onPress={() => setAdding(true)}
-            accessibilityRole="button"
-            style={styles.secondaryButton}
-          >
-            <Text style={styles.secondaryButtonText}>{t("lesson.flashcards.addCard")}</Text>
-          </Pressable>
-        )}
+        <View style={styles.flashcardsActions}>
+          {lessonCards.length > 0 && (
+            <Pressable
+              onPress={() => setListingAll((open) => !open)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: listingAll }}
+              style={[styles.secondaryButton, listingAll && styles.secondaryButtonActive]}
+            >
+              <Text style={styles.secondaryButtonText}>
+                {t("lesson.flashcards.allCardsCount", { count: lessonCards.length })}
+              </Text>
+            </Pressable>
+          )}
+          {!adding && (
+            <Pressable
+              onPress={() => setAdding(true)}
+              accessibilityRole="button"
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryButtonText}>{t("lesson.flashcards.addCard")}</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {adding && (
@@ -1098,6 +1144,22 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
             refresh();
           }}
         />
+      )}
+
+      {listingAll && lessonCards.length > 0 && (
+        <View style={styles.myCardsSection}>
+          <Text style={styles.myCardsHeading}>
+            {t("lesson.flashcards.allCards")}
+            {excludedCount > 0
+              ? t("lesson.flashcards.excludedCount", { count: excludedCount })
+              : ""}
+          </Text>
+          <View style={styles.tabList}>
+            {lessonCards.map((card) => (
+              <LessonCardRow key={card.id} card={card} onChanged={refresh} />
+            ))}
+          </View>
+        </View>
       )}
 
       {!currentCard && (
@@ -1179,22 +1241,6 @@ function FlashcardsTab({ documentId }: { documentId: string }) {
 
       {cardsQuery.isError && (
         <Text style={styles.errorText}>{t("lesson.flashcards.manageFailed")}</Text>
-      )}
-
-      {lessonCards.length > 0 && (
-        <View style={styles.myCardsSection}>
-          <Text style={styles.myCardsHeading}>
-            {t("lesson.flashcards.allCards")}
-            {excludedCount > 0
-              ? t("lesson.flashcards.excludedCount", { count: excludedCount })
-              : ""}
-          </Text>
-          <View style={styles.tabList}>
-            {lessonCards.map((card) => (
-              <LessonCardRow key={card.id} card={card} onChanged={refresh} />
-            ))}
-          </View>
-        </View>
       )}
     </View>
   );
@@ -1597,8 +1643,13 @@ function TocModal({
   // screen -- on iOS a Modal is its own native window, so the old drawer hung
   // over the new screen until it finished dismissing. Overlay fires
   // onDismissed after the panel has left the tree, which is the safe moment.
-  // The new lesson opens with the drawer already up, and without the push
-  // animation (learn/_layout.tsx), so the drawer seems to stay in place.
+  //
+  // The drawer stays closed on the lesson it opened. It used to carry over
+  // (`?toc=1`), on the theory that moving through a chapter shouldn't shut it
+  // at every step -- but on a phone the drawer *is* the screen, so picking a
+  // lesson left you looking at the contents list again instead of the lesson
+  // you had just chosen. The web keeps carrying it over, where the drawer
+  // sits beside the lesson rather than on top of it.
   const [pendingLessonId, setPendingLessonId] = useState<string | null>(null);
 
   function lessonRow(lesson: { id: string; title: string }) {
@@ -1628,7 +1679,7 @@ function TocModal({
       onDismissed={() => {
         if (!pendingLessonId) return;
         setPendingLessonId(null);
-        router.push(`/learn/${pendingLessonId}?toc=1`);
+        router.push(`/learn/${pendingLessonId}`);
       }}
     >
       {chapter ? (
@@ -1745,11 +1796,7 @@ export default function LectureScreen() {
   const { t } = useI18n();
   const styles = useStyles();
   const colors = useThemeColors();
-  const {
-    id,
-    tab: tabParam,
-    toc: tocParam,
-  } = useLocalSearchParams<{ id: string; tab?: string; toc?: string }>();
+  const { id, tab: tabParam } = useLocalSearchParams<{ id: string; tab?: string }>();
   const queryClient = useQueryClient();
   // Deep link support: navigating here with ?tab=review (e.g. from the
   // review dashboard) opens straight to that tab instead of always
@@ -1761,11 +1808,7 @@ export default function LectureScreen() {
   // panel and the notebook at the same time unrepresentable. On iOS each is
   // its own native window, and the stacking between two of those is
   // undefined -- which is how they ended up overlapping.
-  // A lesson opened from the contents arrives with them open (`toc=1`), so
-  // moving through a chapter doesn't close the drawer at every step.
-  const [activeDrawer, setActiveDrawer] = useState<"toc" | "notes" | null>(() =>
-    tocParam === "1" ? "toc" : null,
-  );
+  const [activeDrawer, setActiveDrawer] = useState<"toc" | "notes" | null>(null);
   const [activeTool, setActiveToolState] = useState<ActiveTool>(null);
   const [penSize, setPenSize] = useState<PenSize>("medium");
   // A mark being dragged (MarkableParagraph, or a PDF page): the lesson
@@ -1896,53 +1939,32 @@ export default function LectureScreen() {
       return;
     }
 
-    if (activeTool?.type === "highlight") {
-      createAnnotationMutation.mutate({
-        type: "highlight",
-        block_index: blockIndex,
-        start_offset: start,
-        end_offset: end,
-        color: activeTool.color,
-      });
-      return;
-    }
-
-    if (activeTool?.type === "eraser") {
-      const overlapping = annotations.filter(
-        (a) =>
-          a.type === "highlight" &&
-          a.block_index === blockIndex &&
-          a.start_offset !== null &&
-          a.end_offset !== null &&
-          a.start_offset < end &&
-          a.end_offset > start,
-      );
-      // Same partial-trim behavior as web: erasing only removes the selected
-      // portion — the original annotation is deleted and replaced with
-      // whatever's left before/after the erased range.
-      for (const a of overlapping) {
-        const before = a.start_offset! < start ? { start: a.start_offset!, end: start } : null;
-        const after = a.end_offset! > end ? { start: end, end: a.end_offset! } : null;
-
-        deleteAnnotationMutation.mutate(a.id);
-        if (before) {
-          createAnnotationMutation.mutate({
-            type: "highlight",
-            block_index: blockIndex,
-            start_offset: before.start,
-            end_offset: before.end,
-            color: a.color,
-          });
-        }
-        if (after) {
-          createAnnotationMutation.mutate({
-            type: "highlight",
-            block_index: blockIndex,
-            start_offset: after.start,
-            end_offset: after.end,
-            color: a.color,
-          });
-        }
+    // Marking clears the range first, whether a colour is going down or
+    // being rubbed out: the highlights the range covers are deleted and the
+    // parts of them outside it are recreated, since annotations have no
+    // resize endpoint. Same partial-trim behaviour as the web eraser, now
+    // applied to the highlighter too -- see clearHighlightRange for what
+    // stacking a second colour on top of the first did instead.
+    if (activeTool?.type === "highlight" || activeTool?.type === "eraser") {
+      const { remove, keep } = clearHighlightRange(annotations, blockIndex, start, end);
+      for (const mark of remove) deleteAnnotationMutation.mutate(mark.id);
+      for (const piece of keep) {
+        createAnnotationMutation.mutate({
+          type: "highlight",
+          block_index: blockIndex,
+          start_offset: piece.start,
+          end_offset: piece.end,
+          color: piece.mark.color,
+        });
+      }
+      if (activeTool.type === "highlight") {
+        createAnnotationMutation.mutate({
+          type: "highlight",
+          block_index: blockIndex,
+          start_offset: start,
+          end_offset: end,
+          color: activeTool.color,
+        });
       }
     }
   }
@@ -2653,12 +2675,6 @@ const useStyles = makeStyles((colors) => ({
   toolDisabled: {
     opacity: 0.35,
   },
-  toolChevron: {
-    fontSize: 22,
-    lineHeight: 24,
-    fontWeight: fontWeights.semibold,
-    color: colors.foreground,
-  },
   swatch: {
     width: 14,
     height: 20,
@@ -3057,10 +3073,18 @@ const useStyles = makeStyles((colors) => ({
   },
   flashcardsHeader: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.sm,
     alignSelf: "stretch",
+  },
+  // The two buttons stay together when the row has to wrap, rather than one
+  // of them dropping under the filter chips on its own.
+  flashcardsActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
   },
   scopeToggle: {
     flexDirection: "row",
@@ -3181,6 +3205,10 @@ const useStyles = makeStyles((colors) => ({
     borderRadius: 10,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
+  },
+  secondaryButtonActive: {
+    backgroundColor: colors.muted,
+    borderColor: colors.foreground,
   },
   secondaryButtonText: {
     color: colors.foreground,

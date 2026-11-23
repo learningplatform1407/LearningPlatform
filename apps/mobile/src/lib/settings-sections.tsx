@@ -20,9 +20,9 @@ import { getApiClient } from "@/lib/api-client";
 import { useI18n } from "@/lib/i18n";
 import { Overlay } from "@/lib/overlay";
 import { supabase } from "@/lib/supabase";
-import { fontSizes, fontWeights, spacing } from "@/lib/theme";
+import { fontSizes, fontWeights, radii, shadows, spacing } from "@/lib/theme";
 import { makeStyles, useThemeColors } from "@/lib/theme-context";
-import { ScreenHeader, SegmentedSwitch } from "@/lib/ui/primitives";
+import { ScreenHeader, SegmentedSwitch, Select } from "@/lib/ui/primitives";
 
 /**
  * The settings sections, as components.
@@ -244,59 +244,35 @@ export function NotificationsSection({ me }: { me: MeResponse }) {
 
 /**
  * The language dropdown: a row saying which language is active, opening a
- * sheet to pick another.
+ * menu of the others under it.
  *
  * A dropdown rather than the row of pills this was -- two pills now, a
- * wrapping wall at six -- and a sheet rather than a floating panel, because a
- * phone has nowhere to float one. It is the shape this app already uses for
- * "pick from a list" (see the exam screen's tag picker). The web has had a
+ * wrapping wall at six. It was briefly a full-screen sheet, since a phone has
+ * nowhere to float a panel; a sheet to pick between two words was the wrong
+ * size of gesture, and the arrow and tick it drew with text glyphs came out
+ * differently on every Android font. `Select` is the real dropdown: an
+ * anchored menu, with the icon set's chevron and tick. The web has had a
  * `<select>` here all along.
  */
 export function LanguagesSection({ me }: { me: MeResponse }) {
   const { t } = useI18n();
   const styles = useStyles();
-  const [open, setOpen] = useState(false);
   const write = useSettingsWriter();
   const language = resolveLanguage(me.settings.language);
 
   return (
     <View style={styles.section}>
       <Text style={styles.rowLabel}>{t("settings.languages.label")}</Text>
-      <Pressable
-        style={styles.select}
-        onPress={() => setOpen(true)}
-        accessibilityRole="button"
-        accessibilityLabel={t("settings.languages.label")}
-        accessibilityValue={{ text: LANGUAGE_NAMES[language] }}
-      >
-        <Text style={styles.selectValue}>{LANGUAGE_NAMES[language]}</Text>
-        <Text style={styles.selectChevron}>⌄</Text>
-      </Pressable>
+      {/* Each name in its own language, so it reads whatever the interface
+          is currently in. */}
+      <Select
+        label={t("settings.languages.label")}
+        options={LANGUAGES.map((code) => ({ value: code, label: LANGUAGE_NAMES[code] }))}
+        value={language}
+        onChange={(code) => write.mutate({ language: code })}
+      />
       <Text style={styles.hint}>{t("settings.languages.hint")}</Text>
       <SaveError error={write.error} />
-
-      <Overlay visible={open} title={t("settings.languages.choose")} onClose={() => setOpen(false)}>
-        {/* Each name in its own language, so it reads whatever the interface
-            is currently in. */}
-        {LANGUAGES.map((code) => {
-          const selected = code === language;
-          return (
-            <Pressable
-              key={code}
-              style={[styles.option, selected && styles.optionSelected]}
-              onPress={() => {
-                setOpen(false);
-                if (!selected) write.mutate({ language: code });
-              }}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-            >
-              <Text style={styles.optionLabel}>{LANGUAGE_NAMES[code]}</Text>
-              {selected && <Text style={styles.optionCheck}>✓</Text>}
-            </Pressable>
-          );
-        })}
-      </Overlay>
     </View>
   );
 }
@@ -639,11 +615,21 @@ const useStyles = makeStyles((colors) => ({
     padding: spacing.xl,
     gap: spacing.lg,
   },
+  // A card each, the shape the Learn hub's tool cards already have. A rule
+  // and a heading were not enough separation on a phone: seven sections of
+  // switches and buttons down one page read as one long list of controls,
+  // with no telling which heading a given switch belonged to.
+  //
+  // Padded `md` rather than the hub cards' `lg`: these hold full-width text
+  // fields, and the page's own `xl` padding is already outside them.
   group: {
     gap: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.xl,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    ...shadows.sm,
   },
   groupHeading: {
     fontSize: fontSizes.xs,
@@ -665,49 +651,6 @@ const useStyles = makeStyles((colors) => ({
   rowLabel: {
     fontSize: fontSizes.base,
     color: colors.foreground,
-  },
-  // The dropdown's closed state: the current value and a chevron, the same
-  // shape as the exam screen's tag summary.
-  select: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    alignSelf: "stretch",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-  },
-  selectValue: {
-    fontSize: fontSizes.base,
-    color: colors.foreground,
-  },
-  selectChevron: {
-    fontSize: fontSizes.base,
-    fontWeight: fontWeights.bold,
-    color: colors.mutedForeground,
-  },
-  option: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    // 44pt minimum tap target, as everywhere else a list is tapped.
-    minHeight: 44,
-    paddingHorizontal: spacing.sm,
-    borderRadius: 8,
-  },
-  optionSelected: {
-    backgroundColor: colors.muted,
-  },
-  optionLabel: {
-    fontSize: fontSizes.base,
-    color: colors.foreground,
-  },
-  optionCheck: {
-    fontSize: fontSizes.base,
-    fontWeight: fontWeights.bold,
-    color: colors.accent,
   },
   label: {
     marginTop: spacing.sm,

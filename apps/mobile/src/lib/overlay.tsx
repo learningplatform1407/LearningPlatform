@@ -11,7 +11,9 @@ import {
 import { SafeAreaInsetsContext } from "react-native-safe-area-context";
 
 import { fontSizes, fontWeights, motion, spacing } from "@/lib/theme";
-import { makeStyles } from "@/lib/theme-context";
+import { makeStyles, useThemeColors } from "@/lib/theme-context";
+import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from "@/lib/ui/icons";
+import { Dot } from "@/lib/ui/primitives";
 import { useI18n } from "@/lib/i18n";
 
 /** A full-screen sheet, the shape every overlay in this app already has.
@@ -21,10 +23,14 @@ import { useI18n } from "@/lib/i18n";
  * screen-filling modal is exactly the thing that should look the same
  * everywhere -- down to the word on the dismiss control.
  *
- * It dismisses with the word **Close**, not an X. That is deliberate, and not
- * a mismatch with the web overlay's X: all of this app's overlays close this
- * way and the existing tests press them by that word, so a lone X here would
- * be the odd one out on the platform it actually lives on.
+ * It dismisses with a dot in its header, never the word **Close**: that word
+ * in accent blue beside the title was both the loudest thing in the header
+ * and the first thing to collide with a long title. A sheet closes with an X;
+ * a side panel closes with a chevron pointing back at the edge it came from,
+ * because the control that opened it is an arrow on that edge (the lesson's
+ * tool notch, design.md §5) and the panel covers it -- the arrow staying put
+ * and turning round is how a drawer says "press me again". Both carry the
+ * accessible name "Close", which is how the tests press them.
  */
 export function Overlay({
   visible,
@@ -54,6 +60,7 @@ export function Overlay({
   children: ReactNode;
 }) {
   const { t } = useI18n();
+  const colors = useThemeColors();
   const overlayStyles = useOverlayStyles();
   // The context rather than `useSafeAreaInsets()`: that hook throws when no
   // provider sits above it, and expo-router supplies one only at the real app
@@ -135,6 +142,18 @@ export function Overlay({
     onDismissedRef.current?.();
   }, [visible, side, progress]);
 
+  const closeDot = (
+    <Dot label={t("common.close")} onPress={onClose} style={overlayStyles.closeDot}>
+      {side === "left" ? (
+        <ChevronLeftIcon color={colors.foreground} />
+      ) : side === "right" ? (
+        <ChevronRightIcon color={colors.foreground} />
+      ) : (
+        <CloseIcon color={colors.foreground} />
+      )}
+    </Dot>
+  );
+
   const panel = (
     <View style={[overlayStyles.container, overlayStyles.sheet, side && overlayStyles[side]]}>
       {/* The inset is applied inline rather than in the stylesheet: a Modal's
@@ -143,11 +162,16 @@ export function Overlay({
           colour set so it cannot see this value. The hardcoded padding this
           replaces under-estimated a Dynamic Island and clipped the title and
           the Close control. */}
+      {/* The dismiss dot comes first on a left panel and last everywhere
+          else, so it always sits on the edge the panel is anchored to -- and
+          the title, which takes the rest of the row and is cut off rather
+          than wrapped, can no longer run into it. */}
       <View style={[overlayStyles.header, { paddingTop: topInset + spacing.sm }]}>
-        <Text style={overlayStyles.title}>{title}</Text>
-        <Pressable onPress={onClose} accessibilityRole="button">
-          <Text style={overlayStyles.close}>{t("common.close")}</Text>
-        </Pressable>
+        {side === "left" && closeDot}
+        <Text style={overlayStyles.title} numberOfLines={1}>
+          {title}
+        </Text>
+        {side !== "left" && closeDot}
       </View>
       {/* `flex: 1` belongs on the ScrollView's own style, not only on
           contentContainerStyle: the latter sizes the inner content box and
@@ -160,9 +184,16 @@ export function Overlay({
           inserts a newline, so dragging the sheet is the gesture left.
           `handled` keeps a tap on a button inside working on the first tap
           rather than being eaten as a dismiss. */}
+      {/* iOS does not resize a Modal for the keyboard, so without this the
+          notebook panel's last lines sat under it: you could neither see what
+          you were typing nor scroll down to it, because the scroll view
+          believed it still had the whole screen. The prop adds the keyboard's
+          height as a bottom inset (and is a no-op on Android, which resizes
+          the window instead). */}
       <ScrollView
         style={overlayStyles.scroll}
         contentContainerStyle={overlayStyles.content}
+        automaticallyAdjustKeyboardInsets
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
       >
@@ -251,22 +282,26 @@ export const useOverlayStyles = makeStyles((colors) => ({
   },
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.sm,
   },
+  // `flex: 1` and one line: the title takes whatever the dismiss dot leaves
+  // and is ellipsised there. A chapter title is as long as a chapter title
+  // happens to be, and this header is 85% of a phone wide.
   title: {
+    flex: 1,
     fontSize: fontSizes.xs,
     fontWeight: fontWeights.bold,
     letterSpacing: 1.4,
     textTransform: "uppercase",
     color: colors.mutedForeground,
   },
-  close: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.bold,
-    color: colors.accent,
+  // Pulled out to the panel's padding, so the dot sits on the edge rather
+  // than a dot's width inside it.
+  closeDot: {
+    marginHorizontal: -spacing.xs,
   },
   scroll: {
     flex: 1,
