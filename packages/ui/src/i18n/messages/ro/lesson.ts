@@ -62,7 +62,6 @@ export const lesson: Messages["lesson"] = {
     textSizeValue: "Mărimea textului: {percent}%",
     margins: "Margini pentru notițe",
     marginsTitle: "Margini pentru notițe (M)",
-    marginsPdfOnly: "Marginile sunt doar la paginile PDF",
     marginsPdfOnlyToast: "Marginile pentru notițe sunt doar la paginile PDF.",
     reviewWords: "Cuvinte de recapitulat",
     reviewWordsTitle: "Cuvinte de recapitulat (D) — administrator",

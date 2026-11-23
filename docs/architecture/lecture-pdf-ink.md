@@ -160,10 +160,11 @@ cascade takes both.
 
 ### 6.2 Writing margins
 
-A reader can give every page a strip either side to write notes in, from a
-toggle in the lesson's tool notch (`M` on web). Off by default. It is a
-reader's preference, not a property of the PDF: nothing about the document
-changes, and two people reading the same lesson can disagree.
+Every page can have a strip either side to write notes in. **On web it is a
+toggle** in the lesson's tool notch (`M`), off by default — a reader's
+preference, not a property of the PDF, so two people reading the same lesson
+can disagree. **On mobile every page simply has them**, with no toggle; §6.2.1
+is why.
 
 **The page remains the coordinate system.** A margin is 18% of the page's
 width, and ink in the left one lands at an `x` between `-0.18` and `0`, in the
@@ -207,9 +208,11 @@ pen or the eraser is in hand — a faint panel beside every page of a 400-page
 book is noise, but at the moment the pen comes out it is the only thing that
 says "you can write here".
 
-**Turning margins off hides their ink, it never deletes it.** Both ink
+**Turning margins off (web) hides their ink, it never deletes it.** Both ink
 layers clip to the page and its margins, so with the margins gone that box is
-only the page and a stroke beside it falls outside. The strokes stay in
+only the page and a stroke beside it falls outside. The same clip is what
+keeps ink drawn past mobile's margins — nothing does today, since both
+platforms use the same fraction — out of the gutter beside the page. The strokes stay in
 `lesson_page_ink.strokes` and every later edit still saves them, because both
 clients build a save from the full stored array rather than from what is on
 screen; turning margins back on brings them back exactly where they were. The
@@ -218,9 +221,41 @@ margin ink paint into the gutter beside the page instead of disappearing with
 the margins it was drawn in. Nor can new margin ink be made while they are
 off: the pointer's x is clamped to the margins that exist, which is none.
 
-One platform difference: web remembers the toggle in `localStorage`
-(`lp-pdf-margins`), mobile holds it in session state, as mobile already does
-for the text size beside it.
+#### 6.2.1 Why mobile has no toggle
+
+Toggling margins resizes every page. On mobile that meant, in one frame: a new
+`style` width and height on every mounted `<Pdf>`, so every visible page
+re-renders its bitmap; and a shorter page, so more fit on screen and several
+more `<Pdf>` instances mount, each opening the same file.
+
+AndroidPdfViewer renders bitmaps on its own `HandlerThread` and recycles the
+`PdfDocument` when a view detaches, without cancelling the jobs already queued
+against it. A burst like the above reliably lands one of those jobs on a
+recycled document:
+
+```
+java.lang.RuntimeException: Get page pdf document null
+  io.legere.pdfiumandroid.PdfDocument.nativeLoadPage
+  io.legere.pdfiumandroid.PdfiumCore.renderPageBitmap
+  com.github.barteksc.pdfviewer.RenderingHandler.handleMessage
+```
+
+That race is the library's and is not ours to fix. What is ours is not to put
+a button on it. Constant margins mean a mobile page's size changes only on
+rotation — exactly the exposure it had before margins existed, which is also
+why this was never seen before.
+
+So the toggle is web-only, where pages are plain DOM and a resize is free. The
+cost on mobile is a page about 73% of the column's width whether or not anyone
+writes beside it, which is the trade: a smaller page, or a feature that
+crashes the app. Giving mobile a narrower margin to claw some of that back is
+**not** a free change — the fraction is what the stored x range means, so the
+two platforms would stop agreeing on where a margin note sits.
+
+A proper fix is a follow-up: render the `<Pdf>` at a stable width and scale
+the container with a transform, so the native view never resizes. It needs a
+device to verify, which is why it is not in the change that introduced the
+margins.
 
 ### 6.3 Three gotchas worth keeping
 

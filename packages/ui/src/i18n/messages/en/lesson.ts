@@ -61,7 +61,6 @@ export const lesson = {
     textSizeValue: "Text size: {percent}%",
     margins: "Margins to write in",
     marginsTitle: "Margins to write in (M)",
-    marginsPdfOnly: "Margins belong to PDF pages",
     marginsPdfOnlyToast: "Margins to write in belong to PDF pages.",
     reviewWords: "Review words",
     reviewWordsTitle: "Review words (D) — admin",

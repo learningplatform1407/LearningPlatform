@@ -67,7 +67,6 @@ import {
   CardsIcon,
   ChevronRightIcon,
   EraserIcon,
-  MarginsIcon,
   NoteIcon,
   PenIcon,
   SparkleIcon,
@@ -363,9 +362,6 @@ function ToolNotch({
   onExplain,
   textScaleAvailable,
   onTextScale,
-  marginsAvailable,
-  margins,
-  onMargins,
 }: {
   activeTool: ActiveTool;
   onToolChange: (tool: ActiveTool) => void;
@@ -383,10 +379,6 @@ function ToolNotch({
    * offered and inert -- design.md §6 scopes it to those two. */
   textScaleAvailable: boolean;
   onTextScale: () => void;
-  /** Writing margins belong to PDF pages, so the toggle only shows there. */
-  marginsAvailable: boolean;
-  margins: boolean;
-  onMargins: () => void;
 }) {
   const { t } = useI18n();
   const styles = useStyles();
@@ -528,27 +520,18 @@ function ToolNotch({
           </Pressable>
         </>
       )}
-      {(textScaleAvailable || marginsAvailable) && <View style={styles.toolSeparator} />}
       {textScaleAvailable && (
-        <Pressable
-          onPress={onTextScale}
-          style={styles.tool}
-          accessibilityRole="button"
-          accessibilityLabel={t("lesson.tools.textSize")}
-        >
-          <Text style={styles.toolAa}>Aa</Text>
-        </Pressable>
-      )}
-      {marginsAvailable && (
-        <Pressable
-          onPress={onMargins}
-          style={[styles.tool, margins && styles.toolActive]}
-          accessibilityRole="button"
-          accessibilityLabel={t("lesson.tools.margins")}
-          accessibilityState={{ selected: margins }}
-        >
-          <MarginsIcon color={margins ? colors.background : colors.foreground} />
-        </Pressable>
+        <>
+          <View style={styles.toolSeparator} />
+          <Pressable
+            onPress={onTextScale}
+            style={styles.tool}
+            accessibilityRole="button"
+            accessibilityLabel={t("lesson.tools.textSize")}
+          >
+            <Text style={styles.toolAa}>Aa</Text>
+          </Pressable>
+        </>
       )}
     </View>
   );
@@ -1845,9 +1828,6 @@ export default function LectureScreen() {
   const [lessonViewMode, setLessonViewMode] = useState<"text" | "pdf">("text");
   const review = useClozeReview(id, activeTab === "review");
   const [textScale, setTextScale] = useState<(typeof TEXT_SCALES)[number]>(100);
-  // Writing margins beside the PDF's pages. Session state, like the text
-  // size above it -- neither is persisted on this platform yet.
-  const [margins, setMargins] = useState(false);
   // The lesson title stays on screen: once the page's h1 scrolls under the
   // top notch, a compact title line appears inside the notch instead.
   const [titleBottom, setTitleBottom] = useState<number | null>(null);
@@ -2180,7 +2160,6 @@ export default function LectureScreen() {
               // The note tool never reaches here: it is disabled outside the
               // text view, and switching views puts it down.
               tool={activeTool?.type === "note" ? null : activeTool}
-              margins={margins}
               viewportTop={pdfScrollTop}
               viewportHeight={windowHeight}
               onMarkingChange={setMarking}
@@ -2310,9 +2289,6 @@ export default function LectureScreen() {
               (current) => TEXT_SCALES[(TEXT_SCALES.indexOf(current) + 1) % TEXT_SCALES.length]!,
             )
           }
-          marginsAvailable={activeTab === "lesson" && lessonViewMode === "pdf"}
-          margins={margins}
-          onMargins={() => setMargins((on) => !on)}
         />
 
         <Pressable

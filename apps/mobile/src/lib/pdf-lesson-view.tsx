@@ -27,11 +27,20 @@ const RENDER_MARGIN_SCREENS = 1;
 const ERASE_RADIUS = 0.02;
 
 /**
- * How much of a page's width each writing margin takes, when margins are on.
- * Matches the web's MARGIN_FRACTION, and so does the storage: ink in a
- * margin keeps page-normalised coordinates, just outside [0, 1], so a note
- * written beside the text on one platform lands in the same place on the
- * other.
+ * How much of a page's width each writing margin takes. Matches the web's
+ * MARGIN_FRACTION, and so does the storage: ink in a margin keeps
+ * page-normalised coordinates, just outside [0, 1], so a note written beside
+ * the text on one platform lands in the same place on the other.
+ *
+ * **Every page has them here, with no toggle** -- unlike the web, where they
+ * are a tool-notch preference. Not a product whim: toggling them resized
+ * every mounted page and re-windowed which pages are mounted, all in one
+ * frame, and AndroidPdfViewer's render thread crashes when a queued bitmap
+ * job finds the document it was for recycled ("Get page pdf document null",
+ * RenderingHandler.handleMessage -> renderPageBitmap -> openPage). That race
+ * is the library's, and it is not ours to fix; what is ours is not to put a
+ * button on it. Constant margins mean page size changes only on rotation,
+ * exactly as before they existed.
  */
 const MARGIN_FRACTION = 0.18;
 
@@ -48,8 +57,6 @@ interface PdfLessonViewProps {
   /** The server's page count, known before the file downloads. */
   pageCount: number;
   tool: PdfTool;
-  /** Side margins to write notes in, either side of every page. */
-  margins?: boolean;
   /** The part of the lesson's scroll content on screen, in the same
    * coordinates as this view's own layout: pages near it are rendered. */
   viewportTop: number;
@@ -159,7 +166,6 @@ export function PdfLessonView({
   storagePath,
   pageCount,
   tool,
-  margins = false,
   viewportTop,
   viewportHeight,
   onMarkingChange,
@@ -214,13 +220,11 @@ export function PdfLessonView({
     cache: true,
     cacheFileName: `lecture-${storagePath.replace(/[^\w.-]/g, "_")}`,
   };
-  // The page shrinks to make room rather than the column growing, so turning
-  // margins on never pushes a page off the side of the screen. The margins
-  // are rounded to whole points first and the page takes the rest, so the
-  // three always add up to exactly the column's width.
-  const marginWidth = margins
-    ? Math.round((width * MARGIN_FRACTION) / (1 + 2 * MARGIN_FRACTION))
-    : 0;
+  // The page makes room for its margins rather than the column growing, so
+  // no page is ever pushed off the side of the screen. The margins are
+  // rounded to whole points first and the page takes the rest, so the three
+  // always add up to exactly the column's width.
+  const marginWidth = Math.round((width * MARGIN_FRACTION) / (1 + 2 * MARGIN_FRACTION));
   const pageWidth = width - 2 * marginWidth;
   const pageHeight = pageWidth * aspect;
   const renderFrom = viewportTop - top - viewportHeight * RENDER_MARGIN_SCREENS;
@@ -278,7 +282,7 @@ function PdfPage({
   source: { uri: string; cache: boolean; cacheFileName: string };
   width: number;
   height: number;
-  /** Each margin's width in points; 0 with margins off. */
+  /** Each margin's width in points. */
   marginWidth: number;
   rendered: boolean;
   tool: PdfTool;
@@ -426,13 +430,12 @@ function PdfPage({
   const marginFraction = width > 0 ? marginWidth / width : 0;
 
   return (
-    // The page and its writing margins. With margins off (marginWidth 0)
-    // this is exactly the page, as it was before they existed.
+    // The page and its writing margins.
     <View
       style={[styles.pageRow, { width: width + 2 * marginWidth, height }]}
       testID={`pdf-page-row-${page}`}
     >
-      {marginWidth > 0 && inkTool && (
+      {inkTool && (
         <>
           {/* Tinted only while the pen or eraser is in hand: a faint panel
               beside every page of a 400-page book would be noise, but at
